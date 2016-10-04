@@ -6,7 +6,8 @@ uses
   {$include LabPlatform.inc},
   LabWindow,
   LabThread,
-  LabRenderer;
+  LabRenderer,
+  LabUtils;
 
 type
   TLabApplication = class (TInterfacedObject)
