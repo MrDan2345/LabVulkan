@@ -5,6 +5,8 @@ interface
 uses
   {$include LabPlatform.inc},
   Vulkan,
+  LabUtils,
+  LabPhysicalDevice,
   LabDevice,
   LabSwapChain;
 
@@ -15,6 +17,8 @@ type
     class var _VulkanEnabled: Boolean;
     class var _Extensions: array of String;
     var _Instance: TVkInstance;
+    var _PhyisicalDevice: TLabPhysicalDevice;
+    var _Device: TLabDevice;
   public
     class constructor CreateClass;
     class destructor DestroyClass;
@@ -64,7 +68,8 @@ constructor TLabRenderer.Create;
   var InstanceCreateInfo: TVkInstanceCreateInfo;
   var gpu_count: TVkUInt32;
   var gpus: array of TVkPhysicslDevice;
-  var physical_device: TVkPhysicslDevice;
+  var physical_device_features: TVkPhysicalDeviceFeatures;
+  var depth_format: TVkFormat;
 begin
   LabZeroMem(@AppInfo, SizeOf(TVkApplicationInfo));
   AppInfo.sType := VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -82,8 +87,10 @@ begin
   Assert(gpu_count > 0);
   SetLength(gpus, gpu_count);
   LabAssetVkError(vk.EnumeratePhysicalDevices(_Instance, @gpu_count, @gpus));
-  physical_device := gpus[0];
-
+  _PhysicalDevice := TLabPhysicalDevice.Create(gpus[0]);
+  LabZeroMem(@physical_device_features, SizeOf(TVkPhysicalDeviceFeatures));
+  _Device := TLabDevice.Create(_PhysicalDevice, physical_device_features);
+  depth_format := _PhyisicalDevice.GetSupportedDepthFormat;
 end;
 
 destructor TLabRenderer.Destroy;
@@ -92,6 +99,8 @@ begin
   begin
     vk.DestroyInstance(instance, nullptr);
   end;
+  _Device := nil;
+  _PhysicalDevice := nil;
   inherited Destroy;
 end;
 

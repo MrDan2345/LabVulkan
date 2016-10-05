@@ -6,7 +6,12 @@ uses
   Vulkan;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
-function LabVkErrorString(const State: VkResult): String;
+function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): VkBool32;
+function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): VkBool32;
+procedure LabAssetVkError(const State: TVkResult);
+function LogVkError(const State: TVkResult): TVkResult;
+function LabVkErrorString(const State: TVkResult): String;
+function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean; inline;
 
 implementation
 
@@ -16,6 +21,42 @@ begin
   {$Warnings off}
   FillChar(Ptr^, Size, 0);
   {$Warnings on}
+end;
+
+function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): VkBool32;
+  var ext_count: TVkUInt32;
+  var extensions: array of TVkExtensionProperties;
+  var ext: TVkExtensionProperties;
+begin
+  ext_count := 0;
+  vk.EnumerateInstanceExtensionProperties(nil, @ext_count, nil);
+  SetLength(extensions, ext_count);
+  vk.EnumerateInstanceExtensionProperties(nil, @ext_count, @extensions[0]);
+  for ext in extensions do
+  if ExtensionName = ext.extensionName then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
+end;
+
+function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): VkBool32;
+  var ext_count: TVkUInt32;
+  var extensions: array of TVkExtensionProperties;
+  var ext: TVkExtensionProperties;
+begin
+  ext_count := 0;
+  vk.EnumerateDeviceExtensionProperties(PhysicalDevice, nil, @ext_count, nil);
+  SetLength(extensions, ext_count);
+  vk.EnumerateDeviceExtensionProperties(PhysicalDevice, nil, @ext_count, @extensions[0]);
+  for ext in extensions do
+  if ExtensionName = ext.extensionName then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
 end;
 
 procedure LabAssetVkError(const State: TVkResult);
@@ -32,10 +73,14 @@ begin
   Result := State;
 end;
 
+function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean;
+begin
+  Result := Handle <> 0;
+end;
+
 function LabVkErrorString(const State: TVkResult): String;
 begin
   case State of
-  begin
     VK_NOT_READY: Result := 'NOT_READY';
     VK_TIMEOUT: Result := 'TIMEOUT';
     VK_EVENT_SET: Result := 'EVENT_SET';
@@ -59,7 +104,7 @@ begin
     VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: Result := 'ERROR_INCOMPATIBLE_DISPLAY_KHR';
     VK_ERROR_VALIDATION_FAILED_EXT: Result := 'ERROR_VALIDATION_FAILED_EXT';
     VK_ERROR_INVALID_SHADER_NV: Result := 'ERROR_INVALID_SHADER_NV';
-    else Reslt := 'UNKNOWN_ERROR';
+    else Result := 'UNKNOWN_ERROR';
   end;
 end;
 
