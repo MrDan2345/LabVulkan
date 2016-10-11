@@ -18,7 +18,7 @@ type
     var _Width: Integer;
     var _Height: Integer;
     var _Handle: HWND;
-    var _Instance: HINSTANCE;
+    var _Instance: HINST;
     var _Caption: AnsiString;
     var _OnClose: TLabWindowProc;
     var _OnTick: TLabWindowProc;
@@ -37,7 +37,8 @@ type
     property Width: Integer read _Width;
     property Height: Integer read _Height;
     property Caption: AnsiString read _Caption write SetCaption;
-    property Handle: HWND read _Handle write _Handle;
+    property Handle: HWND read _Handle;
+    property Instance: HINST read _Instance;
     property OnClose: TLabWindowProc read _OnClose write _OnClose;
     property OnTick: TLabWindowProc read _OnTick write _OnTick;
     procedure Close;

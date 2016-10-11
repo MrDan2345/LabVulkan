@@ -14,6 +14,7 @@ type
 
   TLabRenderer = class (TInterfacedObject)
   private
+    class var _Renerer: TLabRenderer;
     class var _VulkanEnabled: Boolean;
     class var _Extensions: array of String;
     var _Instance: TVkInstance;
@@ -24,8 +25,10 @@ type
     class destructor DestroyClass;
     class procedure ResetExtensions;
     class procedure AddExtension(const Name: String);
+    class function Instance: TLabRenderer;
     constructor Create;
     destructor Destroy; override;
+    property VkHandle: TVkInstance read _Instance;
   end;
 
 implementation
@@ -48,7 +51,7 @@ end;
 
 class destructor TLabRenderer.DestroyClass;
 begin
-
+  if Assigned(_Renderer) then _Renderer := nil;
 end;
 
 class procedure TLabRenderer.ResetExtensions;
@@ -61,6 +64,11 @@ class procedure TLabRenderer.AddExtension(const Name: String);
 begin
   SetLength(_Extensions, Length(_Extensions) + 1);
   _Extensions[High(_Extensions)] := Name;
+end;
+
+class function TLabRenderer.Instance: TLabRenderer;
+begin
+  Result := _Renderer;
 end;
 
 constructor TLabRenderer.Create;
@@ -91,10 +99,12 @@ begin
   LabZeroMem(@physical_device_features, SizeOf(TVkPhysicalDeviceFeatures));
   _Device := TLabDevice.Create(_PhysicalDevice, physical_device_features);
   depth_format := _PhyisicalDevice.GetSupportedDepthFormat;
+  _Renderer := Self;
 end;
 
 destructor TLabRenderer.Destroy;
 begin
+  if _Renderer = Self then _Renderer := nil;
   if Assigned(_Instance) then
   begin
     vk.DestroyInstance(instance, nullptr);
