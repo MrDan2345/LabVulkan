@@ -3,28 +3,33 @@ unit LabPhysicalDevice;
 interface
 
 uses
-  Vulkan;
+  Vulkan,
+  LabUtils;
 
 type
+  TLabRenderer = class;
   TLabPhysicalDevice = class (TInterfacedObject)
   private
+    var _Renderer: TLabRenderer;
     var _PhysicalDevice: TVkPhysicalDevice;
     var _Properties: TVkPhysicalDeviceProperties;
     var _Features: TVkPhysicalDeviceFeatures;
     var _MemoryProperties: TVkPhysicalDeviceMemoryProperties;
     var _QueueFamilyProperties: array of TVkQueueFamilyProperties;
   public
-    constructor Create(const APhysicalDevice: TVkPhysicalDevice);
+    constructor Create(const ARenderer: TLabRenderer; const APhysicalDevice: TVkPhysicalDevice);
     destructor Destroy; override;
     property VkHandle: TVkPhysicalDevice read _PhysicalDevice;
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlagBits): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
   end;
+  TLabPhysicalDeviceList = specialize TLabListRef<TLabPhysicalDevice>;
 
 implementation
 
-constructor TLabPhysicalDevice.Create(const APhysicalDevice: TVkPhysicalDevice);
+constructor TLabPhysicalDevice.Create(const ARenderer: TLabRenderer; const APhysicalDevice: TVkPhysicalDevice);
 begin
+  _Renderer := ARenderer;
   _PhysicalDevice := APhysicalDevice;
   vk.GetPhysicalDeviceProperties(_PhysicalDevice, @_Properties);
   vk.GetPhysicalDeviceFeatures(_PhysicalDevice, @_Features);

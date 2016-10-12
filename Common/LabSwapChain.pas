@@ -22,10 +22,9 @@ implementation
 uses
   LabRenderer;
 
-constructor TLabSwapChain.Create(const Window: TLabWindow);
 {$if defined(Windows)}
+constructor TLabSwapChain.Create(const Window: TLabWindow);
   var surface_create_info: TVkWin32SurfaceCreateInfoKHR;
-{$endif}
 begin
   inherited Create;
   LabZeroMem(@surface_create_info, SizeOf(TVkWin32SurfaceCreateInfoKHR));
@@ -34,6 +33,12 @@ begin
   surface_create_info.hwnd_ := Window.Handle;
   LabAssetVkError(vk.CreateWin32SurfaceKHR(TLabRenderer.VkHandle, @surface_create_info, nil, @_Surface));
 end;
+{$else}
+constructor TLabSwapChain.Create(const Window: TLabWindow);
+begin
+  Halt;
+end;
+{$endif}
 
 destructor TLabSwapChain.Destroy;
 begin

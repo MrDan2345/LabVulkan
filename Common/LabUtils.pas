@@ -5,6 +5,97 @@ interface
 uses
   Vulkan;
 
+type
+  generic TLabList<T> = class (TInterfacedObject)
+  private
+    var _Increment: Integer;
+    var _ItemCount: Integer;
+  public
+    type TItemPtr = ^T;
+    type TCmpFunc = function (const Item0, Item1: T): Integer;
+    type TCmpFuncObj = function (const Item0, Item1: T): Integer of object;
+  protected
+    procedure SetItem(const Index: Integer; const Value: T); inline;
+    function GetItem(const Index: Integer): T; inline;
+    procedure SetCapacity(const Value: Integer); inline;
+    function GetCapacity: Integer; inline;
+    function GetFirst: T; inline;
+    function GetLast: T; inline;
+    function GetData: TItemPtr; inline;
+  public
+    constructor Create;
+    constructor Create(const DefaultCapacity: Integer; Increment: Integer = 256);
+    destructor Destroy; override;
+    property Capacity: Integer read GetCapacity write SetCapacity;
+    property Count: Integer read _ItemCount;
+    property Items[const Index: Integer]: T read GetItem write SetItem; default;
+    property First: T read GetFirst;
+    property Last: T read GetLast;
+    property Data: TItemPtr read GetData;
+    function Find(const Item: T): Integer;
+    function Add(const Item: T): Integer;
+    function Pop: T;
+    function Extract(const Index: Integer): T;
+    function Insert(const Index: Integer; const Item: T): Integer;
+    procedure Delete(const Index: Integer; const ItemCount: Integer = 1);
+    procedure Remove(const Item: T);
+    procedure Clear;
+    procedure Allocate(const Amount: Integer);
+    procedure Allocate(const Amount: Integer; const DefaultValue: T);
+    function Search(const CmpFunc: TCmpFunc; const Item: T): Integer; overload;
+    function Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer; overload;
+    procedure Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer); overload;
+    procedure Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer); overload;
+    procedure Sort(const CmpFunc: TCmpFunc); overload;
+    procedure Sort(const CmpFunc: TCmpFuncObj); overload;
+  end;
+
+  generic TLabListRef<T> = class (TInterfacedObject)
+  private
+    var _Increment: Integer;
+    var _ItemCount: Integer;
+  public
+    type TItemPtr = ^T;
+    type TCmpFunc = function (const Item0, Item1: T): Integer;
+    type TCmpFuncObj = function (const Item0, Item1: T): Integer of object;
+  protected
+    procedure SetItem(const Index: Integer; const Value: T); inline;
+    function GetItem(const Index: Integer): T; inline;
+    procedure SetCapacity(const Value: Integer); inline;
+    function GetCapacity: Integer; inline;
+    function GetFirst: T; inline;
+    function GetLast: T; inline;
+    function GetData: TItemPtr; inline;
+  public
+    constructor Create; override;
+    constructor Create(const DefaultCapacity: Integer; Increment: Integer = 256);
+    destructor Destroy; override;
+    property Capacity: Integer read GetCapacity write SetCapacity;
+    property Count: Integer read _ItemCount;
+    property Items[const Index: Integer]: T read GetItem write SetItem; default;
+    property First: T read GetFirst;
+    property Last: T read GetLast;
+    property Data: TItemPtr read GetData;
+    function Find(const Item: T): Integer;
+    function Add(const Item: T): Integer;
+    function Pop: T;
+    function Extract(const Index: Integer): T;
+    function Insert(const Index: Integer; const Item: T): Integer;
+    procedure Delete(const Index: Integer; const ItemCount: Integer = 1);
+    procedure Remove(const Item: T);
+    procedure Clear;
+    procedure Allocate(const Amount: Integer);
+    procedure Allocate(const Amount: Integer; const DefaultValue: T);
+    function Search(const CmpFunc: TCmpFunc; const Item: T): Integer; overload;
+    function Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer; overload;
+    procedure Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer); overload;
+    procedure Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer); overload;
+    procedure Sort(const CmpFunc: TCmpFunc); overload;
+    procedure Sort(const CmpFunc: TCmpFuncObj); overload;
+  end;
+
+  TLabListString = specialize TLabList<AnsiString>;
+
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): VkBool32;
 function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): VkBool32;
@@ -14,6 +105,488 @@ function LabVkErrorString(const State: TVkResult): String;
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean; inline;
 
 implementation
+
+//TLabList BEGIN
+{$Hints off}
+procedure TLabList.SetItem(const Index: Integer; const Value: T);
+begin
+  _Items[Index] := Value;
+end;
+
+function TLabList.GetItem(const Index: Integer): T;
+begin
+  Result := _Items[Index];
+end;
+
+procedure TLabList.SetCapacity(const Value: Integer);
+begin
+  SetLength(_Items, Value);
+end;
+
+function TLabList.GetCapacity: Integer;
+begin
+  Result := Length(_Items);
+end;
+
+function TLabList.GetFirst: T;
+begin
+  Result := _Items[0];
+end;
+
+function TLabList.GetLast: T;
+begin
+  Result := _Items[_ItemCount - 1];
+end;
+
+function TLabList.GetData: TItemPtr;
+begin
+  if _ItemCount > 0 then
+  Result := @_Items[0]
+  else
+  Result := nil;
+end;
+
+constructor TLabList.Create;
+begin
+  _Increment := 256;
+  _ItemCount := 0;
+end;
+
+constructor TLabList.Create(const DefaultCapacity: Integer; Increment: Integer);
+begin
+  if DefaultCapacity > 0 then SetCapacity(DefaultCapacity);
+  if Increment < 1 then _Increment := 1 else _Increment := Increment;
+  _ItemCount := 0;
+end;
+
+destructor TLabList.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TLabList.Find(const Item: T): Integer;
+  var i: Integer;
+begin
+  for i := 0 to _ItemCount - 1 do
+  if _Items[i] = Item then
+  begin
+    Result := i;
+    Exit;
+  end;
+  Result := -1;
+end;
+
+function TLabList.Add(const Item: T): Integer;
+begin
+  if Length(_Items) <= _ItemCount then
+  SetLength(_Items, Length(_Items) + _Increment);
+  _Items[_ItemCount] := Item;
+  Result := _ItemCount;
+  Inc(_ItemCount);
+end;
+
+function TLabList.Pop: T;
+begin
+  Result := Extract(_ItemCount - 1);
+end;
+
+function TLabList.Extract(const Index: Integer): T;
+begin
+  Result := _Items[Index];
+  Delete(Index);
+end;
+
+function TLabList.Insert(const Index: Integer; const Item: T): Integer;
+  var i: TG2IntS32;
+begin
+  if Length(_Items) <= _ItemCount then
+  SetLength(_Items, Length(_Items) + _Increment);
+  if Index < _ItemCount then
+  begin
+    for i := _ItemCount - 1 downto Index do
+    _Items[i + 1] := _Items[i];
+    _Items[Index] := Item;
+    Result := Index;
+  end
+  else
+  begin
+    _Items[_ItemCount] := Item;
+    Result := _ItemCount;
+  end;
+  Inc(_ItemCount);
+end;
+
+procedure TLabList.Delete(const Index: Integer; const ItemCount: Integer);
+  var i: TG2IntS32;
+begin
+  for i := Index to _ItemCount - (1 + ItemCount) do
+  begin
+    _Items[i] := _Items[i + ItemCount];
+  end;
+  Dec(_ItemCount, ItemCount);
+end;
+
+procedure TLabList.Remove(const Item: T);
+  var i: TG2IntS32;
+begin
+  i := Find(Item);
+  if i > -1 then Delete(i);
+end;
+
+procedure TLabList.Clear;
+begin
+  _ItemCount := 0;
+end;
+
+procedure TLabList.Allocate(const Amount: Integer);
+begin
+  SetCapacity(_ItemCount + Amount);
+  _ItemCount += Amount;
+end;
+
+procedure TLabList.Allocate(const Amount: Integer; const DefaultValue: T);
+  var i, j: Integer;
+begin
+  j := _ItemCount;
+  Allocate(Amount);
+  for i := j to _ItemCount - 1 do
+  begin
+    _Items[i] := DefaultValue;
+  end;
+end;
+
+function TLabList.Search(const CmpFunc: TCmpFunc; const Item: T): Integer;
+  var l, h, m, r: Integer;
+begin
+  l := 0;
+  h := _ItemCount - 1;
+  while l <= h do
+  begin
+    m := (l + h) shr 1;
+    r := CmpFunc(_Items[m], Item);
+    if r = 0 then Exit(m)
+    else if r < 0 then l := m + 1
+    else h := m - 1;
+  end;
+  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+end;
+
+function TLabList.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
+  var l, h, m, r: Integer;
+begin
+  l := 0;
+  h := _ItemCount - 1;
+  while l <= h do
+  begin
+    m := (l + h) shr 1;
+    r := CmpFunc(_Items[m], Item);
+    if r = 0 then Exit(m)
+    else if r < 0 then l := m + 1
+    else h := m - 1;
+  end;
+  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+end;
+
+procedure TLabList.Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer);
+  var i, j : LongInt;
+  var tmp, pivot: T;
+begin
+  if RangeEnd < RangeStart then Exit;
+  i := RangeStart;
+  j := RangeEnd;
+  pivot := _Items[(RangeStart + RangeEnd) shr 1];
+  repeat
+    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
+    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    if i <= j then
+    begin
+      tmp := _Items[i];
+      _Items[i] := _Items[j];
+      _Items[j] := tmp;
+      j := j - 1;
+      i := i + 1;
+    end;
+  until i > j;
+  if RangeStart < j then Sort(CmpFunc, RangeStart, j);
+  if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
+end;
+
+procedure TLabList.Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer);
+  var i, j : LongInt;
+  var tmp, pivot: T;
+begin
+  i := RangeStart;
+  j := RangeEnd;
+  pivot := _Items[(RangeStart + RangeEnd) shr 1];
+  repeat
+    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
+    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    if i <= j then
+    begin
+      tmp := _Items[i];
+      _Items[i] := _Items[j];
+      _Items[j] := tmp;
+      j := j - 1;
+      i := i + 1;
+    end;
+  until i > j;
+  if RangeStart < j then Sort(CmpFunc, RangeStart, j);
+  if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
+end;
+
+procedure TLabList.Sort(const CmpFunc: TCmpFunc);
+begin
+  Sort(CmpFunc, 0, _ItemCount - 1);
+end;
+
+procedure TLabList.Sort(const CmpFunc: TCmpFuncObj);
+begin
+  Sort(CmpFunc, 0, _ItemCount - 1);
+end;
+{$Hints on}
+//TLabList END
+
+//TLabListRef BEGIN
+procedure TLabListRef.SetItem(const Index: Integer; const Value: T);
+begin
+  _Items[Index] := Value;
+end;
+
+function TLabListRef.GetItem(const Index: Integer): T;
+begin
+  Result := _Items[Index];
+end;
+
+procedure TLabListRef.SetCapacity(const Value: Integer);
+  var j, i: Integer;
+begin
+  j := Length(_Items);
+  SetLength(_Items, Value);
+  for i := j to High(_Items) do
+  begin
+    _Items[i] := nil;
+  end;
+end;
+
+function TLabListRef.GetCapacity: Integer;
+begin
+  Result := Length(_Items);
+end;
+
+function TLabListRef.GetFirst: T;
+begin
+  Result := _Items[0];
+end;
+
+function TLabListRef.GetLast: T;
+begin
+  Result := _Items[_ItemCount - 1];
+end;
+
+function TLabListRef.GetData: TItemPtr;
+begin
+  if _ItemCount > 0 then
+  Result := @_Items[0]
+  else
+  Result := nil;
+end;
+
+constructor TLabListRef.Create;
+begin
+  inherited Create;
+  _Increment := 256;
+  _ItemCount := 0;
+end;
+
+constructor TLabListRef.Create(const DefaultCapacity: Integer; Increment: Integer);
+begin
+  if DefaultCapacity > 0 then SetCapacity(DefaultCapacity);
+  if Increment < 1 then _Increment := 1 else _Increment := Increment;
+  _ItemCount := 0;
+end;
+
+destructor TLabListRef.Destroy;
+  var i: Integer;
+begin
+  for i := 0 to _ItemCount - 1 do
+  begin
+    _Items[i] := nil;
+  end;
+  inherited Destroy;
+end;
+
+function TLabListRef.Find(const Item: T): Integer;
+  var i: Integer;
+begin
+  for i := 0 to _ItemCount - 1 do
+  if _Items[i] = Item then
+  begin
+    Result := i;
+    Exit;
+  end;
+  Result := -1;
+end;
+
+function TLabListRef.Add(const Item: T): Integer;
+begin
+  if Length(_Items) <= _ItemCount then
+  SetLength(_Items, Length(_Items) + 256);
+  _Items[_ItemCount] := Item;
+  Result := _ItemCount;
+  Inc(_ItemCount);
+end;
+
+function TLabListRef.Pop: T;
+begin
+  Result := Extract(_ItemCount - 1);
+end;
+
+function TLabListRef.Extract(const Index: Integer): T;
+begin
+  Result := _Items[Index];
+  Delete(Index);
+end;
+
+function TLabListRef.Insert(const Index: Integer; const Item: T): Integer;
+begin
+
+end;
+
+procedure TLabListRef.Delete(const Index: Integer; const ItemCount: Integer);
+  var i: TG2IntS32;
+begin
+  for i := Index to _ItemCount - (1 + ItemCount) do
+  begin
+    _Items[i] := _Items[i + ItemCount];
+    _Items[i + ItemCount] := nil;
+  end;
+  Dec(_ItemCount, ItemCount);
+end;
+
+procedure TLabListRef.Remove(const Item: T);
+  var i: Integer;
+begin
+  i := Find(Item);
+  if i > -1 then
+  Delete(i);
+end;
+
+procedure TLabListRef.Clear;
+  var i: Integer;
+begin
+  for i := 0 to _ItemCount - 1 do
+  begin
+    _Items[i] := nil;
+  end;
+  _ItemCount := 0;
+end;
+
+procedure TLabListRef.Allocate(const Amount: Integer);
+begin
+  SetCapacity(_ItemCount + Amount);
+  _ItemCount += Amount;
+end;
+
+procedure TLabListRef.Allocate(const Amount: Integer; const DefaultValue: T);
+  var i, j: Integer;
+begin
+  j := _ItemCount;
+  Allocate(Amount);
+  for i := j to _ItemCount - 1 do
+  begin
+    _Items[i] := DefaultValue;
+  end;
+end;
+
+function TLabListRef.Search(const CmpFunc: TCmpFunc; const Item: T): Integer;
+  var l, h, m, r: Integer;
+begin
+  l := 0;
+  h := _ItemCount - 1;
+  while l <= h do
+  begin
+    m := (l + h) shr 1;
+    r := CmpFunc(_Items[m], Item);
+    if r = 0 then Exit(m)
+    else if r < 0 then l := m + 1
+    else h := m - 1;
+  end;
+  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+end;
+
+function TLabListRef.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
+  var l, h, m, r: TG2IntS32;
+begin
+  l := 0;
+  h := _ItemCount - 1;
+  while l <= h do
+  begin
+    m := (l + h) shr 1;
+    r := CmpFunc(_Items[m], Item);
+    if r = 0 then Exit(m)
+    else if r < 0 then l := m + 1
+    else h := m - 1;
+  end;
+  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+end;
+
+procedure TLabListRef.Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer);
+  var i, j : LongInt;
+  var tmp, pivot: T;
+begin
+  if RangeEnd < RangeStart then Exit;
+  i := RangeStart;
+  j := RangeEnd;
+  pivot := _Items[(RangeStart + RangeEnd) shr 1];
+  repeat
+    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
+    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    if i <= j then
+    begin
+      tmp := _Items[i];
+      _Items[i] := _Items[j];
+      _Items[j] := tmp;
+      j := j - 1;
+      i := i + 1;
+    end;
+  until i > j;
+  if RangeStart < j then Sort(CmpFunc, RangeStart, j);
+  if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
+end;
+
+procedure TLabListRef.Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer);
+  var i, j : LongInt;
+  var tmp, pivot: T;
+begin
+  i := RangeStart;
+  j := RangeEnd;
+  pivot := _Items[(RangeStart + RangeEnd) shr 1];
+  repeat
+    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
+    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    if i <= j then
+    begin
+      tmp := _Items[i];
+      _Items[i] := _Items[j];
+      _Items[j] := tmp;
+      j := j - 1;
+      i := i + 1;
+    end;
+  until i > j;
+  if RangeStart < j then Sort(CmpFunc, RangeStart, j);
+  if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
+end;
+
+procedure TLabListRef.Sort(const CmpFunc: TCmpFunc);
+begin
+  Sort(CmpFunc, 0, _ItemCount - 1);
+end;
+
+procedure TLabListRef.Sort(const CmpFunc: TCmpFuncObj);
+begin
+  Sort(CmpFunc, 0, _ItemCount - 1);
+end;
+//TLabListRef END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin
