@@ -7,37 +7,37 @@ uses
   LabUtils;
 
 type
-  TLabRenderer = class;
   TLabPhysicalDevice = class (TInterfacedObject)
   private
-    var _Renderer: TLabRenderer;
+    var _Vulkan: TVulkan;
     var _PhysicalDevice: TVkPhysicalDevice;
     var _Properties: TVkPhysicalDeviceProperties;
     var _Features: TVkPhysicalDeviceFeatures;
     var _MemoryProperties: TVkPhysicalDeviceMemoryProperties;
     var _QueueFamilyProperties: array of TVkQueueFamilyProperties;
   public
-    constructor Create(const ARenderer: TLabRenderer; const APhysicalDevice: TVkPhysicalDevice);
+    constructor Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
     destructor Destroy; override;
+    property Vulkan: TVulkan read _Vulkan;
     property VkHandle: TVkPhysicalDevice read _PhysicalDevice;
-    function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlagBits): TVkUInt32;
+    function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
   end;
   TLabPhysicalDeviceList = specialize TLabListRef<TLabPhysicalDevice>;
 
 implementation
 
-constructor TLabPhysicalDevice.Create(const ARenderer: TLabRenderer; const APhysicalDevice: TVkPhysicalDevice);
+constructor TLabPhysicalDevice.Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
+  var QueueFamilyCount: Integer;
 begin
-  _Renderer := ARenderer;
-  _PhysicalDevice := APhysicalDevice;
-  vk.GetPhysicalDeviceProperties(_PhysicalDevice, @_Properties);
-  vk.GetPhysicalDeviceFeatures(_PhysicalDevice, @_Features);
-  vk.GetPhysicalDeviceMemoryProperties(_PhysicalDevice, @_MemoryProperties);
-  vk.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @queue_family_count, nil);
-  Assert(queue_family_count > 0);
-  SetLength(_QueueFamilyProperties, queue_family_count);
-  vk.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @queue_family_count, @_QueueFamilyProperties[0]);
+  _Vulkan := AVulkan;
+  _PhysicalDevice := AVkPhysicalDevice;
+  _Vulkan.GetPhysicalDeviceProperties(_PhysicalDevice, @_Properties);
+  _Vulkan.GetPhysicalDeviceFeatures(_PhysicalDevice, @_Features);
+  _Vulkan.GetPhysicalDeviceMemoryProperties(_PhysicalDevice, @_MemoryProperties);
+  _Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @QueueFamilyCount, nil);
+  SetLength(_QueueFamilyProperties, QueueFamilyCount);
+  _Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @QueueFamilyCount, @_QueueFamilyProperties[0]);
 end;
 
 destructor TLabPhysicalDevice.Destroy;
@@ -45,28 +45,28 @@ begin
   inherited Destroy;
 end;
 
-function TLabPhysicalDevice.GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlagBits): TVkUInt32;
+function TLabPhysicalDevice.GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
   var i: Integer;
 begin
-  if (QueueFlags and VK_QUEUE_COMPUTE_BIT) > 0 then
+  if (QueueFlags and TVkQueueFlags(VK_QUEUE_COMPUTE_BIT)) > 0 then
   begin
-    for i := 0 to High(_QueueFamilyPropertTLabPhysicalDeviceies) do
+    for i := 0 to High(_QueueFamilyProperties) do
     begin
       if ((_QueueFamilyProperties[i].queueFlags and QueueFlags) > 0)
-      and ((_QueueFamilyProperties[i].queueFlags and VK_QUEUE_GRAPHICS_BIT) == 0) then
+      and ((_QueueFamilyProperties[i].queueFlags and TVkQueueFlags(VK_QUEUE_GRAPHICS_BIT)) = 0) then
       begin
 	Result := i;
 	Exit;
       end;
     end;
   end;
-  if (QueueFlags and VK_QUEUE_TRANSFER_BIT)  > 0 then
+  if (QueueFlags and TVkQueueFlags(VK_QUEUE_TRANSFER_BIT))  > 0 then
   begin
     for i := 0 to High(_QueueFamilyProperties) do
     begin
       if ((_QueueFamilyProperties[i].queueFlags and queueFlags) > 0)
-      and ((_QueueFamilyProperties[i].queueFlags and VK_QUEUE_GRAPHICS_BIT) = 0)
-      and ((_QueueFamilyProperties[i].queueFlags and VK_QUEUE_COMPUTE_BIT) = 0) then
+      and ((_QueueFamilyProperties[i].queueFlags and TVkQueueFlags(VK_QUEUE_GRAPHICS_BIT)) = 0)
+      and ((_QueueFamilyProperties[i].queueFlags and TVkQueueFlags(VK_QUEUE_COMPUTE_BIT)) = 0) then
       begin
 	Result := i;
 	Exit;
@@ -75,7 +75,7 @@ begin
   end;
   for i := 0 to High(_QueueFamilyProperties) do
   begin
-    if (_QueueFamilyProperties[i].queueFlags and QueueFlags) then
+    if (_QueueFamilyProperties[i].queueFlags and TVkQueueFlags(QueueFlags)) > 0 then
     begin
       Result := i;
       Exit;
@@ -98,7 +98,7 @@ begin
   for format in depth_formats do
   begin
     vk.GetPhysicalDeviceFormatProperties(_PhysicalDevice, format, @format_props);
-    if (format_props.optimalTilingFeatures and VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) > 0 then
+    if (format_props.optimalTilingFeatures and TVkFlags(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0 then
     begin
       Result := format;
       Exit;

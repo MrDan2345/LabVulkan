@@ -26,7 +26,7 @@ type
       const APhysicalDevice: TLabPhysicalDevice;
       const AFeatures: TVkPhysicalDeviceFeatures;
       const AUseSwapChain: Boolean = true;
-      const ARequestedQueueTypes: TVkQueueFlags = (VK_QUEUE_GRAPHICS_BIT or VK_QUEUE_COMPUTE_BIT)
+      const ARequestedQueueTypes: TVkQueueFlags = (TVkFlags(VK_QUEUE_GRAPHICS_BIT) or TVkFlags(VK_QUEUE_COMPUTE_BIT))
     );
     destructor Destroy; override;
     property VkHandle: TVkDevice read _LogicalDevice;
@@ -50,9 +50,9 @@ constructor TLabDevice.Create(
 begin
   _PhysicalDevice := APhysicalDevice;
   // Graphics queue
-  if (RequestedQueueTypes and VK_QUEUE_GRAPHICS_BIT > 0) then
+  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) > 0 then
   begin
-    _QueueFamilyIndices.Graphics := _PhysicalDevice.GetQueueFamiliyIndex(VK_QUEUE_GRAPHICS_BIT);
+    _QueueFamilyIndices.Graphics := _PhysicalDevice.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT));
     i := Length(queue_create_infos);
     SetLength(queue_create_infos, i + 1);
     LabZeroMem(@queue_create_infos[i], SizeOf(TVkDeviceQueueCreateInfo));
@@ -66,9 +66,9 @@ begin
     _QueueFamilyIndices.Graphics := VK_NULL_HANDLE;
   end;
   // Dedicated compute queue
-  if (RequestedQueueTypes and VK_QUEUE_COMPUTE_BIT) > 0 then
+  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_COMPUTE_BIT)) > 0 then
   begin
-    _QueueFamilyIndices.Compute := GetQueueFamiliyIndex(VK_QUEUE_COMPUTE_BIT);
+    _QueueFamilyIndices.Compute := _PhysicalDevice.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT));
     if _QueueFamilyIndices.Compute <> _QueueFamilyIndices.Graphics then
     begin
       i := Length(queue_create_infos);
@@ -85,9 +85,9 @@ begin
     _QueueFamilyIndices.Compute := _QueueFamilyIndices.Graphics;
   end;
   // Dedicated transfer queue
-  if (RequestedQueueTypes and VK_QUEUE_TRANSFER_BIT) > 0 then
+  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_TRANSFER_BIT)) > 0 then
   begin
-    _QueueFamilyIndices.Transfer := GetQueueFamiliyIndex(VK_QUEUE_TRANSFER_BIT);
+    _QueueFamilyIndices.Transfer := _PhysicalDevice.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_TRANSFER_BIT));
     if (_QueueFamilyIndices.Transfer <> _QueueFamilyIndices.Graphics)
     and (_QueueFamilyIndices.Transfer <> _QueueFamilyIndices.Compute) then
     begin
@@ -104,17 +104,17 @@ begin
   begin
     _QueueFamilyIndices.Transfer := _QueueFamilyIndices.Graphics;
   end;
-  if UseSwapChain then
+  if AUseSwapChain then
   begin
     i := Length(device_extensions);
     SetLength(device_extensions, i + 1);
     device_extensions[i] := VK_KHR_SWAPCHAIN_EXTENSION_NAME;
   end;
-  ZeroMem(@device_create_info, SizeOf(TVkDeviceCreateInfo));
+  LabZeroMem(@device_create_info, SizeOf(TVkDeviceCreateInfo));
   device_create_info.sType := VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   device_create_info.queueCreateInfoCount := Length(queue_create_infos);
   device_create_info.pQueueCreateInfos := @queue_create_infos[0];
-  device_create_info.pEnabledFeatures := @Features;
+  device_create_info.pEnabledFeatures := @AFeatures;
   if LabCheckDeviceExtensionPresent(_PhysicalDevice.VkHandle, VK_EXT_DEBUG_MARKER_EXTENSION_NAME) then
   begin
     i := Length(device_extensions);
@@ -129,15 +129,15 @@ begin
   if Length(device_extensions) > 0 then
   begin
     device_create_info.enabledExtensionCount := TVkUInt32(Length(device_extensions));
-    device_create_info.ppEnabledExtensionNames := @(PVkChar(device_extensions[0]));
+    device_create_info.ppEnabledExtensionNames := PPVkChar(@device_extensions[0]);
   end;
-  LabAssetVkError(vk.CreateDevice(_PhysicalDevice.VkHandle, @device_create_info, nil, @_LogicalDevice);
+  LabAssetVkError(vk.CreateDevice(_PhysicalDevice.VkHandle, @device_create_info, nil, @_LogicalDevice));
   _CommandPool := TLabCommandPool.Create(_LogicalDevice, _QueueFamilyIndices.Graphics);
 end;
 
 destructor TLabDevice.Destroy;
 begin
-  if _CommandPool then _CommandPool := nil;
+  if Assigned(_CommandPool) then _CommandPool := nil;
   if LabVkValidHandle(_LogicalDevice) then
   begin
     vk.DestroyDevice(_LogicalDevice, nil);

@@ -15,7 +15,7 @@ type
     constructor Create(
       const LogicalDevice: TVkDevice;
       const QueueFamilyIndex: TVkUInt32;
-      const CreateFlags: TVkCommandPoolCreateFlags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+      const CreateFlags: TVkCommandPoolCreateFlags = TVkFlags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
     );
     destructor Destroy; override;
   end;

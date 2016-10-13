@@ -8,6 +8,7 @@ uses
 type
   generic TLabList<T> = class (TInterfacedObject)
   private
+    var _Items: array of T;
     var _Increment: Integer;
     var _ItemCount: Integer;
   public
@@ -52,6 +53,7 @@ type
 
   generic TLabListRef<T> = class (TInterfacedObject)
   private
+    var _Items: array of T;
     var _Increment: Integer;
     var _ItemCount: Integer;
   public
@@ -67,7 +69,7 @@ type
     function GetLast: T; inline;
     function GetData: TItemPtr; inline;
   public
-    constructor Create; override;
+    constructor Create;
     constructor Create(const DefaultCapacity: Integer; Increment: Integer = 256);
     destructor Destroy; override;
     property Capacity: Integer read GetCapacity write SetCapacity;
@@ -97,8 +99,8 @@ type
   TLabListString = specialize TLabList<AnsiString>;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
-function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): VkBool32;
-function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): VkBool32;
+function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
+function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
 procedure LabAssetVkError(const State: TVkResult);
 function LogVkError(const State: TVkResult): TVkResult;
 function LabVkErrorString(const State: TVkResult): String;
@@ -197,7 +199,7 @@ begin
 end;
 
 function TLabList.Insert(const Index: Integer; const Item: T): Integer;
-  var i: TG2IntS32;
+  var i: Integer;
 begin
   if Length(_Items) <= _ItemCount then
   SetLength(_Items, Length(_Items) + _Increment);
@@ -217,7 +219,7 @@ begin
 end;
 
 procedure TLabList.Delete(const Index: Integer; const ItemCount: Integer);
-  var i: TG2IntS32;
+  var i: Integer;
 begin
   for i := Index to _ItemCount - (1 + ItemCount) do
   begin
@@ -227,7 +229,7 @@ begin
 end;
 
 procedure TLabList.Remove(const Item: T);
-  var i: TG2IntS32;
+  var i: Integer;
 begin
   i := Find(Item);
   if i > -1 then Delete(i);
@@ -453,7 +455,7 @@ begin
 end;
 
 procedure TLabListRef.Delete(const Index: Integer; const ItemCount: Integer);
-  var i: TG2IntS32;
+  var i: Integer;
 begin
   for i := Index to _ItemCount - (1 + ItemCount) do
   begin
@@ -515,7 +517,7 @@ begin
 end;
 
 function TLabListRef.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
-  var l, h, m, r: TG2IntS32;
+  var l, h, m, r: Integer;
 begin
   l := 0;
   h := _ItemCount - 1;
@@ -596,7 +598,7 @@ begin
   {$Warnings on}
 end;
 
-function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): VkBool32;
+function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
   var ext_count: TVkUInt32;
   var extensions: array of TVkExtensionProperties;
   var ext: TVkExtensionProperties;
@@ -614,7 +616,7 @@ begin
   Result := False;
 end;
 
-function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): VkBool32;
+function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
   var ext_count: TVkUInt32;
   var extensions: array of TVkExtensionProperties;
   var ext: TVkExtensionProperties;
@@ -641,7 +643,7 @@ function LogVkError(const State: TVkResult): TVkResult;
 begin
   if State <> VK_SUCCESS then
   begin
-    WriteLn('Vulkan Error: ' + LavVkErrorString(State));
+    WriteLn('Vulkan Error: ' + LabVkErrorString(State));
   end;
   Result := State;
 end;
