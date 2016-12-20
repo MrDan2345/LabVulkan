@@ -1,15 +1,18 @@
 program Initialize;
 
+{$include LabPlatform.inc}
 uses
-  {$include LabPlatform.inc},
   LabApplication,
-  Vulkan;
+  Vulkan,
+  SysUtils;
 
 var
-  App: TLabApplication;
+  App: TLabApplicationRef;
 
 begin
+  if FileExists('heaptrc.txt') then DeleteFile('heaptrc.txt');
+  SetHeapTraceOutput('heaptrc.txt');
   App := TLabApplication.Create;
-  App.Run;
+  App.Ptr.Run;
 end.
 

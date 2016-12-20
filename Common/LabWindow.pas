@@ -1,10 +1,15 @@
 unit LabWindow;
 
+{$include LabPlatform.inc}
 interface
 
 uses
-  {$include LabPlatform.inc},
-  LabThread;
+{$if defined(VK_USE_PLATFORM_WIN32_KHR)}
+  Windows,
+{$endif}
+  LabThread,
+  LabUtils,
+  SysUtils;
 
 type
   TLabWindow = class;
@@ -200,6 +205,7 @@ end;
 
 class constructor TLabWindow.CreateClass;
 begin
+  LabLog('TLabWindow.CreateClass');
   _WndClassName := 'LabVulkan';
   FillChar(_WndClass, SizeOf(TWndClassExA), 0);
   _WndClass.cbSize := SizeOf(TWndClassExA);
@@ -225,17 +231,18 @@ begin
   DestroyIcon(_WndClass.hIconSm);
   DestroyIcon(_WndClass.hIcon);
   DestroyCursor(_WndClass.hCursor);
+  LabLog('TLabWindow.DestroyClass');
 end;
 
 constructor TLabWindow.Create;
 begin
-  _Width := 960;
-  _Height := 540;
-  Initialize;
+  Create(960, 540);
 end;
 
 constructor TLabWindow.Create(const NewWidth, NewHeight: Integer);
 begin
+  LabLog('TLabWindow.Create(' + IntToStr(NewWidth) + ', ' + IntToStr(NewHeight) + ')', 2);
+  inherited Create;
   _Width := NewWidth;
   _Height := NewHeight;
   Initialize;
@@ -246,6 +253,7 @@ begin
   if _Active then Close;
   Finalize;
   inherited Destroy;
+  LabLog('TLabWindow.Destroy', -2);
 end;
 
 procedure TLabWindow.Close;

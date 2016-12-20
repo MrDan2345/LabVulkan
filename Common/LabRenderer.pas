@@ -1,15 +1,16 @@
 unit LabRenderer;
 
+{$include LabPlatform.inc}
 interface
 
 uses
-  {$include LabPlatform.inc},
   Vulkan,
   LabTypes,
   LabUtils,
   LabPhysicalDevice,
   LabDevice,
-  LabSwapChain;
+  LabSwapChain,
+  SysUtils;
 
 type
 
@@ -31,8 +32,8 @@ type
   private
     class var _VulkanEnabled: Boolean;
     class var _Layers: array of TLabLayer;
-    class var _ExtensionsEnabled: TLabListString;
-    class var _LayersEnabled: TLabListString;
+    class var _ExtensionsEnabled: TLabListStringRef;
+    class var _LayersEnabled: TLabListStringRef;
     var _Vulkan: TVulkan;
     var _PhysicalDevices: TLabPhysicalDeviceList;
   public
@@ -51,6 +52,7 @@ type
     destructor Destroy; override;
     property PhysicalDevices: TLabPhysicalDeviceList read _PhysicalDevices;
   end;
+  TLabRendererRef = specialize TLabRefCounter<TLabRenderer>;
 
 implementation
 
@@ -60,9 +62,12 @@ class constructor TLabRenderer.CreateClass;
   var LayerProperties: array of TVkLayerProperties;
   var ExtensionProperties: array of TVkExtensionProperties;
 begin
+  LabLog('TLabRenderer.CreateClass');
   _VulkanEnabled := LoadVulkanLibrary and LoadVulkanGlobalCommands;
   if _VulkanEnabled then
   begin
+    _ExtensionsEnabled := TLabListString.Create(4, 4);
+    _LayersEnabled := TLabListString.Create(4, 4);
     ResetExtensions;
 {$if defined(Windows)}
     EnableExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
@@ -71,15 +76,13 @@ begin
 {$elseif defined(Linux)}
     EnableExtension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 {$endif}
-    _ExtensionsEnabled := TLabListString.Create(4, 4);
-    _LayersEnabled := TLabListString.Create(4, 4);
     LayerCount := 0;
-    Vulkan.EnumerateInstanceLayerProperties(@LayerCount, nil);
+    LabAssetVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, nil));
     if LayerCount > 0 then
     begin
       SetLength(_Layers, LayerCount);
       SetLength(LayerProperties, LayerCount);
-      Vulkan.EnumerateInstanceLayerProperties(@LayerCount, @LayerProperties[0]);
+      LabAssetVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, @LayerProperties[0]));
       for i := 0 to LayerCount - 1 do
       begin
         _Layers[i].Name := LayerProperties[i].layerName;
@@ -87,13 +90,13 @@ begin
         _Layers[i].ImplementationVersion := LayerProperties[i].implementationVersion;
         _Layers[i].Description := LayerProperties[i].description;
         ExtensionCount := 0;
-        Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, nil);
+        LabAssetVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, nil));
         SetLength(_Layers[i].Extensions, ExtensionCount);
         if Length(ExtensionProperties) < ExtensionCount then
         begin
           SetLength(ExtensionProperties, ExtensionCount);
         end;
-        Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, @ExtensionProperties[0]);
+        LabAssetVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, @ExtensionProperties[0]));
         for j := 0 to ExtensionCount - 1 do
         begin
           _Layers[i].Extensions[j].Name := ExtensionProperties[j].extensionName;
@@ -106,7 +109,7 @@ end;
 
 class destructor TLabRenderer.DestroyClass;
 begin
-
+  LabLog('TLabRenderer.DestroyClass');
 end;
 
 class function TLabRenderer.GetLayer(const Index: Integer): PLabLayer;
@@ -132,39 +135,39 @@ end;
 
 class procedure TLabRenderer.ResetExtensions;
 begin
-  _ExtensionsEnabled.Clear;
-  _ExtensionsEnabled.Add(VK_KHR_SURFACE_EXTENSION_NAME);
+  _ExtensionsEnabled.Ptr.Clear;
+  _ExtensionsEnabled.Ptr.Add(VK_KHR_SURFACE_EXTENSION_NAME);
 end;
 
 class procedure TLabRenderer.EnableExtension(const Name: AnsiString);
 begin
-  if _ExtensionsEnabled.Find(Name) = -1 then
+  if _ExtensionsEnabled.Ptr.Find(Name) = -1 then
   begin
-    _ExtensionsEnabled.Add(Name);
+    _ExtensionsEnabled.Ptr.Add(Name);
   end;
 end;
 
 class procedure TLabRenderer.DisableExtension(const Name: AnsiString);
 begin
-  _ExtensionsEnabled.Remove(Name);
+  _ExtensionsEnabled.Ptr.Remove(Name);
 end;
 
 class procedure TLabRenderer.ResetLayers;
 begin
-  _LayersEnabled.Clear;
+  _LayersEnabled.Ptr.Clear;
 end;
 
 class procedure TLabRenderer.EnableLayer(const Name: AnsiString);
 begin
-  if _LayersEnabled.Find(Name) = -1 then
+  if _LayersEnabled.Ptr.Find(Name) = -1 then
   begin
-    _LayersEnabled.Add(Name);
+    _LayersEnabled.Ptr.Add(Name);
   end;
 end;
 
 class procedure TLabRenderer.DisableLayer(const Name: AnsiString);
 begin
-  _LayersEnabled.Remove(Name);
+  _LayersEnabled.Ptr.Remove(Name);
 end;
 
 constructor TLabRenderer.Create(const AppName: AnsiString; const EngineName: AnsiString);
@@ -175,10 +178,11 @@ constructor TLabRenderer.Create(const AppName: AnsiString; const EngineName: Ans
   var PhysicalDeviceArr: array of TVkPhysicalDevice;
   var PhysicalDeviceFeatures: TVkPhysicalDeviceFeatures;
   var DepthFormat: TVkFormat;
-  var i: Integer;
+  var i, j: Integer;
   var Extensions: array of PVkChar;
   var Layers: array of PVkChar;
 begin
+  LabLog('TLabRenderer.Create', 2);
   if not _VulkanEnabled then Halt;
   _PhysicalDevices := TLabPhysicalDeviceList.Create(0, 4);
   LabZeroMem(@AppInfo, SizeOf(TVkApplicationInfo));
@@ -186,15 +190,15 @@ begin
   AppInfo.pApplicationName := PVkChar(AppName);
   AppInfo.pEngineName := PVkChar(EngineName);
   AppInfo.apiVersion := VK_API_VERSION_1_0;
-  SetLength(Extensions, _ExtensionsEnabled.Count);
-  for i := 0 to _ExtensionsEnabled.Count - 1 do
+  SetLength(Extensions, _ExtensionsEnabled.Ptr.Count);
+  for i := 0 to _ExtensionsEnabled.Ptr.Count - 1 do
   begin
-    Extensions[i] := PVkChar(_ExtensionsEnabled[i]);
+    Extensions[i] := PVkChar(_ExtensionsEnabled.Ptr[i]);
   end;
-  SetLength(Layers, _LayersEnabled.Count);
-  for i := 0 to _LayersEnabled.Count - 1 do
+  SetLength(Layers, _LayersEnabled.Ptr.Count);
+  for i := 0 to _LayersEnabled.Ptr.Count - 1 do
   begin
-    Layers[i] := PVkChar(_LayersEnabled[i]);
+    Layers[i] := PVkChar(_LayersEnabled.Ptr[i]);
   end;
   LabZeroMem(@InstanceCreateInfo, SizeOf(TVkInstanceCreateInfo));
   InstanceCreateInfo.sType := VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -205,7 +209,7 @@ begin
   InstanceCreateInfo.pApplicationInfo := @AppInfo;
   LabAssetVkError(vk.CreateInstance(@InstanceCreateInfo, nil, @_VulkanInstance));
   LabZeroMem(@InstanceCommands, SizeOf(TVulkanCommands));
-  if LoadVulkanInstanceCommands(vk.Commands.GetInstanceProcAddr, _Instance, InstanceCommands) then
+  if LoadVulkanInstanceCommands(vk.Commands.GetInstanceProcAddr, _VulkanInstance, InstanceCommands) then
   begin
     _Vulkan := TVulkan.Create(InstanceCommands);
     _VulkanPtr := @_Vulkan;
@@ -216,19 +220,31 @@ begin
     Halt;
   end;
   PhysicalDeviceCount := 0;
-  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_Instance, @PhysicalDeviceCount, nil));
+  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @PhysicalDeviceCount, nil));
   _PhysicalDevices.Allocate(PhysicalDeviceCount);
   SetLength(PhysicalDeviceArr, PhysicalDeviceCount);
-  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_Instance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
+  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
   for i := 0 to PhysicalDeviceCount - 1 do
   begin
     _PhysicalDevices[i] := TLabPhysicalDevice.Create(_Vulkan, PhysicalDeviceArr[i]);
+  end;
+  LabLog('Physical device count = ' + IntToStr(_PhysicalDevices.Count));
+  LabLog('Layer count = ' + IntToStr(Length(_Layers)));
+  for i := 0 to High(_Layers) do
+  begin
+    LabLog('Layer[' + IntToStr(i) + '] = ' + _Layers[i].Name + ' (' + _Layers[i].Description + ')');
+    LabLog('Layer[' + IntToStr(i) + '] extension count = ' + IntToStr(Length(_Layers[i].Extensions)));
+    for j := 0 to High(_Layers[i].Extensions) do
+    begin
+      LabLog(_Layers[i].Extensions[j].Name);
+    end;
   end;
 end;
 
 destructor TLabRenderer.Destroy;
 begin
   _PhysicalDevices.Clear;
+  _PhysicalDevices.Free;
   if Assigned(_Vulkan) then
   begin
     if _VulkanPtr = @_Vulkan then
@@ -244,6 +260,7 @@ begin
     _VulkanInstance := 0;
   end;
   inherited Destroy;
+  LabLog('TLabRenderer.Destroy', -2);
 end;
 
 end.

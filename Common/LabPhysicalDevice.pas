@@ -15,17 +15,40 @@ type
     var _Features: TVkPhysicalDeviceFeatures;
     var _MemoryProperties: TVkPhysicalDeviceMemoryProperties;
     var _QueueFamilyProperties: array of TVkQueueFamilyProperties;
+    function GetProperties: PVkPhysicalDeviceProperties; inline;
+    function GetFeatures: PVkPhysicalDeviceFeatures; inline;
+    function GetMemoryProperties: PVkPhysicalDeviceMemoryProperties; inline;
   public
     constructor Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
     destructor Destroy; override;
     property Vulkan: TVulkan read _Vulkan;
     property VkHandle: TVkPhysicalDevice read _PhysicalDevice;
+    property Properties: PVkPhysicalDeviceProperties read GetProperties;
+    property Features: PVkPhysicalDeviceFeatures read GetFeatures;
+    property MemoryPropertices: PVkPhysicalDeviceMemoryProperties read GetMemoryProperties;
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
   end;
-  TLabPhysicalDeviceList = specialize TLabListRef<TLabPhysicalDevice>;
+  TLabPhysicalDeviceRef = specialize TLabRefCounter<TLabPhysicalDevice>;
+  TLabPhysicalDeviceList = specialize TLabListRef<TLabPhysicalDeviceRef>;
+  TLabPhysicalDeviceListRef = specialize TLabRefCounter<TLabPhysicalDeviceList>;
 
 implementation
+
+function TLabPhysicalDevice.GetProperties: PVkPhysicalDeviceProperties;
+begin
+  Result := @_Properties;
+end;
+
+function TLabPhysicalDevice.GetFeatures: PVkPhysicalDeviceFeatures;
+begin
+  Result := @_Features;
+end;
+
+function TLabPhysicalDevice.GetMemoryProperties: PVkPhysicalDeviceMemoryProperties;
+begin
+  Result := @_MemoryProperties;
+end;
 
 constructor TLabPhysicalDevice.Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
   var QueueFamilyCount: Integer;

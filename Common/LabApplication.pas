@@ -1,10 +1,14 @@
 unit LabApplication;
 
+{$include LabPlatform.inc}
 interface
 
 uses
-  {$include LabPlatform.inc},
+  SysUtils,
   LabWindow,
+  LabSwapChain,
+  LabPhysicalDevice,
+  LabDevice,
   LabThread,
   LabRenderer,
   LabUtils;
@@ -12,8 +16,11 @@ uses
 type
   TLabApplication = class (TInterfacedObject)
   private
+    var _Renderer: TLabRenderer;
     var _Window: TLabWindow;
+    var _SwapChain: TLabSwapChain;
     var _UpdateThread: TLabThread;
+    var _Device: TLabDevice;
     var _Active: Boolean;
     procedure OnWindowClose(Wnd: TLabWindow);
     procedure Update;
@@ -23,6 +30,7 @@ type
     destructor Destroy; override;
     procedure Run;
   end;
+  TLabApplicationRef = specialize TLabRefCounter<TLabApplication>;
 
 implementation
 
@@ -46,10 +54,16 @@ end;
 
 constructor TLabApplication.Create;
 begin
+  LabProfileStart('App');
+  LabLog('CPU Count = ' + IntToStr(System.CPUCount));
+  LabLog('TLabApplication.Create', 2);
   inherited Create;
   _Active := False;
+  _Renderer := TLabRenderer.Create();
   _Window := TLabWindow.Create;
   _Window.OnClose := @OnWindowClose;
+  _Device := TLabDevice.Create(_Renderer.PhysicalDevices[0]);
+  _SwapChain := TLabSwapChain.Create(_Window);
   _UpdateThread := TLabThread.Create;
   _UpdateThread.Proc := @Update;
 end;
@@ -57,8 +71,13 @@ end;
 destructor TLabApplication.Destroy;
 begin
   _UpdateThread.Free;
+  _SwapChain.Free;
+  _Device.Free;
   _Window.Free;
+  _Renderer.Free;
   inherited Destroy;
+  LabLog('TLabApplication.Destroy', -2);
+  LabProfileStop;
 end;
 
 procedure TLabApplication.Run;

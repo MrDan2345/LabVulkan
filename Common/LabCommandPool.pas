@@ -12,6 +12,7 @@ type
     var _LogicalDevice: TVkDevice;
     var _CommandPool: TVkCommandPool;
   public
+    type TRefCounter = specialize TLabRefCounter<TLabCommandPool>;
     constructor Create(
       const LogicalDevice: TVkDevice;
       const QueueFamilyIndex: TVkUInt32;

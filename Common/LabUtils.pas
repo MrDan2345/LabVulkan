@@ -1,11 +1,28 @@
 unit LabUtils;
 
 interface
+{$modeswitch advancedrecords}
 
 uses
+  SysUtils,
   Vulkan;
 
 type
+  generic TLabRefCounter<T> = record
+  private
+    var _Ptr: IInterface;
+    function GetPtr: T; inline;
+    procedure SetPtr(const Value: T); inline;
+  public
+    type TPtr = T;
+    type TSelf = specialize TLabRefCounter<T>;
+    property Ptr: T read GetPtr write SetPtr;
+    function IsValid: Boolean; inline;
+    class operator := (const Value: T): TSelf; inline;
+    class operator := (const Value: Pointer): TSelf; inline;
+    class operator = (v1, v2: TSelf): Boolean; inline;
+  end;
+
   generic TLabList<T> = class (TInterfacedObject)
   private
     var _Items: array of T;
@@ -97,16 +114,65 @@ type
   end;
 
   TLabListString = specialize TLabList<AnsiString>;
+  TLabListStringRef = specialize TLabRefCounter<TLabListString>;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
 function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
+procedure LabLog(const Msg: AnsiString; const Offset: Integer = 0);
+procedure LabLogOffset(const Offset: Integer);
 procedure LabAssetVkError(const State: TVkResult);
-function LogVkError(const State: TVkResult): TVkResult;
+function LabLogVkError(const State: TVkResult): TVkResult;
 function LabVkErrorString(const State: TVkResult): String;
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean; inline;
+procedure LabProfileStart(const Name: AnsiString);
+procedure LabProfileStop;
 
 implementation
+
+type TProfileTime = record
+  tv: Double;
+  name: AnsiString;
+end;
+
+var LogFile: Text;
+var LogOffset: Integer = 0;
+var LogLock: Integer = 0;
+var ProfileStack: array [0..127] of TProfileTime;
+var ProfileIndex: Integer = -1;
+
+//TRefCounter BEGIN
+function TLabRefCounter.GetPtr: T;
+begin
+  Result := T(_Ptr as TInterfacedObject);
+end;
+
+procedure TLabRefCounter.SetPtr(const Value: T);
+begin
+  _Ptr := IInterface(Value);
+end;
+
+function TLabRefCounter.IsValid: Boolean;
+begin
+  Result := _Ptr <> nil;
+end;
+
+class operator TLabRefCounter.:=(const Value: T): TSelf;
+begin
+  Result.Ptr := Value;
+end;
+
+class operator TLabRefCounter.:=(const Value: Pointer): TSelf;
+begin
+  Result.Ptr := T(Value);
+end;
+
+class operator TLabRefCounter.=(v1, v2: TSelf): Boolean;
+begin
+  Result := v1._Ptr = v2._Ptr;
+end;
+
+//TRefCounter END
 
 //TLabList BEGIN
 {$Hints off}
@@ -421,7 +487,7 @@ function TLabListRef.Find(const Item: T): Integer;
   var i: Integer;
 begin
   for i := 0 to _ItemCount - 1 do
-  if _Items[i] = Item then
+  if _Items[i]._Ptr = Item._Ptr then
   begin
     Result := i;
     Exit;
@@ -634,12 +700,44 @@ begin
   Result := False;
 end;
 
-procedure LabAssetVkError(const State: TVkResult);
+procedure LabLog(const Msg: AnsiString; const Offset: Integer);
+  var Spaces: AnsiString;
 begin
-  Assert(LogVkError(State) = VK_SUCCESS, LabVkErrorString(State));
+  if (Offset < 0) then
+  begin
+    LabLogOffset(Offset);
+  end;
+  if LogOffset > 0 then
+  begin
+    SetLength(Spaces, LogOffset);
+    FillChar(Spaces[1], LogOffset, ' ');
+    WriteLn(LogFile, Spaces + Msg);
+    //WriteLn(Spaces + Msg);
+  end
+  else
+  begin
+    WriteLn(LogFile, Msg);
+    //WriteLn(Msg);
+  end;
+  if (Offset > 0) then
+  begin
+    LabLogOffset(Offset);
+  end;
 end;
 
-function LogVkError(const State: TVkResult): TVkResult;
+procedure LabLogOffset(const Offset: Integer);
+begin
+  while InterlockedCompareExchange(LogLock, 1, 0) = 1 do;
+  LogOffset := LogOffset + Offset;
+  InterLockedExchange(LogLock, 0);
+end;
+
+procedure LabAssetVkError(const State: TVkResult);
+begin
+  Assert(LabLogVkError(State) = VK_SUCCESS, LabVkErrorString(State));
+end;
+
+function LabLogVkError(const State: TVkResult): TVkResult;
 begin
   if State <> VK_SUCCESS then
   begin
@@ -651,6 +749,22 @@ end;
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean;
 begin
   Result := Handle <> 0;
+end;
+
+procedure LabProfileStart(const Name: AnsiString);
+begin
+  Inc(ProfileIndex);
+  ProfileStack[ProfileIndex].name := Name;
+  ProfileStack[ProfileIndex].tv := Now * 24 * 60 * 60;
+end;
+
+procedure LabProfileStop;
+  var t: Double;
+begin
+  if ProfileIndex < 0 then Exit;
+  t := Now * 24 * 60 * 60 - ProfileStack[ProfileIndex].tv;
+  LabLog('Profile[' + ProfileStack[ProfileIndex].name + ']: ' + FloatToStr(t));
+  Dec(ProfileIndex);
 end;
 
 function LabVkErrorString(const State: TVkResult): String;
@@ -681,6 +795,17 @@ begin
     VK_ERROR_INVALID_SHADER_NV: Result := 'ERROR_INVALID_SHADER_NV';
     else Result := 'UNKNOWN_ERROR';
   end;
+end;
+
+initialization
+begin
+  Assign(LogFile, 'LabLog.txt');
+  Rewrite(LogFile);
+end;
+
+finalization
+begin
+  Close(LogFile);
 end;
 
 end.

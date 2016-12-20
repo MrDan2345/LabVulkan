@@ -9,5 +9,6 @@
 {$endif}
 {$ifdef Windows}
   {$define VK_USE_PLATFORM_WIN32_KHR}
-  Windows
 {$endif}
+{$implicitexceptions off}
+{$modeswitch advancedrecords}
