@@ -129,6 +129,7 @@ begin
   Result := DefWindowProc(Wnd, Msg, wParam, lParam);
 end;
 
+//TLabWindow BEGIN
 procedure TLabWindow.SetCaption(const Value: AnsiString);
 begin
   if _Caption = Value then Exit;
@@ -260,5 +261,6 @@ procedure TLabWindow.Close;
 begin
   _Active := False;
 end;
+//TLabWindow END
 
 end.

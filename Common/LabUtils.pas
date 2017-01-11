@@ -498,7 +498,7 @@ end;
 function TLabListRef.Add(const Item: T): Integer;
 begin
   if Length(_Items) <= _ItemCount then
-  SetLength(_Items, Length(_Items) + 256);
+  SetLength(_Items, Length(_Items) + _Increment);
   _Items[_ItemCount] := Item;
   Result := _ItemCount;
   Inc(_ItemCount);
@@ -516,8 +516,23 @@ begin
 end;
 
 function TLabListRef.Insert(const Index: Integer; const Item: T): Integer;
+  var i: Integer;
 begin
-
+  if Length(_Items) <= _ItemCount then
+  SetLength(_Items, Length(_Items) + _Increment);
+  if Index < _ItemCount then
+  begin
+    for i := _ItemCount - 1 downto Index do
+    _Items[i + 1] := _Items[i];
+    _Items[Index] := Item;
+    Result := Index;
+  end
+  else
+  begin
+    _Items[_ItemCount] := Item;
+    Result := _ItemCount;
+  end;
+  Inc(_ItemCount);
 end;
 
 procedure TLabListRef.Delete(const Index: Integer; const ItemCount: Integer);
@@ -748,7 +763,7 @@ end;
 
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean;
 begin
-  Result := Handle <> 0;
+  Result := Handle <> VK_NULL_HANDLE;
 end;
 
 procedure LabProfileStart(const Name: AnsiString);

@@ -4,12 +4,12 @@ interface
 
 uses
   Vulkan,
+  LabTypes,
   LabUtils;
 
 type
-  TLabPhysicalDevice = class (TInterfacedObject)
+  TLabPhysicalDevice = class (TLabClass)
   private
-    var _Vulkan: TVulkan;
     var _PhysicalDevice: TVkPhysicalDevice;
     var _Properties: TVkPhysicalDeviceProperties;
     var _Features: TVkPhysicalDeviceFeatures;
@@ -18,14 +18,17 @@ type
     function GetProperties: PVkPhysicalDeviceProperties; inline;
     function GetFeatures: PVkPhysicalDeviceFeatures; inline;
     function GetMemoryProperties: PVkPhysicalDeviceMemoryProperties; inline;
+    function GetQueueFamilyProperties(const Index: Integer): PVkQueueFamilyProperties; inline;
+    function GetQueueFamilyCount: Integer; inline;
   public
-    constructor Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
+    constructor Create(const AVkPhysicalDevice: TVkPhysicalDevice);
     destructor Destroy; override;
-    property Vulkan: TVulkan read _Vulkan;
     property VkHandle: TVkPhysicalDevice read _PhysicalDevice;
     property Properties: PVkPhysicalDeviceProperties read GetProperties;
     property Features: PVkPhysicalDeviceFeatures read GetFeatures;
     property MemoryPropertices: PVkPhysicalDeviceMemoryProperties read GetMemoryProperties;
+    property QueueFamilyProperties[const Index: Integer]: PVkQueueFamilyProperties read GetQueueFamilyProperties;
+    property QueueFamilyCount: Integer read GetQueueFamilyCount;
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
   end;
@@ -35,6 +38,7 @@ type
 
 implementation
 
+//TLabPhysicalDevice BEGIN
 function TLabPhysicalDevice.GetProperties: PVkPhysicalDeviceProperties;
 begin
   Result := @_Properties;
@@ -50,17 +54,26 @@ begin
   Result := @_MemoryProperties;
 end;
 
-constructor TLabPhysicalDevice.Create(const AVulkan: TVulkan; const AVkPhysicalDevice: TVkPhysicalDevice);
-  var QueueFamilyCount: Integer;
+function TLabPhysicalDevice.GetQueueFamilyProperties(const Index: Integer): PVkQueueFamilyProperties;
 begin
-  _Vulkan := AVulkan;
+  Result := @_QueueFamilyProperties[Index];
+end;
+
+function TLabPhysicalDevice.GetQueueFamilyCount: Integer;
+begin
+  Result := Length(_QueueFamilyProperties);
+end;
+
+constructor TLabPhysicalDevice.Create(const AVkPhysicalDevice: TVkPhysicalDevice);
+  var qfc: Integer;
+begin
   _PhysicalDevice := AVkPhysicalDevice;
-  _Vulkan.GetPhysicalDeviceProperties(_PhysicalDevice, @_Properties);
-  _Vulkan.GetPhysicalDeviceFeatures(_PhysicalDevice, @_Features);
-  _Vulkan.GetPhysicalDeviceMemoryProperties(_PhysicalDevice, @_MemoryProperties);
-  _Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @QueueFamilyCount, nil);
-  SetLength(_QueueFamilyProperties, QueueFamilyCount);
-  _Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @QueueFamilyCount, @_QueueFamilyProperties[0]);
+  Vulkan.GetPhysicalDeviceProperties(_PhysicalDevice, @_Properties);
+  Vulkan.GetPhysicalDeviceFeatures(_PhysicalDevice, @_Features);
+  Vulkan.GetPhysicalDeviceMemoryProperties(_PhysicalDevice, @_MemoryProperties);
+  Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @qfc, nil);
+  SetLength(_QueueFamilyProperties, qfc);
+  Vulkan.GetPhysicalDeviceQueueFamilyProperties(_PhysicalDevice, @qfc, @_QueueFamilyProperties[0]);
 end;
 
 destructor TLabPhysicalDevice.Destroy;
@@ -104,7 +117,7 @@ begin
       Exit;
     end;
   end;
-  Result := VK_NULL_HANDLE;
+  Result := TVkUInt32(-1);
 end;
 
 function TLabPhysicalDevice.GetSupportedDepthFormat: TVkFormat;
@@ -129,5 +142,6 @@ begin
   end;
   Result := VK_FORMAT_UNDEFINED;
 end;
+//TLabPhysicalDevice END
 
 end.

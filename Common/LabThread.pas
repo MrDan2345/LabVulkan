@@ -47,6 +47,7 @@ begin
   Result := 0;
 end;
 
+//TLabThread BEGIN
 procedure TLabThread.Run;
 begin
   _State := lab_ts_running;
@@ -89,7 +90,9 @@ procedure TLabThread.WaitFor(const Timeout: LongWord);
 begin
   WaitForThreadTerminate(_ThreadHandle, Timeout);
 end;
+//TLabThread END
 
+//TG2CriticalSection BEGIN
 procedure TG2CriticalSection.Initialize;
 begin
   InitCriticalSection(_CS);
@@ -109,5 +112,6 @@ procedure TG2CriticalSection.Leave;
 begin
   LeaveCriticalSection(_CS);
 end;
+//TG2CriticalSection END
 
 end.

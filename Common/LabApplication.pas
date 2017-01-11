@@ -1,6 +1,5 @@
 unit LabApplication;
 
-{$include LabPlatform.inc}
 interface
 
 uses
@@ -9,18 +8,22 @@ uses
   LabSwapChain,
   LabPhysicalDevice,
   LabDevice,
+  LabCommandPool,
+  LabCommandBuffer,
   LabThread,
   LabRenderer,
-  LabUtils;
+  LabUtils,
+  LabSync,
+  Vulkan;
 
 type
   TLabApplication = class (TInterfacedObject)
   private
     var _Renderer: TLabRenderer;
     var _Window: TLabWindow;
-    var _SwapChain: TLabSwapChain;
+    var _Device: TLabDeviceRef;
+    var _SwapChain: TLabSwapChainRef;
     var _UpdateThread: TLabThread;
-    var _Device: TLabDevice;
     var _Active: Boolean;
     procedure OnWindowClose(Wnd: TLabWindow);
     procedure Update;
@@ -62,8 +65,15 @@ begin
   _Renderer := TLabRenderer.Create();
   _Window := TLabWindow.Create;
   _Window.OnClose := @OnWindowClose;
-  _Device := TLabDevice.Create(_Renderer.PhysicalDevices[0]);
-  _SwapChain := TLabSwapChain.Create(_Window);
+  _Device := TLabDevice.Create(
+    _Renderer.PhysicalDevices[0],
+    [
+      LabQueueFamilyRequest(_Renderer.PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT))),
+      LabQueueFamilyRequest(_Renderer.PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT)))
+    ],
+    [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
+  );
+  _SwapChain := TLabSwapChain.Create(_Window, _Device);
   _UpdateThread := TLabThread.Create;
   _UpdateThread.Proc := @Update;
 end;
@@ -71,8 +81,8 @@ end;
 destructor TLabApplication.Destroy;
 begin
   _UpdateThread.Free;
-  _SwapChain.Free;
-  _Device.Free;
+  _SwapChain := nil;
+  _Device := nil;
   _Window.Free;
   _Renderer.Free;
   inherited Destroy;

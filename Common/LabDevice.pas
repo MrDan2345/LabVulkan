@@ -1,18 +1,26 @@
 unit LabDevice;
 
-{$include LabPlatform.inc}
 interface
 
 uses
+  LabTypes,
   LabUtils,
-  LabCommandPool,
   LabPhysicalDevice,
-  Vulkan;
+  Vulkan,
+  SysUtils;
 
 type
-  TLabDevice = class (TInterfacedObject)
+  {$Push}
+  {$PackRecords 2}
+  TLabQueueFamilyRequest = record
+    FamilyIndex: Byte;
+    QueueCount: Byte;
+    Priority: Single;
+  end;
+  {$Pop}
+
+  TLabDevice = class (TLabClass)
   private
-    var _CommandPool: TLabCommandPool.TRefCounter;
     var _PhysicalDevice: TLabPhysicalDeviceRef;
     var _Handle: TVkDevice;
     var _QueueFamilyIndices: record
@@ -22,90 +30,72 @@ type
     end;
     var _EnableDebugMarkers: Boolean;
   public
-    type TRefCounter = specialize TLabRefCounter<TLabDevice>;
+    property PhysicalDevice: TLabPhysicalDeviceRef read _PhysicalDevice;
     constructor Create(
       const APhysicalDevice: TLabPhysicalDeviceRef;
-      const AUseSwapChain: Boolean = true;
-      const ARequestedQueueTypes: TVkQueueFlags = (TVkFlags(VK_QUEUE_GRAPHICS_BIT) or TVkFlags(VK_QUEUE_COMPUTE_BIT))
+      const ARequestedQueues: array of TLabQueueFamilyRequest;
+      const ADeviceExtensions: array of AnsiString
     );
     destructor Destroy; override;
     property VkHandle: TVkDevice read _Handle;
     function GetGraphicsQueue: TVkQueue; inline;
   end;
+  TLabDeviceRef = specialize TLabRefCounter<TLabDevice>;
+
+function LabQueueFamilyRequest(const FamilyIndex: Byte; const QueueCount: Byte = 1; const Priority: Single = 0): TLabQueueFamilyRequest; inline;
 
 implementation
 
+//TLabDevice BEGIN
 constructor TLabDevice.Create(
   const APhysicalDevice: TLabPhysicalDeviceRef;
-  const AUseSwapChain: Boolean;
-  const ARequestedQueueTypes: TVkQueueFlags
+  const ARequestedQueues: array of TLabQueueFamilyRequest;
+  const ADeviceExtensions: array of AnsiString
 );
-  var queue_family_count: TVkUInt32;
   var queue_create_infos: array of TVkDeviceQueueCreateInfo;
   var device_create_info: TVkDeviceCreateInfo;
   var device_extensions: array of AnsiString;
+  var add_swapchain_extension: Boolean;
   var i: Integer;
-  const default_queue_priority: TVkFloat = 0;
 begin
   LabLog('TLabDevice.Create', 2);
   inherited Create;
   _PhysicalDevice := APhysicalDevice;
-  // Graphics queue
-  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) > 0 then
+  LabLog('Queue family count = ' + IntToStr(_PhysicalDevice.Ptr.QueueFamilyCount));
+  for i := 0 to _PhysicalDevice.Ptr.QueueFamilyCount - 1 do
   begin
-    _QueueFamilyIndices.Graphics := _PhysicalDevice.Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT));
-    i := Length(queue_create_infos);
-    SetLength(queue_create_infos, i + 1);
+    LabLog('Queue family[' + IntToStr(i) + ']:', 2);
+    with _PhysicalDevice.Ptr.QueueFamilyProperties[i]^ do
+    begin
+      if (queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) > 0 then LabLog('Graphics support');
+      if (queueFlags and TVkFlags(VK_QUEUE_COMPUTE_BIT)) > 0 then LabLog('Compute support');
+      if (queueFlags and TVkFlags(VK_QUEUE_TRANSFER_BIT)) > 0 then LabLog('Transfer support');
+      if (queueFlags and TVkFlags(VK_QUEUE_SPARSE_BINDING_BIT)) > 0 then LabLog('Sparse binding support');
+      LabLog('Queue count = ' + IntToStr(queueCount));
+    end;
+    LabLogOffset(-2);
+  end;
+  SetLength(queue_create_infos, Length(ARequestedQueues));
+  for i := 0 to High(ARequestedQueues) do
+  begin
     LabZeroMem(@queue_create_infos[i], SizeOf(TVkDeviceQueueCreateInfo));
     queue_create_infos[i].sType := VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_infos[i].queueFamilyIndex := _QueueFamilyIndices.Graphics;
-    queue_create_infos[i].queueCount := 1;
-    queue_create_infos[i].pQueuePriorities := @default_queue_priority;
-  end
-  else
-  begin
-    _QueueFamilyIndices.Graphics := VK_NULL_HANDLE;
+    queue_create_infos[i].queueFamilyIndex := ARequestedQueues[i].FamilyIndex;
+    queue_create_infos[i].queueCount := ARequestedQueues[i].QueueCount;
+    queue_create_infos[i].pQueuePriorities := @ARequestedQueues[i].Priority;
   end;
-  // Dedicated compute queue
-  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_COMPUTE_BIT)) > 0 then
+  add_swapchain_extension := True;
+  SetLength(device_extensions, Length(ADeviceExtensions));
+  for i := 0 to High(ADeviceExtensions) do
   begin
-    _QueueFamilyIndices.Compute := _PhysicalDevice.Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT));
-    if _QueueFamilyIndices.Compute <> _QueueFamilyIndices.Graphics then
+    device_extensions[i] := ADeviceExtensions[i];
+    if add_swapchain_extension
+    and (ADeviceExtensions[i] = VK_KHR_SWAPCHAIN_EXTENSION_NAME) then
     begin
-      i := Length(queue_create_infos);
-      SetLength(queue_create_infos, i + 1);
-      LabZeroMem(@queue_create_infos[i], SizeOf(TVkDeviceQueueCreateInfo));
-      queue_create_infos[i].sType := VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-      queue_create_infos[i].queueFamilyIndex := _QueueFamilyIndices.Compute;
-      queue_create_infos[i].queueCount := 1;
-      queue_create_infos[i].pQueuePriorities := @default_queue_priority;
+      add_swapchain_extension := False;
     end;
-  end
-  else
-  begin
-    _QueueFamilyIndices.Compute := _QueueFamilyIndices.Graphics;
   end;
-  // Dedicated transfer queue
-  if (ARequestedQueueTypes and TVkFlags(VK_QUEUE_TRANSFER_BIT)) > 0 then
-  begin
-    _QueueFamilyIndices.Transfer := _PhysicalDevice.Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_TRANSFER_BIT));
-    if (_QueueFamilyIndices.Transfer <> _QueueFamilyIndices.Graphics)
-    and (_QueueFamilyIndices.Transfer <> _QueueFamilyIndices.Compute) then
-    begin
-      i := Length(queue_create_infos);
-      SetLength(queue_create_infos, i + 1);
-      LabZeroMem(@queue_create_infos[i], SizeOf(TVkDeviceQueueCreateInfo));
-      queue_create_infos[i].sType := VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-      queue_create_infos[i].queueFamilyIndex := _QueueFamilyIndices.Transfer;
-      queue_create_infos[i].queueCount := 1;
-      queue_create_infos[i].pQueuePriorities := @default_queue_priority;
-    end;
-  end
-  else
-  begin
-    _QueueFamilyIndices.Transfer := _QueueFamilyIndices.Graphics;
-  end;
-  if AUseSwapChain then
+  if add_swapchain_extension then
   begin
     i := Length(device_extensions);
     SetLength(device_extensions, i + 1);
@@ -133,12 +123,18 @@ begin
     device_create_info.ppEnabledExtensionNames := PPVkChar(@device_extensions[0]);
   end;
   LabAssetVkError(vk.CreateDevice(_PhysicalDevice.Ptr.VkHandle, @device_create_info, nil, @_Handle));
-  _CommandPool := TLabCommandPool.Create(_Handle, _QueueFamilyIndices.Graphics);
+  if Length(device_extensions) > 0 then
+  begin
+    LabLog('Device extension count = ' + IntToStr(Length(device_extensions)));
+    for i := 0 to High(device_extensions) do
+    begin
+      LabLog('Extension[' + IntToStr(i) + '] ' + device_extensions[i]);
+    end;
+  end;
 end;
 
 destructor TLabDevice.Destroy;
 begin
-  _CommandPool := nil;
   if LabVkValidHandle(_Handle) then
   begin
     vk.DestroyDevice(_Handle, nil);
@@ -150,6 +146,17 @@ end;
 function TLabDevice.GetGraphicsQueue: TVkQueue;
 begin
   vk.GetDeviceQueue(_Handle, _QueueFamilyIndices.Graphics, 0, @Result);
+end;
+//TLabDevice END
+
+function LabQueueFamilyRequest(const FamilyIndex: Byte; const QueueCount: Byte; const Priority: Single = 0): TLabQueueFamilyRequest;
+begin
+  {$Push}
+  {$Warnings off}
+  Result.FamilyIndex := FamilyIndex;
+  Result.QueueCount := QueueCount;
+  Result.Priority := Priority;
+  {$Pop}
 end;
 
 end.

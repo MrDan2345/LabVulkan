@@ -1,6 +1,5 @@
 unit LabRenderer;
 
-{$include LabPlatform.inc}
 interface
 
 uses
@@ -56,6 +55,7 @@ type
 
 implementation
 
+//TLabRenderer BEGIN
 class constructor TLabRenderer.CreateClass;
   var i, j: Integer;
   var LayerCount, ExtensionCount: TVkUInt32;
@@ -69,13 +69,8 @@ begin
     _ExtensionsEnabled := TLabListString.Create(4, 4);
     _LayersEnabled := TLabListString.Create(4, 4);
     ResetExtensions;
-{$if defined(Windows)}
-    EnableExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-{$elseif defined(Android)}
-    EnableExtension(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-{$elseif defined(Linux)}
-    EnableExtension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-{$endif}
+    EnableExtension(VK_KHR_SURFACE_EXTENSION_NAME);
+    EnableExtension(TLabSwapChain.GetSurfacePlatformExtension);
     LayerCount := 0;
     LabAssetVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, nil));
     if LayerCount > 0 then
@@ -136,7 +131,6 @@ end;
 class procedure TLabRenderer.ResetExtensions;
 begin
   _ExtensionsEnabled.Ptr.Clear;
-  _ExtensionsEnabled.Ptr.Add(VK_KHR_SURFACE_EXTENSION_NAME);
 end;
 
 class procedure TLabRenderer.EnableExtension(const Name: AnsiString);
@@ -176,8 +170,6 @@ constructor TLabRenderer.Create(const AppName: AnsiString; const EngineName: Ans
   var InstanceCommands: TVulkanCommands;
   var PhysicalDeviceCount: TVkUInt32;
   var PhysicalDeviceArr: array of TVkPhysicalDevice;
-  var PhysicalDeviceFeatures: TVkPhysicalDeviceFeatures;
-  var DepthFormat: TVkFormat;
   var i, j: Integer;
   var Extensions: array of PVkChar;
   var Layers: array of PVkChar;
@@ -226,7 +218,15 @@ begin
   LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
   for i := 0 to PhysicalDeviceCount - 1 do
   begin
-    _PhysicalDevices[i] := TLabPhysicalDevice.Create(_Vulkan, PhysicalDeviceArr[i]);
+    _PhysicalDevices[i] := TLabPhysicalDevice.Create(PhysicalDeviceArr[i]);
+  end;
+  if _ExtensionsEnabled.Ptr.Count > 0 then
+  begin
+    LabLog('Vulkan extension count = ' + IntToStr(_ExtensionsEnabled.Ptr.Count));
+    for i := 0 to _ExtensionsEnabled.Ptr.Count - 1 do
+    begin
+      LabLog('Extension[' + IntToStr(i) + '] = ' + _ExtensionsEnabled.Ptr[i]);
+    end;
   end;
   LabLog('Physical device count = ' + IntToStr(_PhysicalDevices.Count));
   LabLog('Layer count = ' + IntToStr(Length(_Layers)));
@@ -262,5 +262,6 @@ begin
   inherited Destroy;
   LabLog('TLabRenderer.Destroy', -2);
 end;
+//TLabRenderer END
 
 end.
