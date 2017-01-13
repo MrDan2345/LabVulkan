@@ -12,8 +12,8 @@ type
     class var _VulkanInstance: TVkInstance;
   public
     class constructor CreateClass;
-    class function Vulkan: TVulkan; inline;
-    class function VulkanInstance: TVkInstance; inline;
+    class function Vulkan: TVulkan;// inline;
+    class function VulkanInstance: TVkInstance;// inline;
   end;
 
 implementation

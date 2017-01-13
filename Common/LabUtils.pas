@@ -727,12 +727,12 @@ begin
     SetLength(Spaces, LogOffset);
     FillChar(Spaces[1], LogOffset, ' ');
     WriteLn(LogFile, Spaces + Msg);
-    //WriteLn(Spaces + Msg);
+    WriteLn(Spaces + Msg);
   end
   else
   begin
     WriteLn(LogFile, Msg);
-    //WriteLn(Msg);
+    WriteLn(Msg);
   end;
   if (Offset > 0) then
   begin

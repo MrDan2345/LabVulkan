@@ -30,10 +30,14 @@ type
     var _Extent: TVkExtent2D;
     var _Images: array of TImageBuffer;
     procedure Setup;
+    function GetWidth: TVkUInt32; inline;
+    function GetHeight: TVkUInt32; inline;
   public
     class function GetSurfacePlatformExtension: AnsiString;
     property VkSurface: TVkSurfaceKHR read _Surface;
     property VkHandle: TVkSwapchainKHR read _Handle;
+    property Width: TVkUInt32 read GetWidth;
+    property Height: TVkUInt32 read GetHeight;
     constructor Create(
       const AWindow: TLabWindow;
       const ADevice: TLabDeviceRef
@@ -44,6 +48,7 @@ type
 
 implementation
 
+//TLabSwapChain BEGIN
 procedure TLabSwapChain.Setup;
   var queue_family_graphics_present: array[0..1] of TVkUInt32;
   var i, format_count, present_mode_count, image_count: TVkUInt32;
@@ -173,7 +178,16 @@ begin
   end;
 end;
 
-//TLabSwapChain BEGIN
+function TLabSwapChain.GetWidth: TVkUInt32;
+begin
+  Result := _Extent.width;
+end;
+
+function TLabSwapChain.GetHeight: TVkUInt32;
+begin
+  Result := _Extent.height;
+end;
+
 class function TLabSwapChain.GetSurfacePlatformExtension: AnsiString;
 begin
 {$if defined(Windows)}
@@ -224,7 +238,7 @@ begin
   LabAssetVkError(Vulkan.CreateAndroidSurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface);
   Setup;
 end;
-{$elseif defined()}
+{$elseif defined(VK_USE_PLATFORM_XCB_KHR)}
 constructor TLabSwapChain.Create(
   const AWindow: TLabWindow;
   const ADevice: TLabDeviceRef

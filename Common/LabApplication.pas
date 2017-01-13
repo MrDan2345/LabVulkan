@@ -14,6 +14,8 @@ uses
   LabRenderer,
   LabUtils,
   LabSync,
+  LabDepthBuffer,
+  LabMath,
   Vulkan;
 
 type
@@ -23,6 +25,7 @@ type
     var _Window: TLabWindow;
     var _Device: TLabDeviceRef;
     var _SwapChain: TLabSwapChainRef;
+    var _DepthBuffer: TLabDepthBufferRef;
     var _UpdateThread: TLabThread;
     var _Active: Boolean;
     procedure OnWindowClose(Wnd: TLabWindow);
@@ -74,6 +77,7 @@ begin
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
   _SwapChain := TLabSwapChain.Create(_Window, _Device);
+  _DepthBuffer := TLabDepthBuffer.Create(_Device, _SwapChain.Ptr.Width, _SwapChain.Ptr.Height);
   _UpdateThread := TLabThread.Create;
   _UpdateThread.Proc := @Update;
 end;
@@ -81,6 +85,7 @@ end;
 destructor TLabApplication.Destroy;
 begin
   _UpdateThread.Free;
+  _DepthBuffer := nil;
   _SwapChain := nil;
   _Device := nil;
   _Window.Free;
