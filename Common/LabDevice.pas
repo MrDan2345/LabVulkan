@@ -39,6 +39,7 @@ type
     destructor Destroy; override;
     property VkHandle: TVkDevice read _Handle;
     function GetGraphicsQueue: TVkQueue; inline;
+    function MemoryTypeFromProperties(const TypeBits: TVkUInt32; const RequirementsMask: TVkFlags; var TypeIndex: TVkUInt32): Boolean;
   end;
   TLabDeviceRef = specialize TLabRefCounter<TLabDevice>;
 
@@ -147,6 +148,31 @@ function TLabDevice.GetGraphicsQueue: TVkQueue;
 begin
   vk.GetDeviceQueue(_Handle, _QueueFamilyIndices.Graphics, 0, @Result);
 end;
+
+function TLabDevice.MemoryTypeFromProperties(
+  const TypeBits: TVkUInt32;
+  const RequirementsMask: TVkFlags;
+  var TypeIndex: TVkUInt32
+): Boolean;
+  var i: TVkInt32;
+  var tb: TVkUInt32;
+begin
+  tb := TypeBits;
+  for i := 0 to _PhysicalDevice.Ptr.MemoryPropertices^.memoryTypeCount - 1 do
+  begin
+    if (tb and 1) = 1 then
+    begin
+      if (_PhysicalDevice.Ptr.MemoryPropertices^.memoryTypes[i].propertyFlags and RequirementsMask) = RequirementsMask then
+      begin
+        TypeIndex := i;
+        Exit(True);
+      end;
+    end;
+    tb := tb shr 1;
+  end;
+  Result := False;
+end;
+
 //TLabDevice END
 
 function LabQueueFamilyRequest(const FamilyIndex: Byte; const QueueCount: Byte; const Priority: Single = 0): TLabQueueFamilyRequest;

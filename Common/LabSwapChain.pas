@@ -38,6 +38,7 @@ type
     property VkHandle: TVkSwapchainKHR read _Handle;
     property Width: TVkUInt32 read GetWidth;
     property Height: TVkUInt32 read GetHeight;
+    property Format: TVkFormat read _Format;
     constructor Create(
       const AWindow: TLabWindow;
       const ADevice: TLabDeviceRef

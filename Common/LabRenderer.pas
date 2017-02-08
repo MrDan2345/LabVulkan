@@ -175,6 +175,7 @@ constructor TLabRenderer.Create(const AppName: AnsiString; const EngineName: Ans
   var Layers: array of PVkChar;
 begin
   LabLog('TLabRenderer.Create', 2);
+  LabProfileStart('TLabRenderer.Create');
   if not _VulkanEnabled then Halt;
   _PhysicalDevices := TLabPhysicalDeviceList.Create(0, 4);
   LabZeroMem(@AppInfo, SizeOf(TVkApplicationInfo));
@@ -199,9 +200,9 @@ begin
   InstanceCreateInfo.enabledLayerCount := Length(Layers);
   InstanceCreateInfo.ppEnabledLayerNames := PPVkChar(@Layers[0]);
   InstanceCreateInfo.pApplicationInfo := @AppInfo;
-  LabAssetVkError(vk.CreateInstance(@InstanceCreateInfo, nil, @_VulkanInstance));
+  LabAssetVkError(Vulkan.CreateInstance(@InstanceCreateInfo, nil, @_VulkanInstance));
   LabZeroMem(@InstanceCommands, SizeOf(TVulkanCommands));
-  if LoadVulkanInstanceCommands(vk.Commands.GetInstanceProcAddr, _VulkanInstance, InstanceCommands) then
+  if LoadVulkanInstanceCommands(Vulkan.Commands.GetInstanceProcAddr, _VulkanInstance, InstanceCommands) then
   begin
     _Vulkan := TVulkan.Create(InstanceCommands);
     _VulkanPtr := @_Vulkan;
@@ -211,11 +212,13 @@ begin
     _Vulkan := nil;
     Halt;
   end;
+  LabProfileStop;
+  LabProfileStart('EnumeratePhysicalDevices');
   PhysicalDeviceCount := 0;
-  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @PhysicalDeviceCount, nil));
+  LabAssetVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, nil));
   _PhysicalDevices.Allocate(PhysicalDeviceCount);
   SetLength(PhysicalDeviceArr, PhysicalDeviceCount);
-  LabAssetVkError(_Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
+  LabAssetVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
   for i := 0 to PhysicalDeviceCount - 1 do
   begin
     _PhysicalDevices[i] := TLabPhysicalDevice.Create(PhysicalDeviceArr[i]);
@@ -239,6 +242,7 @@ begin
       LabLog(_Layers[i].Extensions[j].Name);
     end;
   end;
+  LabProfileStop;
 end;
 
 destructor TLabRenderer.Destroy;
@@ -256,7 +260,7 @@ begin
   end;
   if LabVkValidHandle(_VulkanInstance) then
   begin
-    vk.DestroyInstance(_VulkanInstance, nil);
+    Vulkan.DestroyInstance(_VulkanInstance, nil);
     _VulkanInstance := 0;
   end;
   inherited Destroy;

@@ -27,25 +27,6 @@ type
 implementation
 
 constructor TLabDepthBuffer.Create(const ADevice: TLabDeviceRef; const AWidth: TVkInt32; const AHeight: TVkInt32);
-  function MemoryTypeFromProperties(const TypeBits: TVkUInt32; const RequirementsMask: TVkFlags; var TypeIndex: TVkUInt32): Boolean;
-    var i: TVkInt32;
-    var tb: TVkUInt32;
-  begin
-    tb := TypeBits;
-    for i := 0 to ADevice.Ptr.PhysicalDevice.Ptr.MemoryPropertices^.memoryTypeCount - 1 do
-    begin
-      if (tb and 1) = 1 then
-      begin
-        if (ADevice.Ptr.PhysicalDevice.Ptr.MemoryPropertices^.memoryTypes[i].propertyFlags and RequirementsMask) = RequirementsMask then
-        begin
-          TypeIndex := i;
-          Exit(True);
-        end;
-      end;
-      tb := tb shr 1;
-    end;
-    Result := False;
-  end;
   var image_info: TVkImageCreateInfo;
   var mem_info: TVkMemoryAllocateInfo;
   var view_info: TVkImageViewCreateInfo;
@@ -94,7 +75,7 @@ begin
   Vulkan.GetImageMemoryRequirements(_Device.Ptr.VkHandle, _Image, @mem_reqs);
 
   mem_info.allocationSize := mem_reqs.size;
-  if not MemoryTypeFromProperties(mem_reqs.memoryTypeBits, 0, mem_info.memoryTypeIndex) then
+  if not _Device.Ptr.MemoryTypeFromProperties(mem_reqs.memoryTypeBits, 0, mem_info.memoryTypeIndex) then
   begin
     LabLog('Error: could not find compatible memory type');
     Exit;

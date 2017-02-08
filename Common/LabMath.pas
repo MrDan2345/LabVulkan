@@ -559,6 +559,8 @@ const
   LabPi = Pi;
   LabHalfPi = Pi * 0.5;
   LabTwoPi = Pi * 2;
+  LabDegToRad = Pi / 180;
+  LabRadToDeg = 180 / Pi;
 
 implementation
 
