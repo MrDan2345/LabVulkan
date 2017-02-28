@@ -31,8 +31,8 @@ type
   private
     class var _VulkanEnabled: Boolean;
     class var _Layers: array of TLabLayer;
-    class var _ExtensionsEnabled: TLabListStringRef;
-    class var _LayersEnabled: TLabListStringRef;
+    class var _ExtensionsEnabled: TLabListStringShared;
+    class var _LayersEnabled: TLabListStringShared;
     var _Vulkan: TVulkan;
     var _PhysicalDevices: TLabPhysicalDeviceList;
   public
@@ -51,7 +51,7 @@ type
     destructor Destroy; override;
     property PhysicalDevices: TLabPhysicalDeviceList read _PhysicalDevices;
   end;
-  TLabRendererRef = specialize TLabRefCounter<TLabRenderer>;
+  TLabRendererShared = specialize TLabSharedRef<TLabRenderer>;
 
 implementation
 

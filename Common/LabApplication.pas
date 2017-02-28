@@ -18,6 +18,7 @@ uses
   LabSync,
   LabDepthBuffer,
   LabUniformBuffer,
+  LabShader,
   LabMath;
 
 type
@@ -25,10 +26,12 @@ type
   private
     var _Renderer: TLabRenderer;
     var _Window: TLabWindow;
-    var _Device: TLabDeviceRef;
-    var _SwapChain: TLabSwapChainRef;
-    var _DepthBuffer: TLabDepthBufferRef;
-    var _UniformBuffer: TLabUniformBufferRef;
+    var _Device: TLabDeviceShared;
+    var _SwapChain: TLabSwapChainShared;
+    var _DepthBuffer: TLabDepthBufferShared;
+    var _UniformBuffer: TLabUniformBufferShared;
+    var _VertexShader: TLabShaderShared;
+    var _PixelShader: TLabShaderShared;
     var _UpdateThread: TLabThread;
     var _Active: Boolean;
     var _DescSetLayout: TVkDescriptorSetLayout;
@@ -52,7 +55,7 @@ type
     destructor Destroy; override;
     procedure Run;
   end;
-  TLabApplicationRef = specialize TLabRefCounter<TLabApplication>;
+  TLabApplicationShared = specialize TLabSharedRef<TLabApplication>;
 
 implementation
 
@@ -285,11 +288,11 @@ begin
     PLabMat(UniformBuffer)^ := WVP;
     _UniformBuffer.Ptr.Unmap;
   end;
-
   PipelineSetup;
   DescriptorSetSetup;
   RenderPassSetup;
-
+  _VertexShader := TLabShader.Create(_Device, 'vs.spv');
+  _PixelShader := TLabShader.Create(_Device, 'ps.spv');
   _UpdateThread := TLabThread.Create;
   _UpdateThread.Proc := @Update;
 end;
@@ -297,6 +300,8 @@ end;
 destructor TLabApplication.Destroy;
 begin
   _UpdateThread.Free;
+  _PixelShader := nil;
+  _VertexShader := nil;
   RenderPassWrapup;
   DescriptorSetWrapup;
   PipelineWrapup;

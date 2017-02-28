@@ -11,33 +11,33 @@ uses
 type
   TLabFence = class (TLabClass)
   private
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Handle: TVkFence;
   public
-    constructor Create(const ADevice: TLabDeviceRef; const AFlags: TVkFenceCreateFlags = TVkFenceCreateFlags(0));
+    constructor Create(const ADevice: TLabDeviceShared; const AFlags: TVkFenceCreateFlags = TVkFenceCreateFlags(0));
     destructor Destroy; override;
     function GetStatus:TVkResult;
     function Reset: TVkResult;
     function WaitFor(const TimeOut: TVkUInt64 = TVKUInt64(TVKInt64(-1))): TVkResult; overload;
-    property Device: TLabDeviceRef read _Device;
+    property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkFence read _Handle;
   end;
 
   TLabSemaphore = class (TLabClass)
   private
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Handle: TVkSemaphore;
   public
-    constructor Create(const ADevice: TLabDeviceRef; const AFlags: TVkSemaphoreCreateFlags = TVkSemaphoreCreateFlags(0));
+    constructor Create(const ADevice: TLabDeviceShared; const AFlags: TVkSemaphoreCreateFlags = TVkSemaphoreCreateFlags(0));
     destructor Destroy; override;
-    property Device: TLabDeviceRef read _Device;
+    property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkSemaphore read _Handle;
   end;
 
 implementation
 
 //TLabFence BEGIN
-constructor TLabFence.Create(const ADevice: TLabDeviceRef; const AFlags: TVkFenceCreateFlags);
+constructor TLabFence.Create(const ADevice: TLabDeviceShared; const AFlags: TVkFenceCreateFlags);
   var FenceCreateInfo: TVkFenceCreateInfo;
 begin
   inherited Create;
@@ -79,7 +79,7 @@ end;
 //TLabFence END
 
 //TLabSemaphore BEGIN
-constructor TLabSemaphore.Create(const ADevice: TLabDeviceRef; const AFlags: TVkSemaphoreCreateFlags);
+constructor TLabSemaphore.Create(const ADevice: TLabDeviceShared; const AFlags: TVkSemaphoreCreateFlags);
   var SemaphoreCreateInfo: TVkSemaphoreCreateInfo;
 begin
   inherited Create;

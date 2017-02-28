@@ -5,25 +5,11 @@ interface
 
 uses
   SysUtils,
-  Vulkan;
+  Vulkan,
+  LabTypes;
 
 type
-  generic TLabRefCounter<T> = record
-  private
-    var _Ptr: IInterface;
-    function GetPtr: T; inline;
-    procedure SetPtr(const Value: T); inline;
-  public
-    type TPtr = T;
-    type TSelf = specialize TLabRefCounter<T>;
-    property Ptr: T read GetPtr write SetPtr;
-    function IsValid: Boolean; inline;
-    class operator := (const Value: T): TSelf; inline;
-    class operator := (const Value: Pointer): TSelf; inline;
-    class operator = (v1, v2: TSelf): Boolean; inline;
-  end;
-
-  generic TLabList<T> = class (TInterfacedObject)
+  generic TLabList<T> = class (TLabClass)
   private
     var _Items: array of T;
     var _Increment: Integer;
@@ -68,7 +54,7 @@ type
     procedure Sort(const CmpFunc: TCmpFuncObj); overload;
   end;
 
-  generic TLabListRef<T> = class (TInterfacedObject)
+  generic TLabRefList<T> = class (TLabClass)
   private
     var _Items: array of T;
     var _Increment: Integer;
@@ -114,7 +100,7 @@ type
   end;
 
   TLabListString = specialize TLabList<AnsiString>;
-  TLabListStringRef = specialize TLabRefCounter<TLabListString>;
+  TLabListStringShared = specialize TLabSharedRef<TLabListString>;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
@@ -140,39 +126,6 @@ var LogOffset: Integer = 0;
 var LogLock: Integer = 0;
 var ProfileStack: array [0..127] of TProfileTime;
 var ProfileIndex: Integer = -1;
-
-//TRefCounter BEGIN
-function TLabRefCounter.GetPtr: T;
-begin
-  Result := T(_Ptr as TInterfacedObject);
-end;
-
-procedure TLabRefCounter.SetPtr(const Value: T);
-begin
-  _Ptr := IInterface(Value);
-end;
-
-function TLabRefCounter.IsValid: Boolean;
-begin
-  Result := _Ptr <> nil;
-end;
-
-class operator TLabRefCounter.:=(const Value: T): TSelf;
-begin
-  Result.Ptr := Value;
-end;
-
-class operator TLabRefCounter.:=(const Value: Pointer): TSelf;
-begin
-  Result.Ptr := T(Value);
-end;
-
-class operator TLabRefCounter.=(v1, v2: TSelf): Boolean;
-begin
-  Result := v1._Ptr = v2._Ptr;
-end;
-
-//TRefCounter END
 
 //TLabList BEGIN
 {$Hints off}
@@ -414,18 +367,18 @@ end;
 {$Hints on}
 //TLabList END
 
-//TLabListRef BEGIN
-procedure TLabListRef.SetItem(const Index: Integer; const Value: T);
+//TLabRefList BEGIN
+procedure TLabRefList.SetItem(const Index: Integer; const Value: T);
 begin
   _Items[Index] := Value;
 end;
 
-function TLabListRef.GetItem(const Index: Integer): T;
+function TLabRefList.GetItem(const Index: Integer): T;
 begin
   Result := _Items[Index];
 end;
 
-procedure TLabListRef.SetCapacity(const Value: Integer);
+procedure TLabRefList.SetCapacity(const Value: Integer);
   var j, i: Integer;
 begin
   j := Length(_Items);
@@ -436,22 +389,22 @@ begin
   end;
 end;
 
-function TLabListRef.GetCapacity: Integer;
+function TLabRefList.GetCapacity: Integer;
 begin
   Result := Length(_Items);
 end;
 
-function TLabListRef.GetFirst: T;
+function TLabRefList.GetFirst: T;
 begin
   Result := _Items[0];
 end;
 
-function TLabListRef.GetLast: T;
+function TLabRefList.GetLast: T;
 begin
   Result := _Items[_ItemCount - 1];
 end;
 
-function TLabListRef.GetData: TItemPtr;
+function TLabRefList.GetData: TItemPtr;
 begin
   if _ItemCount > 0 then
   Result := @_Items[0]
@@ -459,21 +412,21 @@ begin
   Result := nil;
 end;
 
-constructor TLabListRef.Create;
+constructor TLabRefList.Create;
 begin
   inherited Create;
   _Increment := 256;
   _ItemCount := 0;
 end;
 
-constructor TLabListRef.Create(const DefaultCapacity: Integer; Increment: Integer);
+constructor TLabRefList.Create(const DefaultCapacity: Integer; Increment: Integer);
 begin
   if DefaultCapacity > 0 then SetCapacity(DefaultCapacity);
   if Increment < 1 then _Increment := 1 else _Increment := Increment;
   _ItemCount := 0;
 end;
 
-destructor TLabListRef.Destroy;
+destructor TLabRefList.Destroy;
   var i: Integer;
 begin
   for i := 0 to _ItemCount - 1 do
@@ -483,7 +436,7 @@ begin
   inherited Destroy;
 end;
 
-function TLabListRef.Find(const Item: T): Integer;
+function TLabRefList.Find(const Item: T): Integer;
   var i: Integer;
 begin
   for i := 0 to _ItemCount - 1 do
@@ -495,7 +448,7 @@ begin
   Result := -1;
 end;
 
-function TLabListRef.Add(const Item: T): Integer;
+function TLabRefList.Add(const Item: T): Integer;
 begin
   if Length(_Items) <= _ItemCount then
   SetLength(_Items, Length(_Items) + _Increment);
@@ -504,18 +457,18 @@ begin
   Inc(_ItemCount);
 end;
 
-function TLabListRef.Pop: T;
+function TLabRefList.Pop: T;
 begin
   Result := Extract(_ItemCount - 1);
 end;
 
-function TLabListRef.Extract(const Index: Integer): T;
+function TLabRefList.Extract(const Index: Integer): T;
 begin
   Result := _Items[Index];
   Delete(Index);
 end;
 
-function TLabListRef.Insert(const Index: Integer; const Item: T): Integer;
+function TLabRefList.Insert(const Index: Integer; const Item: T): Integer;
   var i: Integer;
 begin
   if Length(_Items) <= _ItemCount then
@@ -535,7 +488,7 @@ begin
   Inc(_ItemCount);
 end;
 
-procedure TLabListRef.Delete(const Index: Integer; const ItemCount: Integer);
+procedure TLabRefList.Delete(const Index: Integer; const ItemCount: Integer);
   var i: Integer;
 begin
   for i := Index to _ItemCount - (1 + ItemCount) do
@@ -546,7 +499,7 @@ begin
   Dec(_ItemCount, ItemCount);
 end;
 
-procedure TLabListRef.Remove(const Item: T);
+procedure TLabRefList.Remove(const Item: T);
   var i: Integer;
 begin
   i := Find(Item);
@@ -554,7 +507,7 @@ begin
   Delete(i);
 end;
 
-procedure TLabListRef.Clear;
+procedure TLabRefList.Clear;
   var i: Integer;
 begin
   for i := 0 to _ItemCount - 1 do
@@ -564,13 +517,13 @@ begin
   _ItemCount := 0;
 end;
 
-procedure TLabListRef.Allocate(const Amount: Integer);
+procedure TLabRefList.Allocate(const Amount: Integer);
 begin
   SetCapacity(_ItemCount + Amount);
   _ItemCount += Amount;
 end;
 
-procedure TLabListRef.Allocate(const Amount: Integer; const DefaultValue: T);
+procedure TLabRefList.Allocate(const Amount: Integer; const DefaultValue: T);
   var i, j: Integer;
 begin
   j := _ItemCount;
@@ -581,7 +534,7 @@ begin
   end;
 end;
 
-function TLabListRef.Search(const CmpFunc: TCmpFunc; const Item: T): Integer;
+function TLabRefList.Search(const CmpFunc: TCmpFunc; const Item: T): Integer;
   var l, h, m, r: Integer;
 begin
   l := 0;
@@ -597,7 +550,7 @@ begin
   if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
 end;
 
-function TLabListRef.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
+function TLabRefList.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
   var l, h, m, r: Integer;
 begin
   l := 0;
@@ -613,7 +566,7 @@ begin
   if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
 end;
 
-procedure TLabListRef.Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer);
+procedure TLabRefList.Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer);
   var i, j : LongInt;
   var tmp, pivot: T;
 begin
@@ -637,7 +590,7 @@ begin
   if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
 end;
 
-procedure TLabListRef.Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer);
+procedure TLabRefList.Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer);
   var i, j : LongInt;
   var tmp, pivot: T;
 begin
@@ -660,16 +613,16 @@ begin
   if i < RangeEnd then Sort(CmpFunc, i, RangeEnd);
 end;
 
-procedure TLabListRef.Sort(const CmpFunc: TCmpFunc);
+procedure TLabRefList.Sort(const CmpFunc: TCmpFunc);
 begin
   Sort(CmpFunc, 0, _ItemCount - 1);
 end;
 
-procedure TLabListRef.Sort(const CmpFunc: TCmpFuncObj);
+procedure TLabRefList.Sort(const CmpFunc: TCmpFuncObj);
 begin
   Sort(CmpFunc, 0, _ItemCount - 1);
 end;
-//TLabListRef END
+//TLabRefList END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin

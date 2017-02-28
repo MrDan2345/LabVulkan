@@ -7,7 +7,7 @@ uses
   SysUtils;
 
 var
-  App: TLabApplicationRef;
+  App: TLabApplicationShared;
 
 begin
   if FileExists('heaptrc.txt') then DeleteFile('heaptrc.txt');

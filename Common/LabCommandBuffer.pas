@@ -11,24 +11,24 @@ uses
 type
   TLabCommandBuffer = class (TLabClass)
   private
-    var _CommandPool: TLabCommandPoolRef;
+    var _CommandPool: TLabCommandPoolShared;
     var _Handle: TVkCommandBuffer;
   public
-    property CommandPool: TLabCommandPoolRef read _CommandPool;
+    property CommandPool: TLabCommandPoolShared read _CommandPool;
     property VkHandle: TVkCommandBuffer read _Handle;
     constructor Create(
-      const ACommandPool: TLabCommandPoolRef;
+      const ACommandPool: TLabCommandPoolShared;
       const ALevel: TVkCommandBufferLevel = VK_COMMAND_BUFFER_LEVEL_PRIMARY
     );
     destructor Destroy; override;
   end;
-  TLabCommandBufferRef = specialize TLabRefCounter<TLabCommandBuffer>;
+  TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
 implementation
 
 //TLabCommandBuffer BEGIN
 constructor TLabCommandBuffer.Create(
-  const ACommandPool: TLabCommandPoolRef;
+  const ACommandPool: TLabCommandPoolShared;
   const ALevel: TVkCommandBufferLevel
 );
   var command_buffer_info: TVkCommandBufferAllocateInfo;

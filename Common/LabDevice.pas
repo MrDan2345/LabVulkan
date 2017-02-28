@@ -21,7 +21,7 @@ type
 
   TLabDevice = class (TLabClass)
   private
-    var _PhysicalDevice: TLabPhysicalDeviceRef;
+    var _PhysicalDevice: TLabPhysicalDeviceShared;
     var _Handle: TVkDevice;
     var _QueueFamilyIndices: record
       Graphics: TVkUInt32;
@@ -30,9 +30,9 @@ type
     end;
     var _EnableDebugMarkers: Boolean;
   public
-    property PhysicalDevice: TLabPhysicalDeviceRef read _PhysicalDevice;
+    property PhysicalDevice: TLabPhysicalDeviceShared read _PhysicalDevice;
     constructor Create(
-      const APhysicalDevice: TLabPhysicalDeviceRef;
+      const APhysicalDevice: TLabPhysicalDeviceShared;
       const ARequestedQueues: array of TLabQueueFamilyRequest;
       const ADeviceExtensions: array of AnsiString
     );
@@ -41,7 +41,7 @@ type
     function GetGraphicsQueue: TVkQueue; inline;
     function MemoryTypeFromProperties(const TypeBits: TVkUInt32; const RequirementsMask: TVkFlags; var TypeIndex: TVkUInt32): Boolean;
   end;
-  TLabDeviceRef = specialize TLabRefCounter<TLabDevice>;
+  TLabDeviceShared = specialize TLabSharedRef<TLabDevice>;
 
 function LabQueueFamilyRequest(const FamilyIndex: Byte; const QueueCount: Byte = 1; const Priority: Single = 0): TLabQueueFamilyRequest; inline;
 
@@ -49,7 +49,7 @@ implementation
 
 //TLabDevice BEGIN
 constructor TLabDevice.Create(
-  const APhysicalDevice: TLabPhysicalDeviceRef;
+  const APhysicalDevice: TLabPhysicalDeviceShared;
   const ARequestedQueues: array of TLabQueueFamilyRequest;
   const ADeviceExtensions: array of AnsiString
 );

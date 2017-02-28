@@ -11,25 +11,25 @@ uses
 type
   TLabCommandPool = class (TLabClass)
   private
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Handle: TVkCommandPool;
   public
     property VkHandle: TVkCommandPool read _Handle;
-    property Device: TLabDeviceRef read _Device;
+    property Device: TLabDeviceShared read _Device;
     constructor Create(
-      const ADevice: TLabDeviceRef;
+      const ADevice: TLabDeviceShared;
       const AQueueFamilyIndex: TVkUInt32;
       const ACreateFlags: TVkCommandPoolCreateFlags = TVkFlags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
     );
     destructor Destroy; override;
   end;
-  TLabCommandPoolRef = specialize TLabRefCounter<TLabCommandPool>;
+  TLabCommandPoolShared = specialize TLabSharedRef<TLabCommandPool>;
 
 implementation
 
 //TLabCommandPool BEGIN
 constructor TLabCommandPool.Create(
-  const ADevice: TLabDeviceRef;
+  const ADevice: TLabDeviceShared;
   const AQueueFamilyIndex: TVkUInt32;
   const ACreateFlags: TVkCommandPoolCreateFlags
 );

@@ -11,7 +11,7 @@ uses
 type
   TLabUniformBuffer = class (TLabClass)
   private
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Handle: TVkBuffer;
     var _Memory: TVkDeviceMemory;
     var _Size: TVkDeviceSize;
@@ -22,7 +22,7 @@ type
     property Size: TVkDeviceSize read _Size;
     property IsMapped: Boolean read _Mapped;
     property BufferInfo: PVkDescriptorBufferInfo read GetBufferInfo;
-    constructor Create(const ADevice: TLabDeviceRef; const ABufferSize: TVkDeviceSize);
+    constructor Create(const ADevice: TLabDeviceShared; const ABufferSize: TVkDeviceSize);
     destructor Destroy; override;
     function Map(
       var Buffer: PVkVoid;
@@ -32,7 +32,7 @@ type
     ): Boolean;
     function Unmap: Boolean;
   end;
-  TLabUniformBufferRef = specialize TLabRefCounter<TLabUniformBuffer>;
+  TLabUniformBufferShared = specialize TLabSharedRef<TLabUniformBuffer>;
 
 implementation
 
@@ -41,7 +41,7 @@ begin
   Result := @_BufferInfo;
 end;
 
-constructor TLabUniformBuffer.Create(const ADevice: TLabDeviceRef; const ABufferSize: TVkDeviceSize);
+constructor TLabUniformBuffer.Create(const ADevice: TLabDeviceShared; const ABufferSize: TVkDeviceSize);
   var buffer_info: TVkBufferCreateInfo;
   var memory_reqs: TVkMemoryRequirements;
   var alloc_info: TVkMemoryAllocateInfo;

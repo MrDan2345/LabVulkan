@@ -19,7 +19,7 @@ type
       View: TVkImageView;
     end;
     var _Window: TLabWindow;
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Surface: TVkSurfaceKHR;
     var _Handle: TVkSwapchainKHR;
     var _Capabilities: TVkSurfaceCapabilitiesKHR;
@@ -41,11 +41,11 @@ type
     property Format: TVkFormat read _Format;
     constructor Create(
       const AWindow: TLabWindow;
-      const ADevice: TLabDeviceRef
+      const ADevice: TLabDeviceShared
     );
     destructor Destroy; override;
   end;
-  TLabSwapChainRef = specialize TLabRefCounter<TLabSwapChain>;
+  TLabSwapChainShared = specialize TLabSharedRef<TLabSwapChain>;
 
 implementation
 
@@ -205,7 +205,7 @@ end;
 {$if defined(VK_USE_PLATFORM_WIN32_KHR)}
 constructor TLabSwapChain.Create(
   const AWindow: TLabWindow;
-  const ADevice: TLabDeviceRef
+  const ADevice: TLabDeviceShared
 );
   var surface_create_info: TVkWin32SurfaceCreateInfoKHR;
 begin

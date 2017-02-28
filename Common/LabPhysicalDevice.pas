@@ -32,9 +32,9 @@ type
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
   end;
-  TLabPhysicalDeviceRef = specialize TLabRefCounter<TLabPhysicalDevice>;
-  TLabPhysicalDeviceList = specialize TLabListRef<TLabPhysicalDeviceRef>;
-  TLabPhysicalDeviceListRef = specialize TLabRefCounter<TLabPhysicalDeviceList>;
+  TLabPhysicalDeviceShared = specialize TLabSharedRef<TLabPhysicalDevice>;
+  TLabPhysicalDeviceList = specialize TLabRefList<TLabPhysicalDeviceShared>;
+  TLabPhysicalDeviceListShared = specialize TLabSharedRef<TLabPhysicalDeviceList>;
 
 implementation
 

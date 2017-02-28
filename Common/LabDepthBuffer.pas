@@ -12,21 +12,21 @@ type
   TLabDepthBuffer = class (TLabClass)
   private
     var _Format: TVkFormat;
-    var _Device: TLabDeviceRef;
+    var _Device: TLabDeviceShared;
     var _Image: TVkImage;
     var _Memory: TVkDeviceMemory;
     var _View: TVkImageView;
   public
     property Format: TVkFormat read _Format;
     property VkImage: TVkImage read _Image;
-    constructor Create(const ADevice: TLabDeviceRef; const AWidth: TVkInt32; const AHeight: TVkInt32);
+    constructor Create(const ADevice: TLabDeviceShared; const AWidth: TVkInt32; const AHeight: TVkInt32);
     destructor Destroy; override;
   end;
-  TLabDepthBufferRef = specialize TLabRefCounter<TLabDepthBuffer>;
+  TLabDepthBufferShared = specialize TLabSharedRef<TLabDepthBuffer>;
 
 implementation
 
-constructor TLabDepthBuffer.Create(const ADevice: TLabDeviceRef; const AWidth: TVkInt32; const AHeight: TVkInt32);
+constructor TLabDepthBuffer.Create(const ADevice: TLabDeviceShared; const AWidth: TVkInt32; const AHeight: TVkInt32);
   var image_info: TVkImageCreateInfo;
   var mem_info: TVkMemoryAllocateInfo;
   var view_info: TVkImageViewCreateInfo;
