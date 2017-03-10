@@ -19,6 +19,7 @@ type
   public
     property Format: TVkFormat read _Format;
     property VkImage: TVkImage read _Image;
+    property VkImageView: TVkImageView read _View;
     constructor Create(const ADevice: TLabDeviceShared; const AWidth: TVkInt32; const AHeight: TVkInt32);
     destructor Destroy; override;
   end;
@@ -71,7 +72,7 @@ begin
   mem_info.sType := VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   mem_info.allocationSize := 0;
   mem_info.memoryTypeIndex := 0;
-  LabAssetVkError(Vulkan.CreateImage(_Device.Ptr.VkHandle, @image_info, nil, @_Image));
+  LabAssertVkError(Vulkan.CreateImage(_Device.Ptr.VkHandle, @image_info, nil, @_Image));
   Vulkan.GetImageMemoryRequirements(_Device.Ptr.VkHandle, _Image, @mem_reqs);
 
   mem_info.allocationSize := mem_reqs.size;
@@ -80,8 +81,8 @@ begin
     LabLog('Error: could not find compatible memory type');
     Exit;
   end;
-  LabAssetVkError(Vulkan.AllocateMemory(_Device.Ptr.VkHandle, @mem_info, nil, @_Memory));
-  LabAssetVkError(Vulkan.BindImageMemory(_Device.Ptr.VkHandle, _Image, _Memory, 0));
+  LabAssertVkError(Vulkan.AllocateMemory(_Device.Ptr.VkHandle, @mem_info, nil, @_Memory));
+  LabAssertVkError(Vulkan.BindImageMemory(_Device.Ptr.VkHandle, _Image, _Memory, 0));
 
   LabZeroMem(@view_info, SizeOf(TVkImageViewCreateInfo));
   view_info.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -98,7 +99,7 @@ begin
   view_info.subresourceRange.layerCount := 1;
   view_info.viewType := VK_IMAGE_VIEW_TYPE_2D;
   view_info.flags := 0;
-  LabAssetVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @view_info, nil, @_View));
+  LabAssertVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @view_info, nil, @_View));
 end;
 
 destructor TLabDepthBuffer.Destroy;

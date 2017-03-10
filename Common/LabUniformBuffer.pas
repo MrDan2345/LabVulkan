@@ -49,6 +49,7 @@ begin
   LabLog('TLabUniformBuffer.Create', 2);
   inherited Create;
   _Device := ADevice;
+  _Size := ABufferSize;
   LabZeroMem(@buffer_info, SizeOf(TVkBufferCreateInfo));
   buffer_info.sType := VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_info.usage := TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
@@ -57,7 +58,7 @@ begin
   buffer_info.pQueueFamilyIndices := nil;
   buffer_info.sharingMode := VK_SHARING_MODE_EXCLUSIVE;
   buffer_info.flags := 0;
-  LabAssetVkError(Vulkan.CreateBuffer(_Device.Ptr.VkHandle, @buffer_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateBuffer(_Device.Ptr.VkHandle, @buffer_info, nil, @_Handle));
   Vulkan.GetBufferMemoryRequirements(_Device.Ptr.VkHandle, _Handle, @memory_reqs);
   LabZeroMem(@alloc_info, SizeOf(TVkMemoryAllocateInfo));
   alloc_info.sType := VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -72,8 +73,7 @@ begin
     LabLog('Error: could not find compatible memory type');
     Exit;
   end;
-  LabAssetVkError(Vulkan.AllocateMemory(_Device.Ptr.VkHandle, @alloc_info, nil, @_Memory));
-  _Size := memory_reqs.size;
+  LabAssertVkError(Vulkan.AllocateMemory(_Device.Ptr.VkHandle, @alloc_info, nil, @_Memory));
   Vulkan.BindBufferMemory(_Device.Ptr.VkHandle, _Handle, _Memory, 0);
   _BufferInfo.buffer := _Handle;
   _BufferInfo.offset := 0;
@@ -94,7 +94,7 @@ function TLabUniformBuffer.Map(var Buffer: PVkVoid; const Offset: TVkDeviceSize;
 begin
   if _Mapped then Exit(False);
   if MapSize = 0 then map_size := _Size else map_size := MapSize;
-  LabAssetVkError(Vulkan.MapMemory(_Device.Ptr.VkHandle, _Memory, Offset, map_size, Flags, @Buffer));
+  LabAssertVkError(Vulkan.MapMemory(_Device.Ptr.VkHandle, _Memory, Offset, map_size, Flags, @Buffer));
   _Mapped := True;
   Result := True;
 end;
@@ -103,6 +103,7 @@ function TLabUniformBuffer.Unmap: Boolean;
 begin
   if not _Mapped then Exit(False);
   Vulkan.UnmapMemory(_Device.Ptr.VkHandle, _Memory);
+  _Mapped := False;
   Result := True;
 end;
 

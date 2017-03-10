@@ -23,11 +23,6 @@ type
   private
     var _PhysicalDevice: TLabPhysicalDeviceShared;
     var _Handle: TVkDevice;
-    var _QueueFamilyIndices: record
-      Graphics: TVkUInt32;
-      Compute: TVkUInt32;
-      Transfer: TVkUInt32;
-    end;
     var _EnableDebugMarkers: Boolean;
   public
     property PhysicalDevice: TLabPhysicalDeviceShared read _PhysicalDevice;
@@ -38,8 +33,8 @@ type
     );
     destructor Destroy; override;
     property VkHandle: TVkDevice read _Handle;
-    function GetGraphicsQueue: TVkQueue; inline;
     function MemoryTypeFromProperties(const TypeBits: TVkUInt32; const RequirementsMask: TVkFlags; var TypeIndex: TVkUInt32): Boolean;
+    function GetQueue(const QueueFamilyIndex, QueueIndex: TVkUInt32): TVkQueue; inline;
   end;
   TLabDeviceShared = specialize TLabSharedRef<TLabDevice>;
 
@@ -123,7 +118,7 @@ begin
     device_create_info.enabledExtensionCount := TVkUInt32(Length(device_extensions));
     device_create_info.ppEnabledExtensionNames := PPVkChar(@device_extensions[0]);
   end;
-  LabAssetVkError(vk.CreateDevice(_PhysicalDevice.Ptr.VkHandle, @device_create_info, nil, @_Handle));
+  LabAssertVkError(vk.CreateDevice(_PhysicalDevice.Ptr.VkHandle, @device_create_info, nil, @_Handle));
   if Length(device_extensions) > 0 then
   begin
     LabLog('Device extension count = ' + IntToStr(Length(device_extensions)));
@@ -142,11 +137,6 @@ begin
   end;
   inherited Destroy;
   LabLog('TLabDevice.Destroy', -2)
-end;
-
-function TLabDevice.GetGraphicsQueue: TVkQueue;
-begin
-  vk.GetDeviceQueue(_Handle, _QueueFamilyIndices.Graphics, 0, @Result);
 end;
 
 function TLabDevice.MemoryTypeFromProperties(
@@ -171,6 +161,11 @@ begin
     tb := tb shr 1;
   end;
   Result := False;
+end;
+
+function TLabDevice.GetQueue(const QueueFamilyIndex, QueueIndex: TVkUInt32): TVkQueue;
+begin
+  Vulkan.GetDeviceQueue(_Handle, QueueFamilyIndex, QueueIndex, @Result);
 end;
 
 //TLabDevice END

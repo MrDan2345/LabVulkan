@@ -7,17 +7,20 @@ uses
   Vulkan,
   LabTypes,
   LabUtils,
+  LabSync,
   LabWindow,
   LabPhysicalDevice,
   LabDevice;
 
 type
   TLabSwapChain = class (TLabClass)
-  private
+  public
     type TImageBuffer = record
       Image: TVkImage;
       View: TVkImageView;
     end;
+    type PImageBuffer = ^TImageBuffer;
+  private
     var _Window: TLabWindow;
     var _Device: TLabDeviceShared;
     var _Surface: TVkSurfaceKHR;
@@ -29,9 +32,13 @@ type
     var _PresentMode: TVkPresentModeKHR;
     var _Extent: TVkExtent2D;
     var _Images: array of TImageBuffer;
+    var _QueueFamilyGraphics: TVkUInt32;
+    var _QueueFamilyPresent: TVkUInt32;
     procedure Setup;
     function GetWidth: TVkUInt32; inline;
     function GetHeight: TVkUInt32; inline;
+    function GetImageBuffer(const Index: TVkInt32): PImageBuffer; inline;
+    function GetImageCount: TVkInt32; inline;
   public
     class function GetSurfacePlatformExtension: AnsiString;
     property VkSurface: TVkSurfaceKHR read _Surface;
@@ -39,11 +46,16 @@ type
     property Width: TVkUInt32 read GetWidth;
     property Height: TVkUInt32 read GetHeight;
     property Format: TVkFormat read _Format;
+    property Images[const Index: TVkInt32]: PImageBuffer read GetImageBuffer;
+    property ImageCount: TVkInt32 read GetImageCount;
+    property QueueFamilyGraphics: TVkUInt32 read _QueueFamilyGraphics;
+    property QueueFamilyPresent: TVkUInt32 read _QueueFamilyPresent;
     constructor Create(
       const AWindow: TLabWindow;
       const ADevice: TLabDeviceShared
     );
     destructor Destroy; override;
+    function AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
   end;
   TLabSwapChainShared = specialize TLabSharedRef<TLabSwapChain>;
 
@@ -80,10 +92,10 @@ begin
     LabLog('Error: could not setup swap chain.');
     Exit;
   end;
-  LabAssetVkError(Vulkan.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @_Capabilities));
-  LabAssetVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, nil));
+  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @_Capabilities));
+  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, nil));
   SetLength(_Formats, format_count);
-  LabAssetVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, @_Formats[0]));
+  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, @_Formats[0]));
   if (format_count = 1) and (_Formats[0].format = VK_FORMAT_UNDEFINED) then
   begin
     _Format := VK_FORMAT_B8G8R8A8_UNORM;
@@ -92,9 +104,16 @@ begin
   begin
     _Format := _Formats[0].format;
   end;
-  LabAssetVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, nil));
+  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, nil));
   SetLength(_PresentModes, present_mode_count);
-  LabAssetVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, @_PresentModes[0]));
+  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, @_PresentModes[0]));
+  if present_mode_count > 0 then _PresentMode := _PresentModes[0] else _PresentMode := VK_PRESENT_MODE_FIFO_KHR;
+  for i := 0 to High(_PresentModes) do
+  if _PresentModes[i] = VK_PRESENT_MODE_FIFO_KHR then
+  begin
+    _PresentMode := _PresentModes[i];
+    Break;
+  end;
   if _Capabilities.currentExtent.width = $FFFFFFFF then
   begin
     _Extent.width := _Window.Width;
@@ -152,11 +171,13 @@ begin
     swap_chain_create_info.queueFamilyIndexCount := 2;
     swap_chain_create_info.pQueueFamilyIndices := @queue_family_graphics_present[0];
   end;
-  LabAssetVkError(Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swap_chain_create_info, nil, @_Handle));
-  LabAssetVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, nil));
+  _QueueFamilyGraphics := queue_family_graphics_present[0];
+  _QueueFamilyPresent := queue_family_graphics_present[1];
+  LabAssertVkError(Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swap_chain_create_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, nil));
   SetLength(_Images, image_count);
   SetLength(swapchain_images, image_count);
-  LabAssetVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, @swapchain_images[0]));
+  LabAssertVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, @swapchain_images[0]));
   for i := 0 to image_count - 1 do
   begin
     _Images[i].Image := swapchain_images[i];
@@ -175,7 +196,7 @@ begin
     image_view_create_info.subresourceRange.levelCount := 1;
     image_view_create_info.subresourceRange.baseArrayLayer := 0;
     image_view_create_info.subresourceRange.layerCount := 1;
-    LabAssetVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @image_view_create_info, nil, @_Images[i].View));
+    LabAssertVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @image_view_create_info, nil, @_Images[i].View));
   end;
 end;
 
@@ -187,6 +208,16 @@ end;
 function TLabSwapChain.GetHeight: TVkUInt32;
 begin
   Result := _Extent.height;
+end;
+
+function TLabSwapChain.GetImageBuffer(const Index: TVkInt32): PImageBuffer;
+begin
+  Result := @_Images[Index];
+end;
+
+function TLabSwapChain.GetImageCount: TVkInt32;
+begin
+  Result := Length(_Images);
 end;
 
 class function TLabSwapChain.GetSurfacePlatformExtension: AnsiString;
@@ -217,7 +248,7 @@ begin
   surface_create_info.sType := VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
   surface_create_info.hinstance_ := _Window.Instance;
   surface_create_info.hwnd_ := _Window.Handle;
-  LabAssetVkError(Vulkan.CreateWin32SurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface));
+  LabAssertVkError(Vulkan.CreateWin32SurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface));
   Setup;
 end;
 {$elseif defined(VK_USE_PLATFORM_ANDROID_KHR)}
@@ -282,6 +313,20 @@ begin
   end;
   inherited Destroy;
   LabLog('TLabSwapChain.Destroy', -2);
+end;
+
+function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
+begin
+  LabAssertVkError(
+    Vulkan.AcquireNextImageKHR(
+      _Device.Ptr.VkHandle,
+      _Handle,
+      High(TVkUInt64),
+      Semaphore.Ptr.VkHandle,
+      VK_NULL_HANDLE,
+      @Result
+    )
+  );
 end;
 
 end.

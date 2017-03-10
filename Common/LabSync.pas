@@ -22,6 +22,7 @@ type
     property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkFence read _Handle;
   end;
+  TLabFenceShared = specialize TLabSharedRef<TLabFence>;
 
   TLabSemaphore = class (TLabClass)
   private
@@ -33,6 +34,7 @@ type
     property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkSemaphore read _Handle;
   end;
+  TLabSemaphoreShared = specialize TLabSharedRef<TLabSemaphore>;
 
 implementation
 
@@ -47,7 +49,7 @@ begin
   FenceCreateInfo.sType := VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   FenceCreateInfo.pNext := nil;
   FenceCreateInfo.flags := AFlags;
-  LabAssetVkError(Vulkan.CreateFence(_Device.Ptr.VkHandle, @FenceCreateInfo, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateFence(_Device.Ptr.VkHandle, @FenceCreateInfo, nil, @_Handle));
 end;
 
 destructor TLabFence.Destroy;
@@ -68,13 +70,13 @@ end;
 function TLabFence.Reset: TVkResult;
 begin
   Result := Vulkan.ResetFences(_Device.Ptr.VkHandle, 1, @_Handle);
-  LabAssetVkError(Result);
+  LabAssertVkError(Result);
 end;
 
 function TLabFence.WaitFor(const TimeOut: TVkUInt64): TVkResult;
 begin
   Result := Vulkan.WaitForFences(_Device.Ptr.VkHandle, 1, @_Handle, VK_TRUE, TimeOut);
-  LabAssetVkError(Result);
+  LabAssertVkError(Result);
 end;
 //TLabFence END
 
@@ -89,7 +91,7 @@ begin
   SemaphoreCreateInfo.sType := VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
   SemaphoreCreateInfo.pNext := nil;
   SemaphoreCreateInfo.flags := AFlags;
-  LabAssetVkError(Vulkan.CreateSemaphore(_Device.Ptr.VkHandle, @SemaphoreCreateInfo, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateSemaphore(_Device.Ptr.VkHandle, @SemaphoreCreateInfo, nil, @_Handle));
 end;
 
 destructor TLabSemaphore.Destroy;

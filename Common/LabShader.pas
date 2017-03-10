@@ -34,7 +34,7 @@ begin
   shader_info.codeSize := Size;
   shader_info.pCode := PVkUInt32(Data);
   _Device := ADevice;
-  LabAssetVkError(Vulkan.CreateShaderModule(_Device.Ptr.VkHandle, @shader_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateShaderModule(_Device.Ptr.VkHandle, @shader_info, nil, @_Handle));
 end;
 
 constructor TLabShader.Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);

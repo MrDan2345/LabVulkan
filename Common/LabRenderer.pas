@@ -72,12 +72,12 @@ begin
     EnableExtension(VK_KHR_SURFACE_EXTENSION_NAME);
     EnableExtension(TLabSwapChain.GetSurfacePlatformExtension);
     LayerCount := 0;
-    LabAssetVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, nil));
+    LabAssertVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, nil));
     if LayerCount > 0 then
     begin
       SetLength(_Layers, LayerCount);
       SetLength(LayerProperties, LayerCount);
-      LabAssetVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, @LayerProperties[0]));
+      LabAssertVkError(Vulkan.EnumerateInstanceLayerProperties(@LayerCount, @LayerProperties[0]));
       for i := 0 to LayerCount - 1 do
       begin
         _Layers[i].Name := LayerProperties[i].layerName;
@@ -85,13 +85,13 @@ begin
         _Layers[i].ImplementationVersion := LayerProperties[i].implementationVersion;
         _Layers[i].Description := LayerProperties[i].description;
         ExtensionCount := 0;
-        LabAssetVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, nil));
+        LabAssertVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, nil));
         SetLength(_Layers[i].Extensions, ExtensionCount);
         if Length(ExtensionProperties) < ExtensionCount then
         begin
           SetLength(ExtensionProperties, ExtensionCount);
         end;
-        LabAssetVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, @ExtensionProperties[0]));
+        LabAssertVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @ExtensionCount, @ExtensionProperties[0]));
         for j := 0 to ExtensionCount - 1 do
         begin
           _Layers[i].Extensions[j].Name := ExtensionProperties[j].extensionName;
@@ -200,7 +200,7 @@ begin
   InstanceCreateInfo.enabledLayerCount := Length(Layers);
   InstanceCreateInfo.ppEnabledLayerNames := PPVkChar(@Layers[0]);
   InstanceCreateInfo.pApplicationInfo := @AppInfo;
-  LabAssetVkError(Vulkan.CreateInstance(@InstanceCreateInfo, nil, @_VulkanInstance));
+  LabAssertVkError(Vulkan.CreateInstance(@InstanceCreateInfo, nil, @_VulkanInstance));
   LabZeroMem(@InstanceCommands, SizeOf(TVulkanCommands));
   if LoadVulkanInstanceCommands(Vulkan.Commands.GetInstanceProcAddr, _VulkanInstance, InstanceCommands) then
   begin
@@ -215,10 +215,10 @@ begin
   LabProfileStop;
   LabProfileStart('EnumeratePhysicalDevices');
   PhysicalDeviceCount := 0;
-  LabAssetVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, nil));
+  LabAssertVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, nil));
   _PhysicalDevices.Allocate(PhysicalDeviceCount);
   SetLength(PhysicalDeviceArr, PhysicalDeviceCount);
-  LabAssetVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
+  LabAssertVkError(Vulkan.EnumeratePhysicalDevices(VulkanInstance, @PhysicalDeviceCount, @PhysicalDeviceArr[0]));
   for i := 0 to PhysicalDeviceCount - 1 do
   begin
     _PhysicalDevices[i] := TLabPhysicalDevice.Create(PhysicalDeviceArr[i]);

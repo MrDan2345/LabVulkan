@@ -107,7 +107,7 @@ function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolea
 function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
 procedure LabLog(const Msg: AnsiString; const Offset: Integer = 0);
 procedure LabLogOffset(const Offset: Integer);
-procedure LabAssetVkError(const State: TVkResult);
+procedure LabAssertVkError(const State: TVkResult);
 function LabLogVkError(const State: TVkResult): TVkResult;
 function LabVkErrorString(const State: TVkResult): String;
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean; inline;
@@ -700,7 +700,7 @@ begin
   InterLockedExchange(LogLock, 0);
 end;
 
-procedure LabAssetVkError(const State: TVkResult);
+procedure LabAssertVkError(const State: TVkResult);
 begin
   Assert(LabLogVkError(State) = VK_SUCCESS, LabVkErrorString(State));
 end;

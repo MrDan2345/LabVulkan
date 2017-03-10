@@ -41,7 +41,7 @@ begin
   command_pool_create_info.sType := VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   command_pool_create_info.queueFamilyIndex := AQueueFamilyIndex;
   command_pool_create_info.flags := ACreateFlags;
-  LabAssetVkError(Vulkan.CreateCommandPool(_Device.Ptr.VkHandle, @command_pool_create_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateCommandPool(_Device.Ptr.VkHandle, @command_pool_create_info, nil, @_Handle));
 end;
 
 destructor TLabCommandPool.Destroy;
