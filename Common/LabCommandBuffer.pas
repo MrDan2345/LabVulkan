@@ -26,7 +26,7 @@ type
     destructor Destroy; override;
     function RecordBegin(const Flags: TVkCommandBufferUsageFlags = 0): Boolean;
     function RecordEnd: Boolean;
-    function QueueBuffer(const Queue: TVkQueue): Boolean;
+    function QueueSubmit(const Queue: TVkQueue): Boolean;
   end;
   TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
@@ -81,7 +81,7 @@ begin
   Result := True;
 end;
 
-function TLabCommandBuffer.QueueBuffer(const Queue: TVkQueue): Boolean;
+function TLabCommandBuffer.QueueSubmit(const Queue: TVkQueue): Boolean;
   var fence: TLabFence;
   var submit_info: TVkSubmitInfo;
   var pipe_stage_flags: TVkPipelineStageFlags;

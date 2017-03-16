@@ -39,6 +39,7 @@ implementation
 
 function TLabVertexBuffer.GetAttribute(const Index: TVkInt32): PVkVertexInputAttributeDescription;
 begin
+  if (Index < 0) or (Index > High(_Attributes)) then Exit(nil);
   Result := @_Attributes[Index];
 end;
 

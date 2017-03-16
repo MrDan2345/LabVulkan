@@ -53,6 +53,8 @@ type
   end;
   TLabRendererShared = specialize TLabSharedRef<TLabRenderer>;
 
+const VK_DYNAMIC_STATE_RANGE_SIZE: TVkInt32 = (TVkInt32(VK_DYNAMIC_STATE_STENCIL_REFERENCE) - TVkInt32(VK_DYNAMIC_STATE_VIEWPORT) + 1);
+
 implementation
 
 //TLabRenderer BEGIN
