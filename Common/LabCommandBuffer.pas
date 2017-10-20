@@ -26,7 +26,7 @@ type
     destructor Destroy; override;
     function RecordBegin(const Flags: TVkCommandBufferUsageFlags = 0): Boolean;
     function RecordEnd: Boolean;
-    function QueueSubmit(const Queue: TVkQueue): Boolean;
+    function QueueSubmit(const Queue: TVkQueue; const WaitSemaphores: array of TVkSemaphore): Boolean;
   end;
   TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
@@ -81,7 +81,7 @@ begin
   Result := True;
 end;
 
-function TLabCommandBuffer.QueueSubmit(const Queue: TVkQueue): Boolean;
+function TLabCommandBuffer.QueueSubmit(const Queue: TVkQueue; const WaitSemaphores: array of TVkSemaphore): Boolean;
   var fence: TLabFence;
   var submit_info: TVkSubmitInfo;
   var pipe_stage_flags: TVkPipelineStageFlags;
@@ -90,8 +90,8 @@ begin
   pipe_stage_flags := TVkPipelineStageFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
   LabZeroMem(@submit_info, SizeOf(submit_info));
   submit_info.sType := VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info.waitSemaphoreCount := 0;
-  submit_info.pWaitSemaphores := nil;
+  submit_info.waitSemaphoreCount := Length(WaitSemaphores);
+  if Length(WaitSemaphores) > 0 then submit_info.pWaitSemaphores := @WaitSemaphores[0] else submit_info.pWaitSemaphores := nil;
   submit_info.pWaitDstStageMask := @pipe_stage_flags;
   submit_info.commandBufferCount := 1;
   submit_info.pCommandBuffers := @_Handle;

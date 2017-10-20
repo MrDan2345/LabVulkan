@@ -7,6 +7,7 @@ uses
   SysUtils,
   LabTypes,
   LabUtils,
+  LabPlatform,
   LabWindow,
   LabSwapChain,
   LabPhysicalDevice,
@@ -65,6 +66,7 @@ type
     procedure RenderPassBegin;
     procedure RenderPassEnd;
     procedure DrawFrame;
+    procedure UpdateUniformBuffer;
   public
     constructor Create; virtual;
     destructor Destroy; override;
@@ -179,7 +181,7 @@ begin
 end;
 
 procedure TLabApplication.PipelineSetup;
-  var dynamic_state_enables: array [0..TVkInt16(High(TVkDynamicState))] of TVkDynamicState;
+  var dynamic_state_enables: array [0..TVkInt16(VK_DYNAMIC_STATE_STENCIL_REFERENCE)] of TVkDynamicState;
   var dynamic_state_info: TVkPipelineDynamicStateCreateInfo;
   var vertex_input_state_info: TVkPipelineVertexInputStateCreateInfo;
   var input_assembly_state_info: TVkPipelineInputAssemblyStateCreateInfo;
@@ -451,10 +453,10 @@ begin
   _CurrentBuffer := _SwapChain.Ptr.AcquireNextImage(_ImageAcquiredSemaphore);
   _CommandBuffer.Ptr.RecordBegin;
   RenderPassBegin;
-  Vulkan.CmdDraw(_CommandBuffer.Ptr.VkHandle, 12 * 3, 1, 0, 0);
+  Vulkan.CmdDraw(_CommandBuffer.Ptr.VkHandle, 36, 1, 0, 0);
   RenderPassEnd;
   _CommandBuffer.Ptr.RecordEnd;
-  _CommandBuffer.Ptr.QueueSubmit(_Device.Ptr.GetQueue(_SwapChain.Ptr.QueueFamilyGraphics, 0));
+  _CommandBuffer.Ptr.QueueSubmit(_Device.Ptr.GetQueue(_SwapChain.Ptr.QueueFamilyGraphics, 0), [_ImageAcquiredSemaphore.Ptr.VkHandle]);
   LabZeroMem(@present_info, SizeOf(present_info));
   present_info.sType := VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present_info.swapchainCount := 1;
@@ -467,9 +469,30 @@ begin
   LabLog('DrawFrame END');
 end;
 
-constructor TLabApplication.Create;
+procedure TLabApplication.UpdateUniformBuffer;
+  var UniformBuffer: PVkVoid;
   var WVP, W, V, P, C: TLabMat;
-  var UniformBuffer, VertexBuffer: PVkVoid;
+begin
+  P := LabMatProj(45 * LabDegToRad, 1, 0.1, 100);
+  V := LabMatView(LabVec3(-5, 3, -10), LabVec3(0, 0, 0), LabVec3(0, -1, 0));
+  W := LabMatScaling(1, 1, 1);// LabMatRotationY(LabTimeSec);
+  C := LabMat(
+    1.0,  0.0, 0.0, 0.0,
+    0.0, -1.0, 0.0, 0.0,
+    0.0,  0.0, 0.5, 0.0,
+    0.0,  0.0, 0.5, 1.0
+  );
+  WVP := W * V * P * C;
+  WVP := LabMatIdentity;
+  if _UniformBuffer.Ptr.Map(UniformBuffer) then
+  begin
+    PLabMat(UniformBuffer)^ := WVP;
+    _UniformBuffer.Ptr.Unmap;
+  end;
+end;
+
+constructor TLabApplication.Create;
+  var VertexBuffer: PVkVoid;
   var i: TVkInt32;
 begin
   LabLog('TLabApplication.Create BEGIN');
@@ -481,9 +504,9 @@ begin
   //TLabRenderer.EnableLayer('VK_LAYER_LUNARG_api_dump');
   TLabRenderer.EnableLayer('VK_LAYER_LUNARG_core_validation');
   TLabRenderer.EnableLayer('VK_LAYER_LUNARG_parameter_validation');
-  TLabRenderer.EnableLayer('VK_LAYER_LUNARG_image');
-  TLabRenderer.EnableLayer('VK_LAYER_LUNARG_monitor');
-  TLabRenderer.EnableLayer('VK_LAYER_LUNARG_object_tracker');
+  //TLabRenderer.EnableLayer('VK_LAYER_LUNARG_image');
+  //TLabRenderer.EnableLayer('VK_LAYER_LUNARG_monitor');
+  //TLabRenderer.EnableLayer('VK_LAYER_LUNARG_object_tracker');
   TLabRenderer.EnableLayer('VK_LAYER_LUNARG_swapchain');
   _Renderer := TLabRenderer.Create();
   _Window := TLabWindow.Create;
@@ -500,28 +523,13 @@ begin
   _CommandBuffer := TLabCommandBuffer.Create(_CommandPool);
   _SwapChain := TLabSwapChain.Create(_Window, _Device);
   _DepthBuffer := TLabDepthBuffer.Create(_Device, _SwapChain.Ptr.Width, _SwapChain.Ptr.Height);
-  P := LabMatProj(45 * LabDegToRad, 1, 0.1, 100);
-  V := LabMatView(LabVec3(-5, 3, -10), LabVec3(0, 0, 0), LabVec3(0, -1, 0));
-  W := LabMatIdentity;
-  C := LabMat(
-    1.0,  0.0, 0.0, 0.0,
-    0.0, -1.0, 0.0, 0.0,
-    0.0,  0.0, 0.5, 0.0,
-    0.0,  0.0, 0.5, 1.0
-  );
-  WVP := W * V * P * C;
-  WVP := LabMatIdentity;
-  _UniformBuffer := TLabUniformBuffer.Create(_Device, SizeOf(WVP));
-  if _UniformBuffer.Ptr.Map(UniformBuffer) then
-  begin
-    PLabMat(UniformBuffer)^ := WVP;
-    _UniformBuffer.Ptr.Unmap;
-  end;
+  _UniformBuffer := TLabUniformBuffer.Create(_Device, SizeOf(TLabMat));
+  UpdateUniformBuffer;
   PipelineLayoutSetup;
   DescriptorSetSetup;
   RenderPassSetup;
-  _VertexShader := TLabShader.Create(_Device, 'vs.spv');
-  _PixelShader := TLabShader.Create(_Device, 'ps.spv');
+  _VertexShader := TLabShader.Create(_Device, 'tri_vs.spv');
+  _PixelShader := TLabShader.Create(_Device, 'tri_ps.spv');
   LabZeroMem(@_ShaderStages, SizeOf(_ShaderStages));
   _ShaderStages[0].sType := VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   _ShaderStages[0].pSpecializationInfo := nil;
@@ -601,8 +609,8 @@ begin
   begin
     //Gather, process window messages and sync other threads
     DrawFrame;
-    Sleep(3000);
-    Stop;
+    //Sleep(3000);
+    //Stop;
   end;
   _UpdateThread.WaitFor();
 end;

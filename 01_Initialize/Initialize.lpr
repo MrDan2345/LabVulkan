@@ -16,5 +16,6 @@ begin
   //SetHeapTraceOutput('heaptrc.txt');
   App := TLabApplication.Create;
   App.Ptr.Run;
+  //ReadLn;
 end.
 
