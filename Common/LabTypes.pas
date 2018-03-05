@@ -8,6 +8,9 @@ uses
   Vulkan;
 
 type
+  TLabProc = procedure;
+  TLabProcObj = procedure of Object;
+
   generic TLabSharedRef<T> = record
   public
     type TPtr = T;

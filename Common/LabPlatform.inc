@@ -1,19 +1,19 @@
 {$ifdef Win32}
-  {$define Windows}
+  {$define Platform_Windows}
 {$endif}
 {$ifdef Win64}
-  {$define Windows}
+  {$define Platform_Windows}
 {$endif}
 {$ifdef WinCE}
-  {$define Windows}
+  {$define Platform_Windows}
 {$endif}
-{$ifdef Windows}
+{$ifdef Platform_Windows}
   {$define VK_USE_PLATFORM_WIN32_KHR}
 {$endif}
-{$ifdef Android}
+{$ifdef Platform_Android}
   {$define VK_USE_PLATFORM_ANDROID_KHR}
 {$endif}
-{$ifdef Linux}
+{$ifdef Platform_Linux}
   {$define VK_USE_PLATFORM_XCB_KHR}
 {$endif}
 {$implicitexceptions off}

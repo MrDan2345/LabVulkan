@@ -10,7 +10,8 @@ uses
   LabSync,
   LabWindow,
   LabPhysicalDevice,
-  LabDevice;
+  LabDevice,
+  LabSurface;
 
 type
   TLabSwapChain = class (TLabClass)
@@ -23,7 +24,7 @@ type
   private
     var _Window: TLabWindow;
     var _Device: TLabDeviceShared;
-    var _Surface: TVkSurfaceKHR;
+    var _Surface: TLabSurfaceShared;
     var _Handle: TVkSwapchainKHR;
     var _Capabilities: TVkSurfaceCapabilitiesKHR;
     var _Formats: array of TVkSurfaceFormatKHR;
@@ -32,27 +33,31 @@ type
     var _PresentMode: TVkPresentModeKHR;
     var _Extent: TVkExtent2D;
     var _Images: array of TImageBuffer;
-    var _QueueFamilyGraphics: TVkUInt32;
-    var _QueueFamilyPresent: TVkUInt32;
-    procedure Setup;
+    var _QueueFamilyIndexGraphics: TVkUInt32;
+    var _QueueFamilyIndexPresent: TVkUInt32;
+    var _QueueFamilyGraphics: TVkQueue;
+    var _QueueFamilyPresent: TVkQueue;
     function GetWidth: TVkUInt32; inline;
     function GetHeight: TVkUInt32; inline;
     function GetImageBuffer(const Index: TVkInt32): PImageBuffer; inline;
     function GetImageCount: TVkInt32; inline;
   public
-    class function GetSurfacePlatformExtension: AnsiString;
-    property VkSurface: TVkSurfaceKHR read _Surface;
     property VkHandle: TVkSwapchainKHR read _Handle;
     property Width: TVkUInt32 read GetWidth;
     property Height: TVkUInt32 read GetHeight;
     property Format: TVkFormat read _Format;
     property Images[const Index: TVkInt32]: PImageBuffer read GetImageBuffer;
     property ImageCount: TVkInt32 read GetImageCount;
-    property QueueFamilyGraphics: TVkUInt32 read _QueueFamilyGraphics;
-    property QueueFamilyPresent: TVkUInt32 read _QueueFamilyPresent;
+    property QueueFamilyIndexGraphics: TVkUInt32 read _QueueFamilyIndexGraphics;
+    property QueueFamilyIndexPresent: TVkUInt32 read _QueueFamilyIndexPresent;
+    property QueueFamilyGraphics: TVkQueue read _QueueFamilyGraphics;
+    property QueueFamilyPresent: TVkQueue read _QueueFamilyPresent;
     constructor Create(
-      const AWindow: TLabWindow;
-      const ADevice: TLabDeviceShared
+      const ADevice: TLabDeviceShared;
+      const ASurface: TLabSurfaceShared;
+      const AUsageFlags: TVkImageUsageFlags = TVkImageUsageFlags(
+        TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+      )
     );
     destructor Destroy; override;
     function AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
@@ -62,144 +67,6 @@ type
 implementation
 
 //TLabSwapChain BEGIN
-procedure TLabSwapChain.Setup;
-  var queue_family_graphics_present: array[0..1] of TVkUInt32;
-  var i, format_count, present_mode_count, image_count: TVkUInt32;
-  var present_support: TVkBool32;
-  var pre_transform: TVkSurfaceTransformFlagBitsKHR;
-  var swap_chain_create_info: TVkSwapchainCreateInfoKHR;
-  var image_view_create_info: TVkImageViewCreateInfo;
-  var swapchain_images: array of TVkImage;
-begin
-  queue_family_graphics_present[0] := TVkUInt32(-1);
-  queue_family_graphics_present[1] := TVkUInt32(-1);
-  for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
-  begin
-    if _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyProperties[i]^.queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT) > 0 then
-    begin
-      queue_family_graphics_present[0] := i;
-    end;
-    Vulkan.GetPhysicalDeviceSurfaceSupportKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, i, _Surface, @present_support);
-    if present_support = VK_TRUE then
-    begin
-      queue_family_graphics_present[1] := i;
-      if queue_family_graphics_present[0] = queue_family_graphics_present[1] then Break;
-    end;
-  end;
-  if (queue_family_graphics_present[0] = TVkUInt32(-1))
-  or (queue_family_graphics_present[1] = TVkUInt32(-1)) then
-  begin
-    LabLog('Error: could not setup swap chain.');
-    Exit;
-  end;
-  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @_Capabilities));
-  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, nil));
-  SetLength(_Formats, format_count);
-  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @format_count, @_Formats[0]));
-  if (format_count = 1) and (_Formats[0].format = VK_FORMAT_UNDEFINED) then
-  begin
-    _Format := VK_FORMAT_B8G8R8A8_UNORM;
-  end
-  else
-  begin
-    _Format := _Formats[0].format;
-  end;
-  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, nil));
-  SetLength(_PresentModes, present_mode_count);
-  LabAssertVkError(Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface, @present_mode_count, @_PresentModes[0]));
-  if present_mode_count > 0 then _PresentMode := _PresentModes[0] else _PresentMode := VK_PRESENT_MODE_FIFO_KHR;
-  for i := 0 to High(_PresentModes) do
-  if _PresentModes[i] = VK_PRESENT_MODE_FIFO_KHR then
-  begin
-    _PresentMode := _PresentModes[i];
-    Break;
-  end;
-  if _Capabilities.currentExtent.width = $FFFFFFFF then
-  begin
-    _Extent.width := _Window.Width;
-    _Extent.height := _Window.Height;
-    if _Extent.width < _Capabilities.minImageExtent.width then
-    begin
-      _Extent.width := _Capabilities.minImageExtent.width;
-    end
-    else if _Extent.width > _Capabilities.maxImageExtent.width then
-    begin
-      _Extent.width := _Capabilities.maxImageExtent.width;
-    end;
-    if _Extent.height < _Capabilities.minImageExtent.height then
-    begin
-      _Extent.height := _Capabilities.minImageExtent.height;
-    end
-    else if _Extent.height > _Capabilities.maxImageExtent.height then
-    begin
-      _Extent.height := _Capabilities.maxImageExtent.height;
-    end;
-  end
-  else
-  begin
-    _Extent := _Capabilities.currentExtent;
-  end;
-  if (_Capabilities.supportedTransforms and TVkFlags(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) > 0 then
-  begin
-    pre_transform := VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-  end
-  else
-  begin
-    pre_transform := _Capabilities.currentTransform;
-  end;
-  LabZeroMem(@swap_chain_create_info, SizeOf(TVkSwapchainCreateInfoKHR));
-  swap_chain_create_info.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swap_chain_create_info.surface := _Surface;
-  swap_chain_create_info.minImageCount := _Capabilities.minImageCount;
-  swap_chain_create_info.imageFormat := _Format;
-  swap_chain_create_info.imageExtent.width := _Extent.width;
-  swap_chain_create_info.imageExtent.height := _Extent.height;
-  swap_chain_create_info.preTransform := pre_transform;
-  swap_chain_create_info.compositeAlpha := VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swap_chain_create_info.imageArrayLayers := 1;
-  swap_chain_create_info.presentMode := _PresentMode;
-  swap_chain_create_info.oldSwapchain := VK_NULL_HANDLE;
-  swap_chain_create_info.clipped := VK_TRUE;
-  swap_chain_create_info.imageColorSpace := VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-  swap_chain_create_info.imageUsage := TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-  swap_chain_create_info.imageSharingMode := VK_SHARING_MODE_EXCLUSIVE;
-  swap_chain_create_info.queueFamilyIndexCount := 0;
-  swap_chain_create_info.pQueueFamilyIndices := nil;
-  if queue_family_graphics_present[0] <> queue_family_graphics_present[1] then
-  begin
-    swap_chain_create_info.imageSharingMode := VK_SHARING_MODE_CONCURRENT;
-    swap_chain_create_info.queueFamilyIndexCount := 2;
-    swap_chain_create_info.pQueueFamilyIndices := @queue_family_graphics_present[0];
-  end;
-  _QueueFamilyGraphics := queue_family_graphics_present[0];
-  _QueueFamilyPresent := queue_family_graphics_present[1];
-  LabAssertVkError(Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swap_chain_create_info, nil, @_Handle));
-  LabAssertVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, nil));
-  SetLength(_Images, image_count);
-  SetLength(swapchain_images, image_count);
-  LabAssertVkError(Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @image_count, @swapchain_images[0]));
-  for i := 0 to image_count - 1 do
-  begin
-    _Images[i].Image := swapchain_images[i];
-    LabZeroMem(@image_view_create_info, SizeOf(TVkImageViewCreateInfo));
-    image_view_create_info.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    image_view_create_info.flags := 0;
-    image_view_create_info.image := _Images[i].Image;
-    image_view_create_info.viewType := VK_IMAGE_VIEW_TYPE_2D;
-    image_view_create_info.format := _Format;
-    image_view_create_info.components.r := VK_COMPONENT_SWIZZLE_R;
-    image_view_create_info.components.g := VK_COMPONENT_SWIZZLE_G;
-    image_view_create_info.components.b := VK_COMPONENT_SWIZZLE_B;
-    image_view_create_info.components.a := VK_COMPONENT_SWIZZLE_A;
-    image_view_create_info.subresourceRange.aspectMask := TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
-    image_view_create_info.subresourceRange.baseMipLevel := 0;
-    image_view_create_info.subresourceRange.levelCount := 1;
-    image_view_create_info.subresourceRange.baseArrayLayer := 0;
-    image_view_create_info.subresourceRange.layerCount := 1;
-    LabAssertVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @image_view_create_info, nil, @_Images[i].View));
-  end;
-end;
-
 function TLabSwapChain.GetWidth: TVkUInt32;
 begin
   Result := _Extent.width;
@@ -220,80 +87,268 @@ begin
   Result := Length(_Images);
 end;
 
-class function TLabSwapChain.GetSurfacePlatformExtension: AnsiString;
+constructor TLabSwapChain.Create(
+  const ADevice: TLabDeviceShared;
+  const ASurface: TLabSurfaceShared;
+  const AUsageFlags: TVkImageUsageFlags
+);
+  var r: TVkResult;
+  var supports_present: array of TVkBool32;
+  var surf_formats: array of TVkSurfaceFormatKHR;
+  var format_count: TVkUInt32;
+  var surf_caps: TVkSurfaceCapabilitiesKHR;
+  var present_mode_count: TVkUInt32;
+  var present_modes: array of TVkPresentModeKHR;
+  var swapchain_extent: TVkExtent2D;
+  var swapchain_present_mode: TVkPresentModeKHR;
+  var desired_number_of_swap_chain_images: TVkUInt32;
+  var pre_transform: TVkSurfaceTransformFlagBitsKHR;
+  var composite_alpha: TVkCompositeAlphaFlagBitsKHR;
+  var composite_alpha_flags: array[0..3] of TVkCompositeAlphaFlagBitsKHR;
+  var swapchain_ci: TVkSwapchainCreateInfoKHR;
+  var queue_family_indices: array[0..1] of TVkUInt32;
+  var swapchain_images: array of TVkImage;
+  var swapchain_image_count: TVkUInt32;
+  var buffer: TImageBuffer;
+  var color_image_view: TVkImageViewCreateInfo;
+  var i: TVkUInt32;
 begin
-{$if defined(Windows)}
-  Result := VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
-{$elseif defined(Android)}
-  Result := VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
-{$elseif defined(Linux)}
-  Result := VK_KHR_XCB_SURFACE_EXTENSION_NAME;
-{$else}
-  LabLog('Error: Surface platform extension not specified');
-{$endif}
-end;
+  _Device := ADevice;
+  _Surface := ASurface;
 
-{$if defined(VK_USE_PLATFORM_WIN32_KHR)}
-constructor TLabSwapChain.Create(
-  const AWindow: TLabWindow;
-  const ADevice: TLabDeviceShared
-);
-  var surface_create_info: TVkWin32SurfaceCreateInfoKHR;
-begin
-  LabLog('TLabSwapChain.Create', 2);
-  inherited Create;
-  _Window := AWindow;
-  _Device := ADevice;
-  LabZeroMem(@surface_create_info, SizeOf(TVkWin32SurfaceCreateInfoKHR));
-  surface_create_info.sType := VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  surface_create_info.hinstance_ := _Window.Instance;
-  surface_create_info.hwnd_ := _Window.Handle;
-  LabAssertVkError(Vulkan.CreateWin32SurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface));
-  Setup;
-end;
-{$elseif defined(VK_USE_PLATFORM_ANDROID_KHR)}
-constructor TLabSwapChain.Create(
-  const AWindow: TLabWindow;
-  const ADevice: TLabDeviceRef
-);
-  var surface_create_info: TVkAndroidSurfaceCreateInfoKHR;
-begin
-  LabLog('TLabSwapChain.Create', 2);
-  inherited Create;
-  _Window := AWindow;
-  _Device := ADevice;
-  LabZeroMem(@surface_create_info, SizeOf(TVkAndroidSurfaceCreateInfoKHR));
-  VkAndroidSurfaceCreateInfoKHR createInfo;
-  surface_create_info.sType := VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-  surface_create_info.flags := 0;
-  surface_create_info.window := AndroidGetApplicationWindow();
-  LabAssetVkError(Vulkan.CreateAndroidSurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface);
-  Setup;
-end;
-{$elseif defined(VK_USE_PLATFORM_XCB_KHR)}
-constructor TLabSwapChain.Create(
-  const AWindow: TLabWindow;
-  const ADevice: TLabDeviceRef
-);
-  var surface_create_info: TVkXcbSurfaceCreateInfoKHR;
-begin
-  LabLog('TLabSwapChain.Create', 2);
-  inherited Create;
-  _Window := AWindow;
-  _Device := ADevice;
-  LabZeroMem(@surface_create_info, SizeOf(TVkXcbSurfaceCreateInfoKHR));
-  surface_create_info.sType := VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-  surface_create_info.connection := Window.Connection;
-  surface_create_info.window := Window.Handle;
-  LabAssetVkError(Vulkan.CreateXcbSurfaceKHR(VulkanInstance, @surface_create_info, nil, @_Surface);
-  Setup;
-end;
+  SetLength(supports_present, _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount);
+  for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
+  begin
+    vk.GetPhysicalDeviceSurfaceSupportKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, i, _Surface.Ptr.VkHandle, @supports_present[i]);
+  end;
+
+  // Search for a graphics and a present queue in the array of queue
+  // families, try to find one that supports both
+  _QueueFamilyIndexGraphics := High(TVkUInt32);
+  _QueueFamilyIndexPresent := High(TVkUInt32);
+  for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
+  begin
+    if ((_Device.Ptr.PhysicalDevice.Ptr.QueueFamilyProperties[i]^.queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) <> 0) then
+    begin
+      if (_QueueFamilyIndexGraphics = High(TVkUInt32)) then _QueueFamilyIndexGraphics := i;
+      if (supports_present[i] = VK_TRUE) then
+      begin
+        _QueueFamilyIndexGraphics := i;
+        _QueueFamilyIndexPresent := i;
+        Break;
+      end;
+    end;
+  end;
+
+  if (_QueueFamilyIndexPresent = High(TVkUInt32)) then
+  begin
+    // If didn't find a queue that supports both graphics and present, then
+    // find a separate present queue.
+    for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
+    if (supports_present[i] = VK_TRUE) then
+    begin
+      _QueueFamilyIndexPresent := i;
+      Break;
+    end;
+  end;
+  //free(pSupportsPresent);
+
+  // Generate error if could not find queues that support graphics
+  // and present
+  if (_QueueFamilyIndexGraphics = High(TVkUInt32))
+  or (_QueueFamilyIndexPresent = High(TVkUInt32)) then
+  begin
+    WriteLn('Could not find a queues for both graphics and present');
+    Halt;
+  end;
+
+  // Get the list of VkFormats that are supported:
+  r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, nil);
+  LabAssertVkError(r);
+  //VkSurfaceFormatKHR *surfFormats = (VkSurfaceFormatKHR *)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+  SetLength(surf_formats, format_count);
+  r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, @surf_formats[0]);
+  LabAssertVkError(r);
+  // If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+  // the surface has no preferred format.  Otherwise, at least one
+  // supported format will be returned.
+  if (format_count = 1) and (surf_formats[0].format = VK_FORMAT_UNDEFINED) then
+  begin
+    _Format := VK_FORMAT_B8G8R8A8_UNORM;
+  end
+  else
+  begin
+    assert(format_count >= 1);
+    _Format := surf_formats[0].format;
+  end;
+
+  // DEPENDS on info.cmd and info.queue initialized
+  r := vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @surf_caps);
+  LabAssertVkError(r);
+
+  r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, nil);
+  LabAssertVkError(r);
+  //VkPresentModeKHR *presentModes = (VkPresentModeKHR *)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+  SetLength(present_modes, present_mode_count);
+  assert(Length(present_modes) > 0);
+  r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, @present_modes[0]);
+  LabAssertVkError(r);
+
+  // width and height are either both 0xFFFFFFFF, or both not 0xFFFFFFFF.
+  if (surf_caps.currentExtent.width = $FFFFFFFF) then
+  begin
+    // If the surface size is undefined, the size is set to
+    // the size of the images requested.
+    swapchain_extent.width := _Surface.Ptr.Width;
+    swapchain_extent.height := _Surface.Ptr.Height;
+    if (swapchain_extent.width < surf_caps.minImageExtent.width) then
+    begin
+      swapchain_extent.width := surf_caps.minImageExtent.width;
+    end
+    else if (swapchain_extent.width > surf_caps.maxImageExtent.width) then
+    begin
+      swapchain_extent.width := surf_caps.maxImageExtent.width;
+    end;
+
+    if (swapchain_extent.height < surf_caps.minImageExtent.height) then
+    begin
+      swapchain_extent.height := surf_caps.minImageExtent.height;
+    end
+    else if (swapchain_extent.height > surf_caps.maxImageExtent.height) then
+    begin
+      swapchain_extent.height := surf_caps.maxImageExtent.height;
+    end;
+  end
+  else
+  begin
+    // If the surface size is defined, the swap chain size must match
+    swapchain_extent := surf_caps.currentExtent;
+  end;
+
+  // The FIFO present mode is guaranteed by the spec to be supported
+  // Also note that current Android driver only supports FIFO
+  swapchain_present_mode := VK_PRESENT_MODE_FIFO_KHR;
+
+  // Determine the number of VkImage's to use in the swap chain.
+  // We need to acquire only 1 presentable image at at time.
+  // Asking for minImageCount images ensures that we can acquire
+  // 1 presentable image as long as we present it before attempting
+  // to acquire another.
+  desired_number_of_swap_chain_images := surf_caps.minImageCount;
+
+  if surf_caps.supportedTransforms and TVkFlags(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) > 0 then
+  begin
+    pre_transform := VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+  end
+  else
+  begin
+    pre_transform := surf_caps.currentTransform;
+  end;
+
+  // Find a supported composite alpha mode - one of these is guaranteed to be set
+  composite_alpha := VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  composite_alpha_flags[0] := VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  composite_alpha_flags[1] := VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+  composite_alpha_flags[2] := VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+  composite_alpha_flags[3] := VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+  for i := 0 to High(composite_alpha_flags) do
+  begin
+    if surf_caps.supportedCompositeAlpha and TVkFlags(composite_alpha_flags[i]) > 0 then
+    begin
+      composite_alpha := composite_alpha_flags[i];
+      Break;
+    end;
+  end;
+
+  //VkSwapchainCreateInfoKHR swapchain_ci = {};
+  FillChar(swapchain_ci, sizeof(swapchain_ci), 0);
+  swapchain_ci.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swapchain_ci.pNext := nil;
+  swapchain_ci.surface := _Surface.Ptr.VkHandle;
+  swapchain_ci.minImageCount := desired_number_of_swap_chain_images;
+  swapchain_ci.imageFormat := _Format;
+  swapchain_ci.imageExtent.width := swapchain_extent.width;
+  swapchain_ci.imageExtent.height := swapchain_extent.height;
+  swapchain_ci.preTransform := pre_transform;
+  swapchain_ci.compositeAlpha := composite_alpha;
+  swapchain_ci.imageArrayLayers := 1;
+  swapchain_ci.presentMode := swapchain_present_mode;
+  swapchain_ci.oldSwapchain := VK_NULL_HANDLE;
+{$ifndef __ANDROID__}
+  swapchain_ci.clipped := VK_TRUE;
 {$else}
-constructor TLabSwapChain.Create(const Window: TLabWindow);
-begin
-  Halt;
-end;
+  swapchain_ci.clipped := VK_FALSE;
 {$endif}
+  swapchain_ci.imageColorSpace := VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+  swapchain_ci.imageUsage := AUsageFlags;
+  swapchain_ci.imageSharingMode := VK_SHARING_MODE_EXCLUSIVE;
+  swapchain_ci.queueFamilyIndexCount := 0;
+  swapchain_ci.pQueueFamilyIndices := nil;
+  //uint32_t queueFamilyIndices[2] = {(uint32_t)info.graphics_queue_family_index, (uint32_t)info.present_queue_family_index};
+  queue_family_indices[0] := _QueueFamilyIndexGraphics;
+  queue_family_indices[1] := _QueueFamilyIndexPresent;
+  if (_QueueFamilyIndexGraphics <> _QueueFamilyIndexPresent) then
+  begin
+    // If the graphics and present queues are from different queue families,
+    // we either have to explicitly transfer ownership of images between the
+    // queues, or we have to create the swapchain with imageSharingMode
+    // as VK_SHARING_MODE_CONCURRENT
+    swapchain_ci.imageSharingMode := VK_SHARING_MODE_CONCURRENT;
+    swapchain_ci.queueFamilyIndexCount := 2;
+    swapchain_ci.pQueueFamilyIndices := @queue_family_indices;
+  end;
+
+  r := vk.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_ci, nil, @_Handle);
+  LabAssertVkError(r);
+
+  r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, nil);
+  LabAssertVkError(r);
+
+  //VkImage *swapchainImages = (VkImage *)malloc(info.swapchainImageCount * sizeof(VkImage));
+  SetLength(swapchain_images, swapchain_image_count);
+  assert(Length(swapchain_images) > 0);
+  r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, @swapchain_images[0]);
+  LabAssertVkError(r);
+
+  for i := 0 to swapchain_image_count - 1 do
+  begin
+    FillChar(color_image_view, sizeof(color_image_view), 0);
+    color_image_view.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    color_image_view.pNext := nil;
+    color_image_view.format := _Format;
+    color_image_view.components.r := VK_COMPONENT_SWIZZLE_R;
+    color_image_view.components.g := VK_COMPONENT_SWIZZLE_G;
+    color_image_view.components.b := VK_COMPONENT_SWIZZLE_B;
+    color_image_view.components.a := VK_COMPONENT_SWIZZLE_A;
+    color_image_view.subresourceRange.aspectMask := TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
+    color_image_view.subresourceRange.baseMipLevel := 0;
+    color_image_view.subresourceRange.levelCount := 1;
+    color_image_view.subresourceRange.baseArrayLayer := 0;
+    color_image_view.subresourceRange.layerCount := 1;
+    color_image_view.viewType := VK_IMAGE_VIEW_TYPE_2D;
+    color_image_view.flags := 0;
+
+    buffer.Image := swapchain_images[i];
+
+    color_image_view.image := buffer.Image;
+
+    r := vk.CreateImageView(_Device.Ptr.VkHandle, @color_image_view, nil, @buffer.view);
+    LabAssertVkError(r);
+    //info.buffers.push_back(sc_buffer);
+    SetLength(_Images, Length(_Images) + 1);
+    _Images[High(_Images)] := buffer;
+  end;
+  vk.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyGraphics);
+  if (_QueueFamilyIndexGraphics = _QueueFamilyIndexPresent) then
+  begin
+    _QueueFamilyPresent := _QueueFamilyGraphics;
+  end
+  else
+  begin
+    vk.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyPresent);
+  end;
+  //free(swapchainImages);
+end;
 
 destructor TLabSwapChain.Destroy;
   var i: TVkInt32;
@@ -306,10 +361,6 @@ begin
   if LabVkValidHandle(_Handle) then
   begin
     vkDestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
-  end;
-  if LabVkValidHandle(_Surface) then
-  begin
-    Vulkan.DestroySurfaceKHR(VulkanInstance, _Surface, nil);
   end;
   inherited Destroy;
   LabLog('TLabSwapChain.Destroy', -2);

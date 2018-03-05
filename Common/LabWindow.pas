@@ -7,6 +7,7 @@ uses
 {$if defined(VK_USE_PLATFORM_WIN32_KHR)}
   Windows,
 {$endif}
+  LabTypes,
   LabThread,
   LabUtils,
   SysUtils;
@@ -14,9 +15,9 @@ uses
 type
   TLabWindow = class;
 
-  TLabWindowProc = procedure (Window: TLabWindow) of Object;
+  TLabWindowProc = procedure (const Window: TLabWindow) of Object;
 
-  TLabWindow = class
+  TLabWindow = class (TLabClass)
   private
     class var _WndClass: TWndClassExA;
     class var _WndClassName: AnsiString;
@@ -25,6 +26,7 @@ type
     var _Handle: HWND;
     var _Instance: HINST;
     var _Caption: AnsiString;
+    var _OnCreate: TLabWindowProc;
     var _OnClose: TLabWindowProc;
     var _OnTick: TLabWindowProc;
     var _LoopThread: TLabThread;
@@ -36,18 +38,23 @@ type
   public
     class constructor CreateClass;
     class destructor DestroyClass;
+    class property WndClass: TWndClassExA read _WndClass;
+    class property WndClassName: AnsiString read _WndClassName;
     constructor Create; overload;
     constructor Create(const NewWidth, NewHeight: Integer); overload;
     destructor Destroy; override;
+    property IsActive: Boolean read _Active;
     property Width: Integer read _Width;
     property Height: Integer read _Height;
     property Caption: AnsiString read _Caption write SetCaption;
     property Handle: HWND read _Handle;
     property Instance: HINST read _Instance;
+    property OnCreate: TLabWindowProc read _OnCreate write _OnCreate;
     property OnClose: TLabWindowProc read _OnClose write _OnClose;
     property OnTick: TLabWindowProc read _OnTick write _OnTick;
     procedure Close;
   end;
+  TLabWindowShared = specialize TLabSharedRef<TLabWindow>;
 
 implementation
 
@@ -136,30 +143,14 @@ begin
 end;
 
 procedure TLabWindow.Initialize;
+  var WndStyle: LongWord;
+  var R: TRect;
 begin
   _OnClose := nil;
   _OnTick := nil;
   _Caption := 'LabVulkan';
   if _Width < 128 then _Width := 128;
   if _Height < 32 then _Height := 32;
-  _Active := True;
-  _LoopThread := TLabThread.Create;
-  _LoopThread.Proc := @Loop;
-  _LoopThread.Start;
-end;
-
-procedure TLabWindow.Finalize;
-begin
-  _LoopThread.WaitFor();
-  _LoopThread.Free;
-end;
-
-procedure TLabWindow.Loop;
-  var WndStyle: LongWord;
-  var R: TRect;
-  var WndClassName: AnsiString;
-  var msg: TMsg;
-begin
   WndStyle := (
     WS_CAPTION or
     WS_POPUP or
@@ -175,9 +166,8 @@ begin
   R.Top := (GetSystemMetrics(SM_CYSCREEN) - _Height) shr 1;
   R.Bottom := R.Top + _Height;
   AdjustWindowRect(R, WndStyle, False);
-  WndClassName := _WndClassName;
   _Handle := CreateWindowExA(
-    WS_EX_WINDOWEDGE or WS_EX_APPWINDOW, PAnsiChar(WndClassName), PAnsiChar(_Caption),
+    WS_EX_WINDOWEDGE or WS_EX_APPWINDOW, PAnsiChar(_WndClassName), PAnsiChar(_Caption),
     WndStyle,
     R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top,
     0, 0, HInstance, nil
@@ -185,23 +175,27 @@ begin
   _Instance := GetWindowLongA(_Handle, GWL_HINSTANCE);
   SetWindowLongPtrA(_Handle, GWLP_USERDATA, PtrInt(Self));
   BringWindowToTop(_Handle);
-  {$Warnings off}
-  FillChar(msg, SizeOf(msg), 0);
-  {$Warnings on}
+  _Active := True;
+  _LoopThread := TLabThread.Create;
+  _LoopThread.Proc := @Loop;
+  _LoopThread.Start;
+end;
+
+procedure TLabWindow.Finalize;
+begin
+  _LoopThread.WaitFor();
+  _LoopThread.Free;
+  DestroyWindow(_Handle);
+end;
+
+procedure TLabWindow.Loop;
+begin
+  if Assigned(_OnCreate) then _OnCreate(Self);
   while _Active do
   begin
-    if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
-    begin
-      TranslateMessage(msg);
-      DispatchMessage(msg);
-    end
-    else
-    begin
-      if Assigned(_OnTick) then _OnTick(Self);
-    end
+    if Assigned(_OnTick) then _OnTick(Self);
   end;
   if Assigned(_OnClose) then _OnClose(Self);
-  DestroyWindow(_Handle);
 end;
 
 class constructor TLabWindow.CreateClass;
@@ -212,7 +206,7 @@ begin
   _WndClass.cbSize := SizeOf(TWndClassExA);
   _WndClass.hIconSm := LoadIcon(MainInstance, 'MAINICON');
   _WndClass.hIcon := LoadIcon(MainInstance, 'MAINICON');
-  _WndClass.hInstance := HInstance;
+  _WndClass.hInstance := GetModuleHandle(nil);
   _WndClass.hCursor := LoadCursor(0, IDC_ARROW);
   _WndClass.lpszClassName := PAnsiChar(_WndClassName);
   _WndClass.style := CS_HREDRAW or CS_VREDRAW or CS_OWNDC or CS_DBLCLKS;

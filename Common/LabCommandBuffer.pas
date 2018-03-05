@@ -39,7 +39,7 @@ constructor TLabCommandBuffer.Create(
 );
   var command_buffer_info: TVkCommandBufferAllocateInfo;
 begin
-  LabLog('TLabCommandBuffer.Create', 2);
+  LabLog('TLabCommandBuffer.Create');
   _Recording := False;
   _CommandPool := ACommandPool;
   LabZeroMem(@command_buffer_info, SizeOf(TVkCommandBufferAllocateInfo));
@@ -57,7 +57,7 @@ begin
     Vulkan.FreeCommandBuffers(_CommandPool.Ptr.Device.Ptr.VkHandle, _CommandPool.Ptr.VkHandle, 1, @_Handle);
   end;
   inherited Destroy;
-  LabLog('TLabCommandBuffer.Destroy', -2);
+  LabLog('TLabCommandBuffer.Destroy');
 end;
 
 function TLabCommandBuffer.RecordBegin(const Flags: TVkCommandBufferUsageFlags): Boolean;

@@ -54,7 +54,7 @@ constructor TLabDevice.Create(
   var add_swapchain_extension: Boolean;
   var i: Integer;
 begin
-  LabLog('TLabDevice.Create', 2);
+  LabLog('TLabDevice.Create');
   inherited Create;
   _PhysicalDevice := APhysicalDevice;
   LabLog('Queue family count = ' + IntToStr(_PhysicalDevice.Ptr.QueueFamilyCount));
@@ -133,10 +133,11 @@ destructor TLabDevice.Destroy;
 begin
   if LabVkValidHandle(_Handle) then
   begin
+    vk.DeviceWaitIdle(_Handle);
     vk.DestroyDevice(_Handle, nil);
   end;
   inherited Destroy;
-  LabLog('TLabDevice.Destroy', -2)
+  LabLog('TLabDevice.Destroy');
 end;
 
 function TLabDevice.MemoryTypeFromProperties(

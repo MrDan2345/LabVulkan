@@ -1,4 +1,4 @@
-unit LabUniformBuffer;
+unit LabBuffer;
 
 interface
 
@@ -9,7 +9,7 @@ uses
   LabDevice;
 
 type
-  TLabUniformBuffer = class (TLabClass)
+  TLabBuffer = class (TLabClass)
   private
     var _Device: TLabDeviceShared;
     var _Handle: TVkBuffer;
@@ -22,7 +22,13 @@ type
     property Size: TVkDeviceSize read _Size;
     property IsMapped: Boolean read _Mapped;
     property BufferInfo: PVkDescriptorBufferInfo read GetBufferInfo;
-    constructor Create(const ADevice: TLabDeviceShared; const ABufferSize: TVkDeviceSize);
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const ABufferSize: TVkDeviceSize;
+      const AQueueFamilyIndices: array of TVkUInt32;
+      const ASharingMode: TVkSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      const AFlags: TVkBufferCreateFlags = 0
+    );
     destructor Destroy; override;
     function Map(
       var Buffer: PVkVoid;
@@ -32,21 +38,24 @@ type
     ): Boolean;
     function Unmap: Boolean;
   end;
-  TLabUniformBufferShared = specialize TLabSharedRef<TLabUniformBuffer>;
+  TLabBufferShared = specialize TLabSharedRef<TLabBuffer>;
 
 implementation
 
-function TLabUniformBuffer.GetBufferInfo: PVkDescriptorBufferInfo;
+function TLabBuffer.GetBufferInfo: PVkDescriptorBufferInfo;
 begin
   Result := @_BufferInfo;
 end;
 
-constructor TLabUniformBuffer.Create(const ADevice: TLabDeviceShared; const ABufferSize: TVkDeviceSize);
+constructor TLabBuffer.Create(const ADevice: TLabDeviceShared;
+  const ABufferSize: TVkDeviceSize;
+  const AQueueFamilyIndices: array of TVkUInt32;
+  const ASharingMode: TVkSharingMode; const AFlags: TVkBufferCreateFlags);
   var buffer_info: TVkBufferCreateInfo;
   var memory_reqs: TVkMemoryRequirements;
   var alloc_info: TVkMemoryAllocateInfo;
 begin
-  LabLog('TLabUniformBuffer.Create', 2);
+  LabLog('TLabBuffer.Create');
   inherited Create;
   _Device := ADevice;
   _Size := ABufferSize;
@@ -54,10 +63,10 @@ begin
   buffer_info.sType := VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_info.usage := TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
   buffer_info.size := ABufferSize;
-  buffer_info.queueFamilyIndexCount := 0;
-  buffer_info.pQueueFamilyIndices := nil;
-  buffer_info.sharingMode := VK_SHARING_MODE_EXCLUSIVE;
-  buffer_info.flags := 0;
+  buffer_info.queueFamilyIndexCount := Length(AQueueFamilyIndices);
+  buffer_info.pQueueFamilyIndices := @AQueueFamilyIndices[0];
+  buffer_info.sharingMode := ASharingMode;
+  buffer_info.flags := AFlags;
   LabAssertVkError(Vulkan.CreateBuffer(_Device.Ptr.VkHandle, @buffer_info, nil, @_Handle));
   Vulkan.GetBufferMemoryRequirements(_Device.Ptr.VkHandle, _Handle, @memory_reqs);
   LabZeroMem(@alloc_info, SizeOf(TVkMemoryAllocateInfo));
@@ -80,16 +89,16 @@ begin
   _BufferInfo.range := _Size;
 end;
 
-destructor TLabUniformBuffer.Destroy;
+destructor TLabBuffer.Destroy;
 begin
   if _Mapped then Unmap;
   Vulkan.DestroyBuffer(_Device.Ptr.VkHandle, _Handle, nil);
   Vulkan.FreeMemory(_Device.Ptr.VkHandle, _Memory, nil);
   inherited Destroy;
-  LabLog('TLabUniformBuffer.Destroy', -2);
+  LabLog('TLabBuffer.Destroy');
 end;
 
-function TLabUniformBuffer.Map(var Buffer: PVkVoid; const Offset: TVkDeviceSize; const MapSize: TVkDeviceSize; const Flags: TVkMemoryMapFlags): Boolean;
+function TLabBuffer.Map(var Buffer: PVkVoid; const Offset: TVkDeviceSize; const MapSize: TVkDeviceSize; const Flags: TVkMemoryMapFlags): Boolean;
   var map_size: TVkDeviceSize;
 begin
   if _Mapped then Exit(False);
@@ -99,7 +108,7 @@ begin
   Result := True;
 end;
 
-function TLabUniformBuffer.Unmap: Boolean;
+function TLabBuffer.Unmap: Boolean;
 begin
   if not _Mapped then Exit(False);
   Vulkan.UnmapMemory(_Device.Ptr.VkHandle, _Memory);

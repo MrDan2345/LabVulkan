@@ -28,11 +28,13 @@ type
   private
     var _Device: TLabDeviceShared;
     var _Handle: TVkSemaphore;
+    function GetVkHandlePtr: PVkSemaphore; inline;
   public
     constructor Create(const ADevice: TLabDeviceShared; const AFlags: TVkSemaphoreCreateFlags = TVkSemaphoreCreateFlags(0));
     destructor Destroy; override;
     property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkSemaphore read _Handle;
+    property VkHandlePtr: PVkSemaphore read GetVkHandlePtr;
   end;
   TLabSemaphoreShared = specialize TLabSharedRef<TLabSemaphore>;
 
@@ -81,6 +83,11 @@ end;
 //TLabFence END
 
 //TLabSemaphore BEGIN
+function TLabSemaphore.GetVkHandlePtr: PVkSemaphore;
+begin
+  Result := @_Handle;
+end;
+
 constructor TLabSemaphore.Create(const ADevice: TLabDeviceShared; const AFlags: TVkSemaphoreCreateFlags);
   var SemaphoreCreateInfo: TVkSemaphoreCreateInfo;
 begin
