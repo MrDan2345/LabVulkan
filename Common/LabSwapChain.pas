@@ -10,6 +10,7 @@ uses
   LabSync,
   LabWindow,
   LabPhysicalDevice,
+  LabImage,
   LabDevice,
   LabSurface;
 
@@ -18,7 +19,7 @@ type
   public
     type TImageBuffer = record
       Image: TVkImage;
-      View: TVkImageView;
+      View: TLabImageView;
     end;
     type PImageBuffer = ^TImageBuffer;
   private
@@ -99,7 +100,6 @@ constructor TLabSwapChain.Create(
   var surf_caps: TVkSurfaceCapabilitiesKHR;
   var present_mode_count: TVkUInt32;
   var present_modes: array of TVkPresentModeKHR;
-  var swapchain_extent: TVkExtent2D;
   var swapchain_present_mode: TVkPresentModeKHR;
   var desired_number_of_swap_chain_images: TVkUInt32;
   var pre_transform: TVkSurfaceTransformFlagBitsKHR;
@@ -199,30 +199,30 @@ begin
   begin
     // If the surface size is undefined, the size is set to
     // the size of the images requested.
-    swapchain_extent.width := _Surface.Ptr.Width;
-    swapchain_extent.height := _Surface.Ptr.Height;
-    if (swapchain_extent.width < surf_caps.minImageExtent.width) then
+    _Extent.width := _Surface.Ptr.Width;
+    _Extent.height := _Surface.Ptr.Height;
+    if (_Extent.width < surf_caps.minImageExtent.width) then
     begin
-      swapchain_extent.width := surf_caps.minImageExtent.width;
+      _Extent.width := surf_caps.minImageExtent.width;
     end
-    else if (swapchain_extent.width > surf_caps.maxImageExtent.width) then
+    else if (_Extent.width > surf_caps.maxImageExtent.width) then
     begin
-      swapchain_extent.width := surf_caps.maxImageExtent.width;
+      _Extent.width := surf_caps.maxImageExtent.width;
     end;
 
-    if (swapchain_extent.height < surf_caps.minImageExtent.height) then
+    if (_Extent.height < surf_caps.minImageExtent.height) then
     begin
-      swapchain_extent.height := surf_caps.minImageExtent.height;
+      _Extent.height := surf_caps.minImageExtent.height;
     end
-    else if (swapchain_extent.height > surf_caps.maxImageExtent.height) then
+    else if (_Extent.height > surf_caps.maxImageExtent.height) then
     begin
-      swapchain_extent.height := surf_caps.maxImageExtent.height;
+      _Extent.height := surf_caps.maxImageExtent.height;
     end;
   end
   else
   begin
     // If the surface size is defined, the swap chain size must match
-    swapchain_extent := surf_caps.currentExtent;
+    _Extent := surf_caps.currentExtent;
   end;
 
   // The FIFO present mode is guaranteed by the spec to be supported
@@ -267,8 +267,8 @@ begin
   swapchain_ci.surface := _Surface.Ptr.VkHandle;
   swapchain_ci.minImageCount := desired_number_of_swap_chain_images;
   swapchain_ci.imageFormat := _Format;
-  swapchain_ci.imageExtent.width := swapchain_extent.width;
-  swapchain_ci.imageExtent.height := swapchain_extent.height;
+  swapchain_ci.imageExtent.width := _Extent.width;
+  swapchain_ci.imageExtent.height := _Extent.height;
   swapchain_ci.preTransform := pre_transform;
   swapchain_ci.compositeAlpha := composite_alpha;
   swapchain_ci.imageArrayLayers := 1;
@@ -312,28 +312,34 @@ begin
 
   for i := 0 to swapchain_image_count - 1 do
   begin
-    FillChar(color_image_view, sizeof(color_image_view), 0);
-    color_image_view.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    color_image_view.pNext := nil;
-    color_image_view.format := _Format;
-    color_image_view.components.r := VK_COMPONENT_SWIZZLE_R;
-    color_image_view.components.g := VK_COMPONENT_SWIZZLE_G;
-    color_image_view.components.b := VK_COMPONENT_SWIZZLE_B;
-    color_image_view.components.a := VK_COMPONENT_SWIZZLE_A;
-    color_image_view.subresourceRange.aspectMask := TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
-    color_image_view.subresourceRange.baseMipLevel := 0;
-    color_image_view.subresourceRange.levelCount := 1;
-    color_image_view.subresourceRange.baseArrayLayer := 0;
-    color_image_view.subresourceRange.layerCount := 1;
-    color_image_view.viewType := VK_IMAGE_VIEW_TYPE_2D;
-    color_image_view.flags := 0;
-
     buffer.Image := swapchain_images[i];
-
-    color_image_view.image := buffer.Image;
-
-    r := vk.CreateImageView(_Device.Ptr.VkHandle, @color_image_view, nil, @buffer.view);
-    LabAssertVkError(r);
+    //FillChar(color_image_view, sizeof(color_image_view), 0);
+    //color_image_view.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    //color_image_view.pNext := nil;
+    //color_image_view.format := _Format;
+    //color_image_view.components.r := VK_COMPONENT_SWIZZLE_R;
+    //color_image_view.components.g := VK_COMPONENT_SWIZZLE_G;
+    //color_image_view.components.b := VK_COMPONENT_SWIZZLE_B;
+    //color_image_view.components.a := VK_COMPONENT_SWIZZLE_A;
+    //color_image_view.subresourceRange.aspectMask := TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
+    //color_image_view.subresourceRange.baseMipLevel := 0;
+    //color_image_view.subresourceRange.levelCount := 1;
+    //color_image_view.subresourceRange.baseArrayLayer := 0;
+    //color_image_view.subresourceRange.layerCount := 1;
+    //color_image_view.viewType := VK_IMAGE_VIEW_TYPE_2D;
+    //color_image_view.flags := 0;
+    buffer.View := TLabImageView.Create(
+      _Device, swapchain_images[i], _Format,
+      TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT),
+      VK_IMAGE_VIEW_TYPE_2D
+    );
+//
+//    buffer.Image := swapchain_images[i];
+//
+//    color_image_view.image := buffer.Image;
+//
+//    r := vk.CreateImageView(_Device.Ptr.VkHandle, @color_image_view, nil, @buffer.view);
+//    LabAssertVkError(r);
     //info.buffers.push_back(sc_buffer);
     SetLength(_Images, Length(_Images) + 1);
     _Images[High(_Images)] := buffer;
@@ -353,14 +359,10 @@ end;
 destructor TLabSwapChain.Destroy;
   var i: TVkInt32;
 begin
-  for i := 0 to High(_Images) do
-  if LabVkValidHandle(_Images[i].View) then
-  begin
-    Vulkan.DestroyImageView(_Device.Ptr.VkHandle, _Images[i].View, nil);
-  end;
+  for i := 0 to High(_Images) do _Images[i].View.Free;
   if LabVkValidHandle(_Handle) then
   begin
-    vkDestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
+    vk.DestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
   end;
   inherited Destroy;
   LabLog('TLabSwapChain.Destroy', -2);
@@ -369,7 +371,7 @@ end;
 function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
 begin
   LabAssertVkError(
-    Vulkan.AcquireNextImageKHR(
+    vk.AcquireNextImageKHR(
       _Device.Ptr.VkHandle,
       _Handle,
       High(TVkUInt64),

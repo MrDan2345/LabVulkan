@@ -56,12 +56,14 @@ type
 
   TLabImageView = class (TLabClass)
   private
-    var _Image: TLabImageShared;
+    var _Device: TLabDeviceShared;
     var _Handle: TVkImageView;
   public
     property VkHandle: TVkImageView read _Handle;
     constructor Create(
-      const AImage: TLabImageShared;
+      const ADevice: TLabDeviceShared;
+      const AImage: TVkImage;
+      const AFormat: TVkFormat;
       const AAspectMask: TVkImageAspectFlags;
       const AViewType: TVkImageViewType;
       const ABaseMipLevel: TVkInt32 = 0;
@@ -164,21 +166,27 @@ begin
   LabLog('TLabImage.Destroy');
 end;
 
-constructor TLabImageView.Create(const AImage: TLabImageShared;
-  const AAspectMask: TVkImageAspectFlags; const AViewType: TVkImageViewType;
-  const ABaseMipLevel: TVkInt32; const AMipLevelCount: TVkInt32;
-  const ABaseLayer: TVkInt32; const ALayerCount: TVkInt32;
+constructor TLabImageView.Create(
+  const ADevice: TLabDeviceShared;
+  const AImage: TVkImage;
+  const AFormat: TVkFormat;
+  const AAspectMask: TVkImageAspectFlags;
+  const AViewType: TVkImageViewType;
+  const ABaseMipLevel: TVkInt32;
+  const AMipLevelCount: TVkInt32;
+  const ABaseLayer: TVkInt32;
+  const ALayerCount: TVkInt32;
   const AFlags: TVkImageViewCreateFlags);
   var view_info: TVkImageViewCreateInfo;
 begin
   LabLog('TLabImageView.Create');
   inherited Create;
-  _Image := AImage;
+  _Device := ADevice;
   FillChar(view_info, sizeof(view_info), 0);
   view_info.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view_info.pNext := nil;
-  view_info.image := _Image.Ptr.VkHandle;
-  view_info.format := _Image.Ptr.Format;
+  view_info.image := AImage;
+  view_info.format := AFormat;
   view_info.components.r := VK_COMPONENT_SWIZZLE_R;
   view_info.components.g := VK_COMPONENT_SWIZZLE_G;
   view_info.components.b := VK_COMPONENT_SWIZZLE_B;
@@ -190,12 +198,12 @@ begin
   view_info.subresourceRange.layerCount := ALayerCount;
   view_info.viewType := AViewType;
   view_info.flags := AFlags;
-  LabAssertVkError(vk.CreateImageView(_Image.Ptr.Device.Ptr.VkHandle, @view_info, nil, @_Handle));
+  LabAssertVkError(vk.CreateImageView(_Device.Ptr.VkHandle, @view_info, nil, @_Handle));
 end;
 
 destructor TLabImageView.Destroy;
 begin
-  vk.DestroyImageView(_Image.Ptr.Device.Ptr.VkHandle, _Handle, nil);
+  vk.DestroyImageView(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabImageView.Destroy');
 end;
@@ -245,7 +253,7 @@ begin
     aspect_mask := aspect_mask or TVkFlags(VK_IMAGE_ASPECT_STENCIL_BIT);
   end;
   _View := TLabImageView.Create(
-    Self, aspect_mask, VK_IMAGE_VIEW_TYPE_2D,
+    ADevice, VkHandle, Format, aspect_mask, VK_IMAGE_VIEW_TYPE_2D,
     0, 1, 0, 1, 0
   );
 end;
