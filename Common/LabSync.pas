@@ -18,7 +18,7 @@ type
     destructor Destroy; override;
     function GetStatus:TVkResult;
     function Reset: TVkResult;
-    function WaitFor(const TimeOut: TVkUInt64 = TVKUInt64(TVKInt64(-1))): TVkResult; overload;
+    function WaitFor(const TimeOut: TVkUInt64 = TVKUInt64(TVKInt64(-1))): TVkResult;
     property Device: TLabDeviceShared read _Device;
     property VkHandle: TVkFence read _Handle;
   end;

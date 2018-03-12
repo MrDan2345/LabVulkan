@@ -20,7 +20,7 @@ type
     property VkHandle: TVkShaderModule read _Handle;
     property StageCreateInfo: PVkPipelineShaderStageCreateInfo read GetStageCreateInfo;
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); virtual;
-    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); virtual;
     destructor Destroy; override;
   end;
   TLabShaderShared = specialize TLabSharedRef<TLabShader>;
@@ -28,11 +28,13 @@ type
   TLabVertexShader = class (TLabShader)
   public
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
   end;
 
   TLabPixelShader = class (TLabShader)
   public
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
   end;
 
   TLabShaderStages = array of TVkPipelineShaderStageCreateInfo;
@@ -97,9 +99,21 @@ begin
   _StageCreateInfo.stage := VK_SHADER_STAGE_VERTEX_BIT;
 end;
 
+constructor TLabVertexShader.Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);
+begin
+  inherited Create(ADevice, FileName);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_VERTEX_BIT;
+end;
+
 constructor TLabPixelShader.Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32);
 begin
   inherited Create(ADevice, Data, Size);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_FRAGMENT_BIT;
+end;
+
+constructor TLabPixelShader.Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);
+begin
+  inherited Create(ADevice, FileName);
   _StageCreateInfo.stage := VK_SHADER_STAGE_FRAGMENT_BIT;
 end;
 
