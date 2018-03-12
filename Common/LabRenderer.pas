@@ -176,7 +176,7 @@ constructor TLabRenderer.Create(const AppName: AnsiString; const EngineName: Ans
   var Extensions: array of PVkChar;
   var Layers: array of PVkChar;
 begin
-  LabLog('TLabRenderer.Create', 2);
+  LabLog('TLabRenderer.Create');
   LabProfileStart('TLabRenderer.Create');
   if not _VulkanEnabled then Halt;
   _PhysicalDevices := TLabPhysicalDeviceList.Create(0, 4);
@@ -266,7 +266,7 @@ begin
     _VulkanInstance := 0;
   end;
   inherited Destroy;
-  LabLog('TLabRenderer.Destroy', -2);
+  LabLog('TLabRenderer.Destroy');
 end;
 //TLabRenderer END
 

@@ -60,7 +60,7 @@ begin
   LabLog('Queue family count = ' + IntToStr(_PhysicalDevice.Ptr.QueueFamilyCount));
   for i := 0 to _PhysicalDevice.Ptr.QueueFamilyCount - 1 do
   begin
-    LabLog('Queue family[' + IntToStr(i) + ']:', 2);
+    LabLog('Queue family[' + IntToStr(i) + ']:');
     with _PhysicalDevice.Ptr.QueueFamilyProperties[i]^ do
     begin
       if (queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) > 0 then LabLog('Graphics support');

@@ -35,7 +35,7 @@ constructor TLabCommandPool.Create(
 );
   var command_pool_create_info: TVkCommandPoolCreateInfo;
 begin
-  LabLog('TLabCommandPool.Create', 2);
+  LabLog('TLabCommandPool.Create');
   _Device := ADevice;
   LabZeroMem(@command_pool_create_info, SizeOf(TVkCommandPoolCreateInfo));
   command_pool_create_info.sType := VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -48,7 +48,7 @@ destructor TLabCommandPool.Destroy;
 begin
   Vulkan.DestroyCommandPool(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
-  LabLog('TLabCommandPool.Destroy', -2);
+  LabLog('TLabCommandPool.Destroy');
 end;
 //TLabCommandPool END
 

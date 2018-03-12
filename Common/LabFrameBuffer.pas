@@ -16,8 +16,12 @@ type
   private
     var _Device: TLabDeviceShared;
     var _Handle: TVkFramebuffer;
+    var _Width: TVkInt32;
+    var _Height: TVkInt32;
   public
     property VkHandle: TVkFramebuffer read _Handle;
+    property Width: TVkInt32 read _Width;
+    property Height: TVkInt32 read _Height;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const ARenderPass: TLabRenderPass;
@@ -48,13 +52,15 @@ constructor TLabFrameBuffer.Create(const ADevice: TLabDeviceShared;
 begin
   LabLog('TLabFrameBuffer.Create');
   _Device := ADevice;
+  _Width := AWidth;
+  _Height := AHeight;
   LabZeroMem(@frame_buffer_info, SizeOf(frame_buffer_info));
   frame_buffer_info.sType := VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   frame_buffer_info.renderPass := ARenderPass.VkHandle;
   frame_buffer_info.attachmentCount := Length(Attachments);
   frame_buffer_info.pAttachments := @Attachments[0];
-  frame_buffer_info.width := AWidth;
-  frame_buffer_info.height := AHeight;
+  frame_buffer_info.width := _Width;
+  frame_buffer_info.height := _Height;
   frame_buffer_info.layers := 1;
   LabAssertVkError(vk.CreateFramebuffer(_Device.Ptr.VkHandle, @frame_buffer_info, nil, @_Handle));
 end;

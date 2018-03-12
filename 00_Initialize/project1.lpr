@@ -21,6 +21,7 @@ uses
   LabDescriptorSet,
   LabPipeline,
   LabRenderPass,
+  LabShader,
   LabDevice,
   LabSurface,
   LabImage,

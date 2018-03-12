@@ -56,6 +56,7 @@ begin
   descriptor_pool_info.maxSets := MaxSets;
   descriptor_pool_info.poolSizeCount := Length(PoolSizes);
   descriptor_pool_info.pPoolSizes := @PoolSizes[0];
+  descriptor_pool_info.flags := TVkFlags(VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
   LabAssertVkError(vk.CreateDescriptorPool(_Device.Ptr.VkHandle, @descriptor_pool_info, nil, @_Handle));
 end;
 

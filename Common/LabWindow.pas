@@ -236,7 +236,7 @@ end;
 
 constructor TLabWindow.Create(const NewWidth, NewHeight: Integer);
 begin
-  LabLog('TLabWindow.Create(' + IntToStr(NewWidth) + ', ' + IntToStr(NewHeight) + ')', 2);
+  LabLog('TLabWindow.Create(' + IntToStr(NewWidth) + ', ' + IntToStr(NewHeight) + ')');
   inherited Create;
   _Width := NewWidth;
   _Height := NewHeight;
@@ -248,7 +248,7 @@ begin
   if _Active then Close;
   Finalize;
   inherited Destroy;
-  LabLog('TLabWindow.Destroy', -2);
+  LabLog('TLabWindow.Destroy');
 end;
 
 procedure TLabWindow.Close;

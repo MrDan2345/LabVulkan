@@ -113,6 +113,7 @@ constructor TLabSwapChain.Create(
   var color_image_view: TVkImageViewCreateInfo;
   var i: TVkUInt32;
 begin
+  LabLog('TLabSwapChain.Create');
   _Device := ADevice;
   _Surface := ASurface;
 
@@ -151,7 +152,6 @@ begin
       Break;
     end;
   end;
-  //free(pSupportsPresent);
 
   // Generate error if could not find queues that support graphics
   // and present
@@ -165,7 +165,6 @@ begin
   // Get the list of VkFormats that are supported:
   r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, nil);
   LabAssertVkError(r);
-  //VkSurfaceFormatKHR *surfFormats = (VkSurfaceFormatKHR *)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
   SetLength(surf_formats, format_count);
   r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, @surf_formats[0]);
   LabAssertVkError(r);
@@ -182,13 +181,11 @@ begin
     _Format := surf_formats[0].format;
   end;
 
-  // DEPENDS on info.cmd and info.queue initialized
   r := vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @surf_caps);
   LabAssertVkError(r);
 
   r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, nil);
   LabAssertVkError(r);
-  //VkPresentModeKHR *presentModes = (VkPresentModeKHR *)malloc(presentModeCount * sizeof(VkPresentModeKHR));
   SetLength(present_modes, present_mode_count);
   assert(Length(present_modes) > 0);
   r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, @present_modes[0]);
@@ -260,7 +257,6 @@ begin
     end;
   end;
 
-  //VkSwapchainCreateInfoKHR swapchain_ci = {};
   FillChar(swapchain_ci, sizeof(swapchain_ci), 0);
   swapchain_ci.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   swapchain_ci.pNext := nil;
@@ -304,7 +300,6 @@ begin
   r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, nil);
   LabAssertVkError(r);
 
-  //VkImage *swapchainImages = (VkImage *)malloc(info.swapchainImageCount * sizeof(VkImage));
   SetLength(swapchain_images, swapchain_image_count);
   assert(Length(swapchain_images) > 0);
   r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, @swapchain_images[0]);
@@ -313,34 +308,11 @@ begin
   for i := 0 to swapchain_image_count - 1 do
   begin
     buffer.Image := swapchain_images[i];
-    //FillChar(color_image_view, sizeof(color_image_view), 0);
-    //color_image_view.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    //color_image_view.pNext := nil;
-    //color_image_view.format := _Format;
-    //color_image_view.components.r := VK_COMPONENT_SWIZZLE_R;
-    //color_image_view.components.g := VK_COMPONENT_SWIZZLE_G;
-    //color_image_view.components.b := VK_COMPONENT_SWIZZLE_B;
-    //color_image_view.components.a := VK_COMPONENT_SWIZZLE_A;
-    //color_image_view.subresourceRange.aspectMask := TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
-    //color_image_view.subresourceRange.baseMipLevel := 0;
-    //color_image_view.subresourceRange.levelCount := 1;
-    //color_image_view.subresourceRange.baseArrayLayer := 0;
-    //color_image_view.subresourceRange.layerCount := 1;
-    //color_image_view.viewType := VK_IMAGE_VIEW_TYPE_2D;
-    //color_image_view.flags := 0;
     buffer.View := TLabImageView.Create(
       _Device, swapchain_images[i], _Format,
       TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT),
       VK_IMAGE_VIEW_TYPE_2D
     );
-//
-//    buffer.Image := swapchain_images[i];
-//
-//    color_image_view.image := buffer.Image;
-//
-//    r := vk.CreateImageView(_Device.Ptr.VkHandle, @color_image_view, nil, @buffer.view);
-//    LabAssertVkError(r);
-    //info.buffers.push_back(sc_buffer);
     SetLength(_Images, Length(_Images) + 1);
     _Images[High(_Images)] := buffer;
   end;
@@ -353,7 +325,6 @@ begin
   begin
     vk.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyPresent);
   end;
-  //free(swapchainImages);
 end;
 
 destructor TLabSwapChain.Destroy;
@@ -365,7 +336,7 @@ begin
     vk.DestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
   end;
   inherited Destroy;
-  LabLog('TLabSwapChain.Destroy', -2);
+  LabLog('TLabSwapChain.Destroy');
 end;
 
 function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;

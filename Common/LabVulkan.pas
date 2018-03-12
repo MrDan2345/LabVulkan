@@ -10,7 +10,9 @@ uses
   LabTypes,
   LabUtils,
   LabPhysicalDevice,
-  LabSurface;
+  LabSurface,
+  LabCommandBuffer,
+  LabSync;
 
 type
   TLabExtension = record
@@ -56,6 +58,20 @@ type
     class constructor CreateClass;
     class destructor DestroyClass;
     class procedure Run;
+    class procedure QueueSubmit(
+      const Queue: TVkQueue;
+      const CommandBuffers: array of TVkCommandBuffer;
+      const WaitSemaphores: array of TVkSemaphore;
+      const SignalSemaphores: array of TVkSemaphore;
+      const Fence: TVkFence;
+      const WaitDstStageMask: TVkPipelineStageFlags = 0
+    );
+    class procedure QueuePresent(
+      const Queue: TVkQueue;
+      const SwapChains: array of TVkSwapchainKHR;
+      const ImageIndices: array of TVkUInt32;
+      const WaitSemaphores: array of TVkSemaphore
+    );
     property PhysicalDevices: TLabPhysicalDeviceList read _PhysicalDevices;
     constructor Create;
     destructor Destroy; override;
@@ -193,6 +209,48 @@ begin
   end;
   if Assigned(_OnFinalize) then _OnFinalize();
   ExitCode := 0;
+end;
+
+class procedure TLabVulkan.QueueSubmit(
+  const Queue: TVkQueue;
+  const CommandBuffers: array of TVkCommandBuffer;
+  const WaitSemaphores: array of TVkSemaphore;
+  const SignalSemaphores: array of TVkSemaphore;
+  const Fence: TVkFence;
+  const WaitDstStageMask: TVkPipelineStageFlags
+);
+  var submit_info: TVkSubmitInfo;
+begin
+  FillChar(submit_info, SizeOf(submit_info), 0);
+  submit_info.sType := VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.pNext := nil;
+  submit_info.waitSemaphoreCount := Length(WaitSemaphores);
+  submit_info.pWaitSemaphores := @WaitSemaphores[0];
+  submit_info.pWaitDstStageMask := @WaitDstStageMask;
+  submit_info.commandBufferCount := Length(CommandBuffers);
+  submit_info.pCommandBuffers := @CommandBuffers;
+  submit_info.signalSemaphoreCount := Length(SignalSemaphores);
+  submit_info.pSignalSemaphores := @SignalSemaphores[0];
+  vk.QueueSubmit(Queue, 1, @submit_info, Fence);
+end;
+
+class procedure TLabVulkan.QueuePresent(
+  const Queue: TVkQueue;
+  const SwapChains: array of TVkSwapchainKHR;
+  const ImageIndices: array of TVkUInt32;
+  const WaitSemaphores: array of TVkSemaphore
+);
+  var present_info: TVkPresentInfoKHR;
+begin
+  present_info.sType := VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present_info.pNext := nil;
+  present_info.swapchainCount := Length(SwapChains);
+  present_info.pSwapchains := @SwapChains[0];
+  present_info.pImageIndices := @ImageIndices[0];
+  present_info.waitSemaphoreCount := Length(WaitSemaphores);
+  present_info.pWaitSemaphores := @WaitSemaphores[0];
+  present_info.pResults := nil;
+  vk.QueuePresentKHR(Queue, @present_info);
 end;
 
 constructor TLabVulkan.Create;
