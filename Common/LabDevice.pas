@@ -55,12 +55,13 @@ constructor TLabDevice.Create(
   var i: Integer;
 begin
   LabLog('TLabDevice.Create');
+  LabLogOffset(2);
   inherited Create;
   _PhysicalDevice := APhysicalDevice;
   LabLog('Queue family count = ' + IntToStr(_PhysicalDevice.Ptr.QueueFamilyCount));
   for i := 0 to _PhysicalDevice.Ptr.QueueFamilyCount - 1 do
   begin
-    LabLog('Queue family[' + IntToStr(i) + ']:');
+    LabLog('Queue family[' + IntToStr(i) + ']:', 2);
     with _PhysicalDevice.Ptr.QueueFamilyProperties[i]^ do
     begin
       if (queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT)) > 0 then LabLog('Graphics support');
@@ -127,6 +128,7 @@ begin
       LabLog('Extension[' + IntToStr(i) + '] ' + device_extensions[i]);
     end;
   end;
+  LabLogOffset(-2);
 end;
 
 destructor TLabDevice.Destroy;

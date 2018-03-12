@@ -265,6 +265,7 @@ constructor TLabVulkan.Create;
   var physical_device_arr: array of TVkPhysicalDevice;
 begin
   LabLog('TLabVulkan.Create');
+  LabLogOffset(2);
   _PhysicalDevices := TLabPhysicalDeviceList.Create(0, 4);
   FillChar(app_info, SizeOf(app_info), 0);
   app_info.sType := VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -342,6 +343,7 @@ begin
       LabLog(_Layers[i].Extensions[j].Name);
     end;
   end;
+  LabLogOffset(-2);
 end;
 
 destructor TLabVulkan.Destroy;
