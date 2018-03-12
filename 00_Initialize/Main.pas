@@ -1,4 +1,4 @@
-unit sample_info;
+unit Main;
 
 {$macro on}
 {$include LabPlatform.inc}
@@ -153,7 +153,9 @@ begin
     ]
   );
   VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
-  PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
+  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
+  PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
+
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
   VertexBuffer := TLabVertexBuffer.Create(
     Device,

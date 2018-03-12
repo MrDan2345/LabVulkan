@@ -12,7 +12,7 @@ uses
   SysUtils,
   Classes,
   Vulkan,
-  sample_info,
+  Main,
   LabMath,
   LabPlatform,
   LabVulkan,
