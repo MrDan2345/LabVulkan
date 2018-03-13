@@ -78,7 +78,7 @@ type
       const ASubpass: TVkUInt32;
       const AViewportState: TVkPipelineViewportStateCreateInfo;
       const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
-      const AVertexInputState: TVkPipelineVertexInputStateCreateInfo;
+      const AVertexInputState: TLabPipelineVertexInputState;
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
@@ -130,12 +130,10 @@ function LabPipelineInputAssemblyState(
 ): TVkPipelineInputAssemblyStateCreateInfo;
 
 function LabPipelineVertexInputState(
-  const VertexBindingDescriptionCount: TVkUInt32;
-  const VertexBindingDescriptions: PVkVertexInputBindingDescription;
-  const VertexAttributeDescriptionCount: TVkUInt32;
-  const VertexAttributeDescriptions: PVkVertexInputAttributeDescription;
+  const VertexBindingDescriptions: array of TVkVertexInputBindingDescription;
+  const VertexAttributeDescriptions: array of TVkVertexInputAttributeDescription;
   const Flags: TVkPipelineVertexInputStateCreateFlags = 0
-): TVkPipelineVertexInputStateCreateInfo;
+): TLabPipelineVertexInputState;
 
 function LabPipelineRasterizationState(
   const DepthClampEnable: TVkBool32 = VK_FALSE;
@@ -285,7 +283,7 @@ constructor TLabGraphicsPipeline.Create(
   const ASubpass: TVkUInt32;
   const AViewportState: TVkPipelineViewportStateCreateInfo;
   const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
-  const AVertexInputState: TVkPipelineVertexInputStateCreateInfo;
+  const AVertexInputState: TLabPipelineVertexInputState;
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
@@ -331,7 +329,7 @@ begin
   pipeline_info.basePipelineHandle := VK_NULL_HANDLE;
   pipeline_info.basePipelineIndex := 0;
   pipeline_info.flags := 0;
-  pipeline_info.pVertexInputState := @AVertexInputState;
+  pipeline_info.pVertexInputState := @AVertexInputState.CreateInfo;
   pipeline_info.pInputAssemblyState := @AInputAssemblyState;
   pipeline_info.pRasterizationState := @ARasterizationState;
   pipeline_info.pColorBlendState := @AColorBlendState;
@@ -394,20 +392,22 @@ begin
 end;
 
 function LabPipelineVertexInputState(
-  const VertexBindingDescriptionCount: TVkUInt32;
-  const VertexBindingDescriptions: PVkVertexInputBindingDescription;
-  const VertexAttributeDescriptionCount: TVkUInt32;
-  const VertexAttributeDescriptions: PVkVertexInputAttributeDescription;
+  const VertexBindingDescriptions: array of TVkVertexInputBindingDescription;
+  const VertexAttributeDescriptions: array of TVkVertexInputAttributeDescription;
   const Flags: TVkPipelineVertexInputStateCreateFlags
-  ): TVkPipelineVertexInputStateCreateInfo;
+): TLabPipelineVertexInputState;
 begin
-  Result.sType := VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  Result.pNext := nil;
-  Result.flags := Flags;
-  Result.vertexBindingDescriptionCount := VertexBindingDescriptionCount;
-  Result.pVertexBindingDescriptions := VertexBindingDescriptions;
-  Result.vertexAttributeDescriptionCount := VertexAttributeDescriptionCount;
-  Result.pVertexAttributeDescriptions := VertexAttributeDescriptions;
+  SetLength(Result.Data.InputBindings, Length(VertexBindingDescriptions));
+  Move(VertexBindingDescriptions[0], Result.Data.InputBindings[0], SizeOf(TVkVertexInputBindingDescription) * Length(VertexBindingDescriptions));
+  SetLength(Result.Data.Attributes, Length(VertexAttributeDescriptions));
+  Move(VertexAttributeDescriptions[0], Result.Data.Attributes[0], SizeOf(TVkVertexInputAttributeDescription) * Length(VertexAttributeDescriptions));
+  Result.CreateInfo.sType := VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  Result.CreateInfo.pNext := nil;
+  Result.CreateInfo.flags := Flags;
+  Result.CreateInfo.vertexBindingDescriptionCount := Length(Result.Data.InputBindings);
+  Result.CreateInfo.pVertexBindingDescriptions := @Result.Data.InputBindings[0];
+  Result.CreateInfo.vertexAttributeDescriptionCount := Length(Result.Data.Attributes);
+  Result.CreateInfo.pVertexAttributeDescriptions := @Result.Data.Attributes[0];
 end;
 
 function LabPipelineRasterizationState(

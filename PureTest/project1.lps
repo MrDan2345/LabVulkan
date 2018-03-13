@@ -2,7 +2,7 @@
 <CONFIG>
   <ProjectSession>
     <PathDelim Value="\"/>
-    <Version Value="9"/>
+    <Version Value="10"/>
     <BuildModes Active="Default"/>
     <Units Count="14">
       <Unit0>
@@ -16,7 +16,7 @@
       <Unit1>
         <Filename Value="sample_info.pas"/>
         <IsVisibleTab Value="True"/>
-        <EditorIndex Value="3"/>
+        <EditorIndex Value="2"/>
         <TopLine Value="1204"/>
         <CursorPos Y="1234"/>
         <UsageCount Value="39"/>
@@ -24,15 +24,14 @@
       </Unit1>
       <Unit2>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\objpas\classes\classesh.inc"/>
-        <EditorIndex Value="13"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="702"/>
         <CursorPos X="3" Y="726"/>
         <UsageCount Value="39"/>
-        <Loaded Value="True"/>
       </Unit2>
       <Unit3>
         <Filename Value="..\Vulkan.pas"/>
-        <EditorIndex Value="12"/>
+        <EditorIndex Value="5"/>
         <TopLine Value="11531"/>
         <CursorPos Y="11554"/>
         <UsageCount Value="39"/>
@@ -40,7 +39,7 @@
       </Unit3>
       <Unit4>
         <Filename Value="..\Common\LabMath.pas"/>
-        <EditorIndex Value="11"/>
+        <EditorIndex Value="4"/>
         <TopLine Value="536"/>
         <CursorPos X="14" Y="562"/>
         <UsageCount Value="39"/>
@@ -48,31 +47,28 @@
       </Unit4>
       <Unit5>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\win\wininc\defines.inc"/>
-        <EditorIndex Value="10"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="1714"/>
         <CursorPos X="6" Y="1738"/>
         <UsageCount Value="39"/>
-        <Loaded Value="True"/>
       </Unit5>
       <Unit6>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\win\wininc\struct.inc"/>
-        <EditorIndex Value="9"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="7507"/>
         <CursorPos X="11" Y="7531"/>
         <UsageCount Value="39"/>
-        <Loaded Value="True"/>
       </Unit6>
       <Unit7>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\win\wininc\base.inc"/>
-        <EditorIndex Value="8"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="63"/>
         <CursorPos X="6" Y="87"/>
         <UsageCount Value="39"/>
-        <Loaded Value="True"/>
       </Unit7>
       <Unit8>
         <Filename Value="shader_data.pas"/>
-        <EditorIndex Value="7"/>
+        <EditorIndex Value="3"/>
         <TopLine Value="34"/>
         <CursorPos X="3" Y="100"/>
         <UsageCount Value="21"/>
@@ -80,31 +76,28 @@
       </Unit8>
       <Unit9>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\inc\resh.inc"/>
-        <EditorIndex Value="6"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="32"/>
         <CursorPos X="10" Y="56"/>
         <UsageCount Value="17"/>
-        <Loaded Value="True"/>
       </Unit9>
       <Unit10>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\win\wininc\ascdef.inc"/>
-        <EditorIndex Value="5"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="48"/>
         <CursorPos X="54" Y="72"/>
         <UsageCount Value="17"/>
-        <Loaded Value="True"/>
       </Unit10>
       <Unit11>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\rtl\win\wininc\redef.inc"/>
-        <EditorIndex Value="4"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="772"/>
         <CursorPos X="10" Y="796"/>
         <UsageCount Value="17"/>
-        <Loaded Value="True"/>
       </Unit11>
       <Unit12>
         <Filename Value="cube_data.pas"/>
-        <EditorIndex Value="2"/>
+        <EditorIndex Value="1"/>
         <TopLine Value="32"/>
         <CursorPos X="47" Y="42"/>
         <UsageCount Value="17"/>
@@ -112,9 +105,8 @@
       </Unit12>
       <Unit13>
         <Filename Value="C:\lazarus\fpc\3.0.0\source\packages\rtl-console\src\win\crt.pp"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="-1"/>
         <UsageCount Value="16"/>
-        <Loaded Value="True"/>
       </Unit13>
     </Units>
     <JumpHistory Count="30" HistoryIndex="29">
@@ -240,15 +232,4 @@
       </Position30>
     </JumpHistory>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints Count="1">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="sample_info.pas"/>
-        <Line Value="1234"/>
-      </Item1>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>

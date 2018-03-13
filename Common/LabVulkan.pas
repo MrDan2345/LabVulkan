@@ -326,23 +326,28 @@ begin
   end;
   if _ExtensionsEnabled.Ptr.Count > 0 then
   begin
-    LabLog('Vulkan extension count = ' + IntToStr(_ExtensionsEnabled.Ptr.Count));
+    LabLog('Vulkan extension count = ' + IntToStr(_ExtensionsEnabled.Ptr.Count), 2);
     for i := 0 to _ExtensionsEnabled.Ptr.Count - 1 do
     begin
       LabLog('Extension[' + IntToStr(i) + '] = ' + _ExtensionsEnabled.Ptr[i]);
     end;
+    LabLogOffset(-2);
   end;
   LabLog('Physical device count = ' + IntToStr(_PhysicalDevices.Count));
   LabLog('Layer count = ' + IntToStr(Length(_Layers)));
+  LabLogOffset(2);
   for i := 0 to High(_Layers) do
   begin
     LabLog('Layer[' + IntToStr(i) + '] = ' + _Layers[i].Name + ' (' + _Layers[i].Description + ')');
     LabLog('Layer[' + IntToStr(i) + '] extension count = ' + IntToStr(Length(_Layers[i].Extensions)));
+    LabLogOffset(2);
     for j := 0 to High(_Layers[i].Extensions) do
     begin
       LabLog(_Layers[i].Extensions[j].Name);
     end;
+    LabLogOffset(-2);
   end;
+  LabLogOffset(-2);
   LabLogOffset(-2);
 end;
 

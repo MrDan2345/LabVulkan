@@ -43,27 +43,40 @@ type
   end;
   TLabBufferShared = specialize TLabSharedRef<TLabBuffer>;
 
+  TLabVertexBufferAttributeFormat = record
+    Format: TVkFormat;
+    Offset: TVkUInt32;
+  end;
+  PLabVertexBufferAttributeFormat = ^TLabVertexBufferAttributeFormat;
+
   TLabVertexBuffer = class (TLabBuffer)
   private
-    var _Binding: TVkVertexInputBindingDescription;
-    var _Attributes: array of TVkVertexInputAttributeDescription;
-    function GetAttribute(const Index: TVkInt32): PVkVertexInputAttributeDescription; inline;
+    var _Stride: TVkUInt32;
+    var _Attributes: array of TLabVertexBufferAttributeFormat;
+    function GetAttribute(const Index: TVkInt32): PLabVertexBufferAttributeFormat; inline;
     function GetAttributeCount: TVkInt32; inline;
     procedure SetAttributeCount(const Value: TVkInt32); inline;
-    function GetBinding: PVkVertexInputBindingDescription; inline;
   public
-    property Binding: PVkVertexInputBindingDescription read GetBinding;
-    property Attribute[const Index: TVkInt32]: PVkVertexInputAttributeDescription read GetAttribute;
+    property Stride: TVkUInt32 read _Stride;
+    property Attribute[const Index: TVkInt32]: PLabVertexBufferAttributeFormat read GetAttribute;
     property AttributeCount: TVkInt32 read GetAttributeCount write SetAttributeCount;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const ABufferSize: TVkDeviceSize;
       const AStride: TVkUInt32;
-      const Attributes: array of TVkVertexInputAttributeDescription;
-      const ABinding: TVkUInt32 = 0
+      const Attributes: array of TLabVertexBufferAttributeFormat
     );
     destructor Destroy; override;
-    procedure SetAttributes(const Attributes: array of TVkVertexInputAttributeDescription);
+    procedure SetAttributes(const NewAttributes: array of TLabVertexBufferAttributeFormat);
+    function MakeBindingDesc(
+      const Binding: TVkUInt32;
+      const InputRate: TVkVertexInputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    ): TVkVertexInputBindingDescription;
+    function MakeAttributeDesc(
+      const AttributeIndex: TVkInt32;
+      const Location: TVkUInt32;
+      const Binding: TVkUInt32
+    ): TVkVertexInputAttributeDescription;
   end;
   TLabVertexBufferShared = specialize TLabSharedRef<TLabVertexBuffer>;
 
@@ -76,12 +89,31 @@ type
   end;
   TLabUniformBufferShared = specialize TLabSharedRef<TLabUniformBuffer>;
 
+  TLabPipelineVertexInputState = record
+    CreateInfo: TVkPipelineVertexInputStateCreateInfo;
+    Data: record
+      InputBindings: array of TVkVertexInputBindingDescription;
+      Attributes: array of TVkVertexInputAttributeDescription;
+    end;
+  end;
+
+function LabVertexBufferAttributeFormat(
+  const Format: TVkFormat;
+  const Offset: TVkUInt32
+): TLabVertexBufferAttributeFormat;
+
 function LabVertexAttributeDescription(
   const Location: TVkUInt32;
   const Binding: TVkUInt32;
   const Format: TVkFormat;
   const Offset: TVkUInt32
 ): TVkVertexInputAttributeDescription;
+
+function LabVertexInputBindingDescription(
+  const Binding: TVkUInt32;
+  const Stride: TVkUInt32;
+  const InputRate: TVkVertexInputRate = VK_VERTEX_INPUT_RATE_VERTEX
+): TVkVertexInputBindingDescription;
 
 implementation
 
@@ -160,7 +192,8 @@ begin
   Result := True;
 end;
 
-function TLabVertexBuffer.GetAttribute(const Index: TVkInt32): PVkVertexInputAttributeDescription;
+function TLabVertexBuffer.GetAttribute(const Index: TVkInt32
+  ): PLabVertexBufferAttributeFormat;
 begin
   if (Index < 0) or (Index > High(_Attributes)) then Exit(nil);
   Result := @_Attributes[Index];
@@ -177,24 +210,13 @@ begin
   SetLength(_Attributes, Value);
 end;
 
-function TLabVertexBuffer.GetBinding: PVkVertexInputBindingDescription;
-begin
-  Result := @_Binding;
-end;
-
-constructor TLabVertexBuffer.Create(
-  const ADevice: TLabDeviceShared;
-  const ABufferSize: TVkDeviceSize;
-  const AStride: TVkUInt32;
-  const Attributes: array of TVkVertexInputAttributeDescription;
-  const ABinding: TVkUInt32
-);
+constructor TLabVertexBuffer.Create(const ADevice: TLabDeviceShared;
+  const ABufferSize: TVkDeviceSize; const AStride: TVkUInt32;
+  const Attributes: array of TLabVertexBufferAttributeFormat);
 begin
   LabLog('TLabVertexBuffer.Create');
   inherited Create(ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT), []);
-  _Binding.binding := ABinding;
-  _Binding.inputRate := VK_VERTEX_INPUT_RATE_VERTEX;
-  _Binding.stride := AStride;
+  _Stride := AStride;
   SetAttributes(Attributes);
 end;
 
@@ -205,12 +227,33 @@ begin
 end;
 
 procedure TLabVertexBuffer.SetAttributes(
-  const Attributes: array of TVkVertexInputAttributeDescription
-);
+  const NewAttributes: array of TLabVertexBufferAttributeFormat);
   var i: Integer;
 begin
-  AttributeCount := Length(Attributes);
-  Move(Attributes[0], _Attributes[0], SizeOf(TVkVertexInputAttributeDescription) * Length(Attributes));
+  AttributeCount := Length(NewAttributes);
+  Move(NewAttributes[0], _Attributes[0], SizeOf(TLabVertexBufferAttributeFormat) * Length(NewAttributes));
+end;
+
+function TLabVertexBuffer.MakeBindingDesc(
+  const Binding: TVkUInt32;
+  const InputRate: TVkVertexInputRate
+): TVkVertexInputBindingDescription;
+begin
+  Result.binding := Binding;
+  Result.stride := _Stride;
+  Result.inputRate := InputRate;
+end;
+
+function TLabVertexBuffer.MakeAttributeDesc(
+  const AttributeIndex: TVkInt32;
+  const Location: TVkUInt32;
+  const Binding: TVkUInt32
+): TVkVertexInputAttributeDescription;
+begin
+  Result.location := Location;
+  Result.binding := Binding;
+  Result.format := _Attributes[AttributeIndex].Format;
+  Result.offset := _Attributes[AttributeIndex].Offset;
 end;
 
 constructor TLabUniformBuffer.Create(
@@ -219,6 +262,15 @@ constructor TLabUniformBuffer.Create(
 );
 begin
   inherited Create(ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), []);
+end;
+
+function LabVertexBufferAttributeFormat(
+  const Format: TVkFormat;
+  const Offset: TVkUInt32
+): TLabVertexBufferAttributeFormat;
+begin
+  Result.Format := Format;
+  Result.Offset := Offset;
 end;
 
 function LabVertexAttributeDescription(
@@ -232,6 +284,17 @@ begin
   Result.binding := Binding;
   Result.format := Format;
   Result.offset := Offset;
+end;
+
+function LabVertexInputBindingDescription(
+  const Binding: TVkUInt32;
+  const Stride: TVkUInt32;
+  const InputRate: TVkVertexInputRate
+): TVkVertexInputBindingDescription;
+begin
+  Result.binding := Binding;
+  Result.stride := Stride;
+  Result.inputRate := InputRate;
 end;
 
 end.

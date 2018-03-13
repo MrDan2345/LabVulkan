@@ -53,6 +53,7 @@ type
       const DynamicOffsets: array of TVkUInt32
     );
     procedure BindVertexBuffers(
+      const FirstBinding: TVkUInt32;
       const Buffers: array of TVkBuffer;
       const Offsets: array of TVkDeviceSize
     );
@@ -218,12 +219,13 @@ begin
 end;
 
 procedure TLabCommandBuffer.BindVertexBuffers(
+  const FirstBinding: TVkUInt32;
   const Buffers: array of TVkBuffer;
   const Offsets: array of TVkDeviceSize
 );
 begin
   vk.CmdBindVertexBuffers(
-    _Handle, 0, Length(Buffers),
+    _Handle, FirstBinding, Length(Buffers),
     @Buffers[0], @Offsets[0]
   );
 end;

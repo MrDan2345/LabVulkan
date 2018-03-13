@@ -5,7 +5,7 @@ unit sample_info;
 interface
 
 uses
-{$ifdef WIN32}
+{$ifdef WINDOWS}
   Windows,
 {$endif}
   Vulkan,
@@ -34,7 +34,7 @@ type
 
   PSampleInfo = ^TSampleInfo;
   TSampleInfo = record
-{$if defined(WIN32)}
+{$if defined(WINDOWS)}
 {$define APP_NAME_STR_LEN:=80}
     connection: TVkHINSTANCE;// hInstance - Windows Instance
     name: array[0..APP_NAME_STR_LEN - 1] of AnsiChar;// Name to put on the window/icon
@@ -346,7 +346,7 @@ begin
   info.instance_extension_names[High(info.instance_extension_names)] := VK_KHR_SURFACE_EXTENSION_NAME;
 {$if defined(__ANDROID__)}
   info.instance_extension_names.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-{$elseif defined(WIN32)}
+{$elseif defined(WINDOWS)}
   //info.instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
   SetLength(info.instance_extension_names, Length(info.instance_extension_names) + 1);
   info.instance_extension_names[High(info.instance_extension_names)] := VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
@@ -475,7 +475,7 @@ begin
 {$endif}
 end;
 
-{$if defined(WIN32)}
+{$if defined(WINDOWS)}
 procedure run(const info: PSampleInfo);
 begin
  {Placeholder for samples that want to show dynamic content}
@@ -656,7 +656,7 @@ end;
 
 procedure init_swapchain_extension(var info: TSampleInfo);
   var res: TVkResult;
-{$ifdef WIN32}
+{$ifdef WINDOWS}
   var createInfo: TVkWin32SurfaceCreateInfoKHR;
 {$endif}
   var pSupportsPresent: array of TVkBool32;
@@ -664,7 +664,7 @@ procedure init_swapchain_extension(var info: TSampleInfo);
   var i, formatCount: TVkUInt32;
 begin
 // Construct the surface description:
-{$if defined(WIN32)}
+{$if defined(WINDOWS)}
   FillChar(createInfo, sizeof(createInfo), 0);
   createInfo.sType := VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
   createInfo.pNext := nil;
