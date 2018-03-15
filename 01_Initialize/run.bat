@@ -1,1 +1,0 @@
-call Initialize.exe > stdout.txt

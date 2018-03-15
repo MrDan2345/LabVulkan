@@ -101,6 +101,8 @@ type
 
   TLabListString = specialize TLabList<AnsiString>;
   TLabListStringShared = specialize TLabSharedRef<TLabListString>;
+  TLabListPointer = specialize TLabList<Pointer>;
+  TLabListPointerShared = specialize TLabSharedRef<TLabListPointer>;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
@@ -113,6 +115,9 @@ function LabVkErrorString(const State: TVkResult): String;
 function LabVkValidHandle(const Handle: TVkDispatchableHandle): Boolean; inline;
 procedure LabProfileStart(const Name: AnsiString);
 procedure LabProfileStop;
+function LabEncodeURL(const URL: String): String;
+function LabDecodeURL(const URL: String): String;
+function LabStrExplode(const Str: AnsiString; const Separator: AnsiString): TLabStrArrA;
 
 implementation
 
@@ -733,6 +738,90 @@ begin
   t := Now * 24 * 60 * 60 - ProfileStack[ProfileIndex].tv;
   LabLog('Profile[' + ProfileStack[ProfileIndex].name + ']: ' + FloatToStr(t));
   Dec(ProfileIndex);
+end;
+
+function LabEncodeURL(const URL: String): String;
+  var i: integer;
+begin
+  Result := '';
+  for i := 1 to Length(URL) do
+  begin
+    if not (URL[i] in ['A'..'Z', 'a'..'z', '0'..'9', '-', '_', '~', '.', ':', '/']) then
+    begin
+      Result += '%' + IntToHex(Ord(URL[i]), 2);
+    end
+    else
+    begin
+      Result += URL[i];
+    end;
+  end;
+end;
+
+function LabDecodeURL(const URL: String): String;
+  var i, len: integer;
+begin
+  Result := '';
+  len := Length(URL);
+  i := 1;
+  while i <= len do
+  begin
+    if (URL[i] = '%') and (i + 1 < len) then
+    begin
+      Result += Chr(StrToIntDef('$' + URL[i + 1] + URL[i + 2], 32));
+      Inc(i, 2);
+    end
+    else Result += URL[i];
+    Inc(i);
+  end;
+end;
+
+function LabStrExplode(const Str: AnsiString; const Separator: AnsiString): TLabStrArrA;
+  var i, j: TVkInt32;
+  var CurElement: TVkInt32;
+  var PrevParamIndex: TVkInt32;
+  var b: Boolean;
+begin
+  if Length(Separator) < 1 then
+  begin
+    SetLength(Result, 1);
+    Result[0] := Str;
+    Exit;
+  end;
+  Result := nil;
+  SetLength(Result, Length(Str) + 1);
+  CurElement := 0;
+  PrevParamIndex := 1;
+  for i := 1 to Length(Str) do
+  begin
+    b := True;
+    for j := 0 to Length(Separator) - 1 do
+    begin
+      if Separator[j + 1] <> Str[i + j] then
+      begin
+        b := False;
+        Break;
+      end;
+    end;
+    if b then
+    begin
+      SetLength(Result[CurElement], i - PrevParamIndex);
+      Move(Str[PrevParamIndex], Result[CurElement][1], i - PrevParamIndex);
+      PrevParamIndex := i + Length(Separator);
+      Inc(CurElement);
+    end;
+  end;
+  if Length(Str) >= PrevParamIndex then
+  begin
+    SetLength(Result[CurElement], Length(Str) - PrevParamIndex + 1);
+    Move(Str[PrevParamIndex], Result[CurElement][1], Length(Str) - PrevParamIndex + 1);
+    Inc(CurElement);
+  end
+  else
+  begin
+    Result[CurElement] := '';
+    Inc(CurElement);
+  end;
+  SetLength(Result, CurElement);
 end;
 
 function LabVkErrorString(const State: TVkResult): String;

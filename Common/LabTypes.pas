@@ -73,6 +73,8 @@ type
     property RefCount: Longint read _RefCount;
   end;
 
+  TLabStrArrA = array of AnsiString;
+
 implementation
 
 //TLabSharedRef BEGIN

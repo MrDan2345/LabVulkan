@@ -462,6 +462,7 @@ function LabMatRotationZ(const a: TLabFloat): TLabMat; inline;
 function LabMatRotation(const x, y, z, a: TLabFloat): TLabMat; inline;
 function LabMatRotation(const v: TLabVec3; const a: TLabFloat): TLabMat; inline;
 function LabMatRotation(const q: TLabQuat): TLabMat; inline;
+function LabMatSkew(const Amount, Axis: TLabVec3; const Angle: TLabFloat): TLabMat; inline;
 function LabMatView(const Pos, Target, Up: TLabVec3): TLabMat; inline;
 function LabMatOrth(const Width, Height, ZNear, ZFar: TLabFloat): TLabMat; inline;
 function LabMatOrth2D(const Width, Height, ZNear, ZFar: TLabFloat; const FlipH: Boolean = False; const FlipV: Boolean = True): TLabMat; inline;
@@ -2274,6 +2275,31 @@ begin
     1 - yy - zz, xy - wz, xz + wy, 0,
     xy + wz, 1 - xx - zz, yz - wx, 0,
     xz - wy, yz + wx, 1 - xx - yy, 0,
+    0, 0, 0, 1
+  );
+  {$Warnings on}
+end;
+
+function LabMatSkew(const Amount, Axis: TLabVec3; const Angle: TLabFloat): TLabMat;
+  var vr: TLabVec3;
+  var s, c, cr, xs, ys, zs, crxy, crxz, cryz: TLabFloat;
+begin
+  LabVec3Norm(@vr, @Axis);
+  {$Hints off}
+  LabSinCos(Angle, s, c);
+  {$Hints on}
+  cr := 1 - c;
+  xs := vr.x * s;
+  ys := vr.y * s;
+  zs := vr.z * s;
+  crxy := cr * vr.x * vr.y;
+  crxz := cr * vr.x * vr.z;
+  cryz := cr * vr.y * vr.z;
+  {$Warnings off}
+  Result.SetValue(
+    LabLerpFloat(1, cr * Axis.x * Axis.x + c, Amount.x), LabLerpFloat(1, -zs + crxy, Amount.y), LabLerpFloat(1, ys + crxz, Amount.z), 0,
+    LabLerpFloat(1, zs + crxy, Amount.x), LabLerpFloat(1, cr * Axis.y * Axis.y + c, Amount.y), LabLerpFloat(1, -xs + cryz, Amount.z), 0,
+    LabLerpFloat(1, -ys + crxz, Amount.x), LabLerpFloat(1, xs + cryz, Amount.y), LabLerpFloat(1, cr * Axis.z * Axis.z + c, Amount.z), 0,
     0, 0, 0, 1
   );
   {$Warnings on}
