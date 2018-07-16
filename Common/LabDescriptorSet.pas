@@ -94,12 +94,12 @@ begin
   descriptor_set_layout_info.flags := _Flags;
   descriptor_set_layout_info.bindingCount := Length(_Bindings);
   descriptor_set_layout_info.pBindings := @_Bindings[0];
-  LabAssertVkError(vk.CreateDescriptorSetLayout(_Device.Ptr.VkHandle, @descriptor_set_layout_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateDescriptorSetLayout(_Device.Ptr.VkHandle, @descriptor_set_layout_info, nil, @_Handle));
 end;
 
 destructor TLabDescriptorSetLayout.Destroy;
 begin
-  vk.DestroyDescriptorSetLayout(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyDescriptorSetLayout(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabDescriptorSetLayout.Destroy');
 end;
@@ -135,12 +135,12 @@ begin
   alloc_info[0].descriptorPool := _Pool.Ptr.VkHandle;
   alloc_info[0].descriptorSetCount := Length(ALayouts);
   alloc_info[0].pSetLayouts := @ALayouts[0];
-  LabAssertVkError(vk.AllocateDescriptorSets(_Device.Ptr.VkHandle, @alloc_info[0], @_Handles[0]));
+  LabAssertVkError(Vulkan.AllocateDescriptorSets(_Device.Ptr.VkHandle, @alloc_info[0], @_Handles[0]));
 end;
 
 destructor TLabDescriptorSets.Destroy;
 begin
-  LabAssertVkError(vk.FreeDescriptorSets(_Device.Ptr.VkHandle, _Pool.Ptr.VkHandle, Length(_Handles), @_Handles[0]));
+  LabAssertVkError(Vulkan.FreeDescriptorSets(_Device.Ptr.VkHandle, _Pool.Ptr.VkHandle, Length(_Handles), @_Handles[0]));
   inherited Destroy;
   LabLog('TLabDescriptorSets.Destroy');
 end;
@@ -150,7 +150,7 @@ procedure TLabDescriptorSets.UpdateSets(
   const Copies: array of TVkCopyDescriptorSet
 );
 begin
-  vk.UpdateDescriptorSets(_Device.Ptr.VkHandle, Length(Writes), @Writes[0], Length(Copies), @Copies[0]);
+  Vulkan.UpdateDescriptorSets(_Device.Ptr.VkHandle, Length(Writes), @Writes[0], Length(Copies), @Copies[0]);
 end;
 
 function LabDescriptorBinding(

@@ -120,7 +120,7 @@ begin
   SetLength(supports_present, _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount);
   for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
   begin
-    vk.GetPhysicalDeviceSurfaceSupportKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, i, _Surface.Ptr.VkHandle, @supports_present[i]);
+    Vulkan.GetPhysicalDeviceSurfaceSupportKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, i, _Surface.Ptr.VkHandle, @supports_present[i]);
   end;
 
   // Search for a graphics and a present queue in the array of queue
@@ -163,10 +163,10 @@ begin
   end;
 
   // Get the list of VkFormats that are supported:
-  r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, nil);
+  r := Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, nil);
   LabAssertVkError(r);
   SetLength(surf_formats, format_count);
-  r := vk.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, @surf_formats[0]);
+  r := Vulkan.GetPhysicalDeviceSurfaceFormatsKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @format_count, @surf_formats[0]);
   LabAssertVkError(r);
   // If the format list includes just one entry of VK_FORMAT_UNDEFINED,
   // the surface has no preferred format.  Otherwise, at least one
@@ -181,14 +181,14 @@ begin
     _Format := surf_formats[0].format;
   end;
 
-  r := vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @surf_caps);
+  r := Vulkan.GetPhysicalDeviceSurfaceCapabilitiesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @surf_caps);
   LabAssertVkError(r);
 
-  r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, nil);
+  r := Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, nil);
   LabAssertVkError(r);
   SetLength(present_modes, present_mode_count);
   assert(Length(present_modes) > 0);
-  r := vk.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, @present_modes[0]);
+  r := Vulkan.GetPhysicalDeviceSurfacePresentModesKHR(_Device.Ptr.PhysicalDevice.Ptr.VkHandle, _Surface.Ptr.VkHandle, @present_mode_count, @present_modes[0]);
   LabAssertVkError(r);
 
   // width and height are either both 0xFFFFFFFF, or both not 0xFFFFFFFF.
@@ -294,15 +294,15 @@ begin
     swapchain_ci.pQueueFamilyIndices := @queue_family_indices;
   end;
 
-  r := vk.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_ci, nil, @_Handle);
+  r := Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_ci, nil, @_Handle);
   LabAssertVkError(r);
 
-  r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, nil);
+  r := Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, nil);
   LabAssertVkError(r);
 
   SetLength(swapchain_images, swapchain_image_count);
   assert(Length(swapchain_images) > 0);
-  r := vk.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, @swapchain_images[0]);
+  r := Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, @swapchain_images[0]);
   LabAssertVkError(r);
 
   for i := 0 to swapchain_image_count - 1 do
@@ -316,14 +316,14 @@ begin
     SetLength(_Images, Length(_Images) + 1);
     _Images[High(_Images)] := buffer;
   end;
-  vk.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyGraphics);
+  Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyGraphics);
   if (_QueueFamilyIndexGraphics = _QueueFamilyIndexPresent) then
   begin
     _QueueFamilyPresent := _QueueFamilyGraphics;
   end
   else
   begin
-    vk.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyPresent);
+    Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyPresent);
   end;
 end;
 
@@ -333,7 +333,7 @@ begin
   for i := 0 to High(_Images) do _Images[i].View.Free;
   if LabVkValidHandle(_Handle) then
   begin
-    vk.DestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
+    Vulkan.DestroySwapchainKHR(_Device.Ptr.VkHandle, _Handle, nil);
   end;
   inherited Destroy;
   LabLog('TLabSwapChain.Destroy');
@@ -342,7 +342,7 @@ end;
 function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
 begin
   LabAssertVkError(
-    vk.AcquireNextImageKHR(
+    Vulkan.AcquireNextImageKHR(
       _Device.Ptr.VkHandle,
       _Handle,
       High(TVkUInt64),

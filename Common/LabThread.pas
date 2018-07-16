@@ -25,7 +25,7 @@ type
     destructor Destroy; override;
     procedure Start;
     procedure Stop;
-    procedure WaitFor(const Timeout: LongWord = $ffffffff);
+    procedure WaitFor(const Timeout: LongWord = 0);
   end;
 
   TG2CriticalSection = object

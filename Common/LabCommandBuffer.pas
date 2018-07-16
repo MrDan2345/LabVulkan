@@ -184,17 +184,17 @@ begin
   else rp_begin_info.renderArea.extent.height := FrameBuffer.Height;
   rp_begin_info.clearValueCount := Length(ClearValues);
   rp_begin_info.pClearValues := @ClearValues[0];
-  vk.CmdBeginRenderPass(_Handle, @rp_begin_info, Contents);
+  Vulkan.CmdBeginRenderPass(_Handle, @rp_begin_info, Contents);
 end;
 
 procedure TLabCommandBuffer.EndRenderPass;
 begin
-  vk.CmdEndRenderPass(_Handle);
+  Vulkan.CmdEndRenderPass(_Handle);
 end;
 
 procedure TLabCommandBuffer.BindPipeline(const Pipeline: TLabPipeline);
 begin
-  vk.CmdBindPipeline(_Handle, Pipeline.BindPoint, Pipeline.VkHandle);
+  Vulkan.CmdBindPipeline(_Handle, Pipeline.BindPoint, Pipeline.VkHandle);
 end;
 
 procedure TLabCommandBuffer.BindDescriptorSets(
@@ -206,7 +206,7 @@ procedure TLabCommandBuffer.BindDescriptorSets(
   const DynamicOffsets: array of TVkUInt32
 );
 begin
-  vk.CmdBindDescriptorSets(
+  Vulkan.CmdBindDescriptorSets(
     _Handle,
     PipelineBindPoint,
     Layout.VkHandle,
@@ -224,7 +224,7 @@ procedure TLabCommandBuffer.BindVertexBuffers(
   const Offsets: array of TVkDeviceSize
 );
 begin
-  vk.CmdBindVertexBuffers(
+  Vulkan.CmdBindVertexBuffers(
     _Handle, FirstBinding, Length(Buffers),
     @Buffers[0], @Offsets[0]
   );
@@ -232,12 +232,12 @@ end;
 
 procedure TLabCommandBuffer.SetViewport(const Viewports: array of TVkViewport);
 begin
-  vk.CmdSetViewport(_Handle, 0, Length(Viewports), @Viewports[0]);
+  Vulkan.CmdSetViewport(_Handle, 0, Length(Viewports), @Viewports[0]);
 end;
 
 procedure TLabCommandBuffer.SetScissor(const Scissors: array of TVkRect2D);
 begin
-  vk.CmdSetScissor(_Handle, 0, Length(Scissors), @Scissors[0]);
+  Vulkan.CmdSetScissor(_Handle, 0, Length(Scissors), @Scissors[0]);
 end;
 
 procedure TLabCommandBuffer.Draw(
@@ -247,7 +247,7 @@ procedure TLabCommandBuffer.Draw(
   const FirstInstance: TVkUInt32
 );
 begin
-  vk.CmdDraw(_Handle, VertexCount, InstanceCount, FirstVertex, FirstInstance);
+  Vulkan.CmdDraw(_Handle, VertexCount, InstanceCount, FirstVertex, FirstInstance);
 end;
 
 //TLabCommandBuffer END

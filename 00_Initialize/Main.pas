@@ -85,8 +85,9 @@ implementation
 
 constructor TLabApp.Create;
 begin
-  EnableLayer('VK_LAYER_LUNARG_core_validation');
-  EnableLayer('VK_LAYER_LUNARG_parameter_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
   OnInitialize := @Initialize;
   OnFinalize := @Finalize;
   OnLoop := @Loop;

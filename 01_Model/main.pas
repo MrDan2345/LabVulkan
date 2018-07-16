@@ -26,6 +26,7 @@ uses
   LabPlatform,
   LabSync,
   LabColladaParser,
+  LabScene,
   Classes;
 
 type
@@ -48,10 +49,11 @@ type
     var VertexShader: TLabShaderShared;
     var PixelShader: TLabShaderShared;
     var FrameBuffers: TLabFrameBuffers;
-    var VertexBuffer: TLabVertexBufferShared;
+    //var VertexBuffer: TLabVertexBufferShared;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
+    var Scene: TLabScene;
     var Transforms: record
       Projection: TLabMat;
       View: TLabMat;
@@ -101,7 +103,7 @@ begin
   ColladaParser.RootNode.Dump;
   ColladaParser.Free;
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Initialization';
+  Window.Caption := 'Vulkan Model';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -158,14 +160,16 @@ begin
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
-  VertexBuffer := TLabVertexBuffer.Create(
-    Device, 32, 32,
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
-    ]
-  );
-  map := nil;
+  //VertexBuffer := TLabVertexBuffer.Create(
+  //  Device, 32, 32,
+  //  [
+  //    LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
+  //    LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
+  //  ]
+  //);
+  Scene := TLabScene.Create(Device);
+  Scene.Add('../Models/box.dae');
+  //map := nil;
   //if (VertexBuffer.Ptr.Map(map)) then
   //begin
   //  Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
@@ -245,7 +249,7 @@ begin
   PipelineCache := nil;
   DescriptorSets := nil;
   DescriptorPool := nil;
-  VertexBuffer := nil;
+  //VertexBuffer := nil;
   FrameBuffers := nil;
   PixelShader := nil;
   VertexShader := nil;

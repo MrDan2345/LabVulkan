@@ -133,7 +133,7 @@ function TLabPhysicalDevice.GetSupportedDepthFormat: TVkFormat;
 begin
   for format in depth_formats do
   begin
-    vk.GetPhysicalDeviceFormatProperties(_PhysicalDevice, format, @format_props);
+    Vulkan.GetPhysicalDeviceFormatProperties(_PhysicalDevice, format, @format_props);
     if (format_props.optimalTilingFeatures and TVkFlags(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0 then
     begin
       Result := format;

@@ -120,7 +120,10 @@ begin
   _Usage := AUsage;
   _Flags := AFlags;
   SetLength(_QueueFamilyIndices, Length(AQueueFamilyIndices));
-  Move(AQueueFamilyIndices[0], _QueueFamilyIndices[0], SizeOf(TVkUint32) * Length(_QueueFamilyIndices));
+  if (Length(_QueueFamilyIndices) > 0) then
+  begin
+    Move(AQueueFamilyIndices[0], _QueueFamilyIndices[0], SizeOf(TVkUint32) * Length(_QueueFamilyIndices));
+  end;
   FillChar(image_info, sizeof(image_info), 0);
   image_info.sType := VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_info.pNext := nil;
@@ -134,7 +137,14 @@ begin
   image_info.samples := _Samples;
   image_info.initialLayout := VK_IMAGE_LAYOUT_UNDEFINED;
   image_info.queueFamilyIndexCount := Length(_QueueFamilyIndices);
-  image_info.pQueueFamilyIndices := @_QueueFamilyIndices[0];
+  if Length(_QueueFamilyIndices) > 0 then
+  begin
+    image_info.pQueueFamilyIndices := @_QueueFamilyIndices[0];
+  end
+  else
+  begin
+    image_info.pQueueFamilyIndices := nil;
+  end;
   image_info.sharingMode := _SharingMode;
   image_info.usage := _Usage;
   image_info.flags := _Flags;
@@ -145,8 +155,8 @@ begin
   mem_alloc.allocationSize := 0;
   mem_alloc.memoryTypeIndex := 0;
 
-  LabAssertVkError(vk.CreateImage(_Device.Ptr.VkHandle, @image_info, nil, @_Handle));
-  vk.GetImageMemoryRequirements(_Device.Ptr.VkHandle, _Handle, @mem_reqs);
+  LabAssertVkError(Vulkan.CreateImage(_Device.Ptr.VkHandle, @image_info, nil, @_Handle));
+  Vulkan.GetImageMemoryRequirements(_Device.Ptr.VkHandle, _Handle, @mem_reqs);
   mem_alloc.allocationSize := mem_reqs.size;
   pass := _Device.Ptr.MemoryTypeFromProperties(
     mem_reqs.memoryTypeBits,
@@ -154,14 +164,14 @@ begin
     mem_alloc.memoryTypeIndex
   );
   assert(pass);
-  LabAssertVkError(vk.AllocateMemory(_Device.Ptr.VkHandle, @mem_alloc, nil, @_Memory));
-  LabAssertVkError(vk.BindImageMemory(_Device.Ptr.VkHandle, _Handle, _Memory, 0));
+  LabAssertVkError(Vulkan.AllocateMemory(_Device.Ptr.VkHandle, @mem_alloc, nil, @_Memory));
+  LabAssertVkError(Vulkan.BindImageMemory(_Device.Ptr.VkHandle, _Handle, _Memory, 0));
 end;
 
 destructor TLabImage.Destroy;
 begin
-  vk.DestroyImage(_Device.Ptr.VkHandle, _Handle, nil);
-  vk.FreeMemory(_Device.Ptr.VkHandle, _Memory, nil);
+  Vulkan.DestroyImage(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.FreeMemory(_Device.Ptr.VkHandle, _Memory, nil);
   inherited Destroy;
   LabLog('TLabImage.Destroy');
 end;
@@ -198,12 +208,12 @@ begin
   view_info.subresourceRange.layerCount := ALayerCount;
   view_info.viewType := AViewType;
   view_info.flags := AFlags;
-  LabAssertVkError(vk.CreateImageView(_Device.Ptr.VkHandle, @view_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateImageView(_Device.Ptr.VkHandle, @view_info, nil, @_Handle));
 end;
 
 destructor TLabImageView.Destroy;
 begin
-  vk.DestroyImageView(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyImageView(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabImageView.Destroy');
 end;
@@ -229,7 +239,7 @@ begin
 {$else}
   if (depth_format = VK_FORMAT_UNDEFINED) then depth_format := VK_FORMAT_D16_UNORM;
 {$endif}
-  vk.GetPhysicalDeviceFormatProperties(ADevice.Ptr.PhysicalDevice.Ptr.VkHandle, depth_format, @props);
+  Vulkan.GetPhysicalDeviceFormatProperties(ADevice.Ptr.PhysicalDevice.Ptr.VkHandle, depth_format, @props);
   if props.linearTilingFeatures and TVkFlags(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) > 0 then
   begin
     tiling := VK_IMAGE_TILING_LINEAR;

@@ -17,23 +17,36 @@ type
   TLabColladaObject = class
   public
     type TObjectList = specialize TLabList<TLabColladaObject>;
+    type CSelf = class of TLabColladaObject;
   private
     _Tag: DOMString;
     _id: DOMString;
     _Scoped: Boolean;
     _Parent: TLabColladaObject;
     _Children: TObjectList;
+    _UserData: TObject;
+    _AutoFreeUserData: Boolean;
     procedure SetParent(const Value: TLabColladaObject); inline;
   protected
     procedure DumpBegin;
     procedure DumpEnd;
     procedure DumpData; virtual;
+    procedure Resolve;
+    procedure ResolveLinks; virtual;
+    procedure Initialize;
+    procedure InitializeObject; virtual;
+    function ResolveObject(
+      const Path: DOMString;
+      const ObjectClass: CSelf
+    ): TLabColladaObject;
   public
     property Tag: DOMString read _Tag;
     property id: DOMString read _id;
     property IsScoped: Boolean read _Scoped;
     property Parent: TLabColladaObject read _Parent write SetParent;
     property Children: TObjectList read _Children;
+    property UserData: TObject read _UserData write _UserData;
+    property AutoFreeUserData: Boolean read _AutoFreeUserData write _AutoFreeUserData;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
     function GetRoot: TLabColladaObject;
@@ -43,18 +56,7 @@ type
     procedure Dump;
   end;
   TLabColladaObjectList = TLabColladaObject.TObjectList;
-
-  TLabColladaGeometry = class (TLabColladaObject)
-  private
-    _Name: DOMString;
-    _Meshes: TLabColladaObjectList;
-  public
-    property Name: DOMString read _Name;
-    property Meshes: TLabColladaObjectList read _Meshes;
-    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
-    destructor Destroy; override;
-  end;
-  TLabColladaGeometryList = specialize TLabList<TLabColladaGeometry>;
+  TLabColladaObjectClass = TLabColladaObject.CSelf;
 
   TLabColladaInput = class (TLabColladaObject)
   private
@@ -63,6 +65,8 @@ type
     _Source: TLabColladaObject;
     _Offset: TVkInt32;
     _Set: TVkInt32;
+  protected
+    procedure ResolveLinks; override;
   public
     property Semantic: DOMString read _Semantic;
     property Source: TLabColladaObject read _Source;
@@ -95,13 +99,16 @@ type
     function GetAsInt(const Index: TVkInt32): PVkInt32; inline;
     function GetAsFloat(const Index: TVkInt32): PVkFloat; inline;
     function GetAsString(const Index: TVkInt32): DOMString; inline;
+    function GetRawData(const Offset: TVkInt32): Pointer; inline;
   public
     property ArrayType: TLabColladaArrayType read _ArrayType;
     property Count: TVkInt32 read _Count;
+    property ItemSize: TVkInt32 read _ItemSize;
     property AsBool[const Index: TVkInt32]: PBoolean read GetAsBool;
     property AsInt[const Index: TVkInt32]: PVkInt32 read GetAsInt;
     property AsFloat[const Index: TVkInt32]: PVkFloat read GetAsFloat;
     property AsString[const Index: TVkInt32]: DOMString read GetAsString;
+    property RawData[const Offset: TVkInt32]: Pointer read GetRawData;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
     class function NodeNameToArrayType(const NodeName: DOMString): TLabColladaArrayType;
@@ -124,6 +131,8 @@ type
     _Stride: TVkInt32;
     _Params: array of TParam;
     function GetParams: PParamArr;
+  protected
+    procedure ResolveLinks; override;
   public
     property Source: TLabColladaDataArray read _Source;
     property Count: TVkInt32 read _Count;
@@ -159,11 +168,21 @@ type
     _MaterialRef: DOMString;
     _Count: TVkInt32;
     _Inputs: TLabColladaInputList;
-    _Indices: array of TVkInt32;
+    _Indices: array of TLabInt32;
+    _VertexDescripttion: TLabColladaInputList;
+    function GetVertexSize: TVkInt32;
+    function GetIndices: PLabInt32Arr; inline;
+  protected
+    procedure InitializeObject; override;
   public
+    property Count: TVkInt32 read _Count;
     property Inputs: TLabColladaInputList read _Inputs;
+    property Indices: PLabInt32Arr read GetIndices;
+    property VertexDescription: TLabColladaInputList read _VertexDescripttion;
+    property VertexSize: TVkInt32 read GetVertexSize;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
+    function CopyInputData(const Target: Pointer; const Input: TLabColladaInput; const Index: TVkInt32): Pointer;
   end;
   TLabColladaTrianglesList = specialize TLabList<TLabColladaTriangles>;
 
@@ -179,6 +198,19 @@ type
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
+  TLabColladaMeshList = specialize TLabList<TLabColladaMesh>;
+
+  TLabColladaGeometry = class (TLabColladaObject)
+  private
+    _Name: DOMString;
+    _Meshes: TLabColladaMeshList;
+  public
+    property Name: DOMString read _Name;
+    property Meshes: TLabColladaMeshList read _Meshes;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaGeometryList = specialize TLabList<TLabColladaGeometry>;
 
   TLabColladaInstance = class (TLabColladaObject)
   private
@@ -201,10 +233,13 @@ type
   TLabColladaInstanceMaterialBindingList = specialize TLabList<TLabColladaInstanceMaterialBinding>;
 
   TLabColladaInstanceGeometry = class (TLabColladaInstance)
-  public
   private
+    _Geometry: TLabColladaGeometry;
     _MaterialBindings: TLabColladaInstanceMaterialBindingList;
+  protected
+    procedure ResolveLinks; override;
   public
+    property Geometry: TLabColladaGeometry read _Geometry;
     property MaterialBindings: TLabColladaInstanceMaterialBindingList read _MaterialBindings;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
@@ -265,6 +300,8 @@ type
   TLabColladaInstanceVisualScene = class (TLabColladaInstance)
   private
     _VisualScene: TLabColladaVisualScene;
+  protected
+    procedure ResolveLinks; override;
   public
     property VisualScene: TLabColladaVisualScene read _VisualScene;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
@@ -272,17 +309,23 @@ type
   end;
 
   TLabColladaScene = class (TLabColladaObject)
+  private
+    _VisualScene: TLabColladaInstanceVisualScene;
   public
+    property VisualScene: TLabColladaInstanceVisualScene read _VisualScene;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
 
   TLabColladaRoot = class (TLabColladaObject)
   private
-    _Geometries: TLabColladaLibraryGeometries;
-    _VisualScenes: TLabColladaLibraryVisualScenes;
+    _LibGeometries: TLabColladaLibraryGeometries;
+    _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
   public
+    property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
+    property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
+    property Scene: TLabColladaScene read _Scene;
     constructor Create(const XMLNode: TDOMNode);
     destructor Destroy; override;
   end;
@@ -365,6 +408,47 @@ begin
   if Length(_id) > 0 then LabLog('id: ' + AnsiString(_id));
 end;
 
+procedure TLabColladaObject.Resolve;
+  var i: TVkInt32;
+begin
+  ResolveLinks;
+  for i := 0 to _Children.Count - 1 do
+  begin
+    _Children[i].Resolve;
+  end;
+end;
+
+procedure TLabColladaObject.ResolveLinks;
+begin
+
+end;
+
+procedure TLabColladaObject.Initialize;
+  var i: TVkInt32;
+begin
+  for i := 0 to _Children.Count - 1 do
+  begin
+    _Children[i].Initialize;
+  end;
+  InitializeObject;
+end;
+
+procedure TLabColladaObject.InitializeObject;
+begin
+
+end;
+
+function TLabColladaObject.ResolveObject(const Path: DOMString;
+  const ObjectClass: CSelf): TLabColladaObject;
+begin
+  Result := Find(Path);
+  if Assigned(Result)
+  and not (Result is ObjectClass) then
+  begin
+    Result := nil;
+  end;
+end;
+
 constructor TLabColladaObject.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -374,6 +458,8 @@ begin
   _Children := TLabColladaObjectList.Create;
   _Tag := LowerCase(XMLNode.NodeName);
   _id := FindAttribute(XMLNode, 'id');
+  _UserData := nil;
+  _AutoFreeUserData := False;
   if Length(_id) = 0 then
   begin
     _id := FindAttribute(XMLNode, 'sid');
@@ -384,6 +470,7 @@ end;
 
 destructor TLabColladaObject.Destroy;
 begin
+  if _AutoFreeUserData and Assigned(_UserData) then _UserData.Free;
   _Children.Free;
   inherited Destroy;
 end;
@@ -412,17 +499,19 @@ begin
   if SearchPath[i] = '/' then
   begin
     SetLength(PathArr[n], i - p);
-    Move(Path[p], PathArr[n][1], i - p);
+    Move(Path[p], PathArr[n][1], (i - p) * SizeOf(WideChar));
     p := i + 1;
     Inc(n);
   end;
-  Move(SearchPath[p], PathArr[n][1], Length(SearchPath) + 1 - p);
+  SetLength(PathArr[n], Length(SearchPath) + 1 - p);
+  Move(SearchPath[p], PathArr[n][1], (Length(SearchPath) + 1 - p) * SizeOf(WideChar));
   Result := GetRoot;
   for i := 0 to High(PathArr) do
   begin
     Result := Result.FindChildRecursive(PathArr[i]);
     if not Assigned(Result) then Break;
   end;
+  if not Assigned(Result) then LabLog('Unresolved link: ' + AnsiString(Path));
 end;
 
 function TLabColladaObject.FindChild(const NodeID: DOMString): TLabColladaObject;
@@ -477,7 +566,7 @@ constructor TLabColladaGeometry.Create(
 begin
   inherited Create(XMLNode, AParent);
   _Name := FindAttribute(XMLNode, 'name');
-  _Meshes := TLabColladaObjectList.Create;
+  _Meshes := TLabColladaMeshList.Create;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
@@ -495,6 +584,17 @@ begin
   while _Meshes.Count > 0 do _Meshes.Pop.Free;
   _Meshes.Free;
   inherited Destroy;
+end;
+
+procedure TLabColladaInput.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(_SourceRef);
+  if Assigned(Obj) and ((Obj is TLabColladaSource) or (Obj is TLabColladaVertices)) then
+  begin
+    _Source := Obj;
+  end;
 end;
 
 constructor TLabColladaInput.Create(
@@ -544,6 +644,11 @@ begin
   Result := _DataString[Index];
 end;
 
+function TLabColladaDataArray.GetRawData(const Offset: TVkInt32): Pointer;
+begin
+  Result := @_Data[Offset];
+end;
+
 constructor TLabColladaDataArray.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -588,6 +693,7 @@ begin
     at_idref,
     at_name:
     begin
+      _ItemSize := 0;
       SetLength(_DataString, _Count);
       for i := 0 to _Count - 1 do
       begin
@@ -642,6 +748,12 @@ end;
 function TLabColladaAccessor.GetParams: PParamArr;
 begin
   Result := @_Params[0];
+end;
+
+procedure TLabColladaAccessor.ResolveLinks;
+begin
+  inherited ResolveLinks;
+  _Source := ResolveObject(_SourceRef, TLabColladaDataArray) as TLabColladaDataArray;
 end;
 
 constructor TLabColladaAccessor.Create(
@@ -742,6 +854,52 @@ begin
   inherited Destroy;
 end;
 
+function TLabColladaTriangles.GetVertexSize: TVkInt32;
+  var i, j: TVkInt32;
+  var src: TLabColladaSource;
+begin
+  Result := 0;
+  for i := 0 to _VertexDescripttion.Count - 1 do
+  begin
+    src := TLabColladaSource(_VertexDescripttion[i].Source);
+    Result += src.Accessor.Source.ItemSize * src.Accessor.Stride;
+  end;
+end;
+
+function TLabColladaTriangles.GetIndices: PLabInt32Arr;
+begin
+  Result := @_Indices[0];
+end;
+
+procedure TLabColladaTriangles.InitializeObject;
+  procedure ProcessInput(const Input: TLabColladaInput);
+    var i: Integer;
+    var Vertices: TLabColladaVertices;
+  begin
+    if not Assigned(Input) or not Assigned(Input.Source) then Exit;
+    if Input.Source is TLabColladaVertices then
+    begin
+      Vertices := TLabColladaVertices(Input.Source);
+      for i := 0 to Vertices.Inputs.Count - 1 do
+      begin
+        ProcessInput(Vertices.Inputs[i]);
+      end;
+    end
+    else
+    begin
+      _VertexDescripttion.Add(Input);
+    end;
+  end;
+  var i: TVkInt32;
+begin
+  inherited InitializeObject;
+  _VertexDescripttion.Clear;
+  for i := 0 to _Inputs.Count - 1 do
+  begin
+    ProcessInput(_Inputs[i]);
+  end;
+end;
+
 constructor TLabColladaTriangles.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -754,6 +912,7 @@ begin
   _MaterialRef := FindAttribute(XMLNode, 'material');
   _Count := StrToIntDef(AnsiString(FindAttribute(XMLNode, 'count')), 0);
   _Inputs := TLabColladaInputList.Create;
+  _VertexDescripttion := TLabColladaInputList.Create;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
@@ -779,9 +938,46 @@ end;
 
 destructor TLabColladaTriangles.Destroy;
 begin
+  _VertexDescripttion.Free;
   while _Inputs.Count > 0 do _Inputs.Pop.Free;
   _Inputs.Free;
   inherited Destroy;
+end;
+
+function TLabColladaTriangles.CopyInputData(
+  const Target: Pointer;
+  const Input: TLabColladaInput;
+  const Index: TVkInt32
+): Pointer;
+  var Dest: PVkUInt8;
+  var Vertices: TLabColladaVertices;
+  var Source: TLabColladaSource;
+  var i: TVkInt32;
+begin
+  if not Assigned(Input) or not Assigned(Input.Source) then Exit;
+  Dest := Target;
+  if Input.Source is TLabColladaVertices then
+  begin
+    Vertices := TLabColladaVertices(Input.Source);
+    for i := 0 to Vertices.Inputs.Count - 1 do
+    begin
+      Dest := CopyInputData(Dest, Vertices.Inputs[i], Index);
+    end;
+  end
+  else if Input.Source is TLabColladaSource then
+  begin
+    Source := TLabColladaSource(Input.Source);
+    if Source.DataArray.ArrayType in [at_bool, at_float, at_int] then
+    begin
+      Move(
+        Source.DataArray.RawData[Source.DataArray.ItemSize * Source.Accessor.Stride * Index]^,
+        Dest^,
+        Source.DataArray.ItemSize * Source.Accessor.Stride
+      );
+      Inc(Dest, Source.DataArray.ItemSize * Source.Accessor.Stride);
+    end;
+  end;
+  Result := Dest;
 end;
 
 constructor TLabColladaMesh.Create(
@@ -856,6 +1052,17 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaInstanceGeometry.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaGeometry) then
+  begin
+    _Geometry := TLabColladaGeometry(Obj);
+  end;
+end;
+
 constructor TLabColladaInstanceGeometry.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -864,6 +1071,7 @@ constructor TLabColladaInstanceGeometry.Create(
   var NodeName: DOMString;
 begin
   inherited Create(XMLNode, AParent);
+  _Geometry := nil;
   _MaterialBindings := TLabColladaInstanceMaterialBindingList.Create;
   CurNode := XMLNode.FindNode('bind_material');
   if Assigned(CurNode) then
@@ -1113,6 +1321,17 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaInstanceVisualScene.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaVisualScene) then
+  begin
+    _VisualScene := TLabColladaVisualScene(Obj);
+  end;
+end;
+
 constructor TLabColladaInstanceVisualScene.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1131,9 +1350,14 @@ constructor TLabColladaScene.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
 );
+  var CurNode: TDOMNode;
 begin
   inherited Create(XMLNode, AParent);
-
+  CurNode := XMLNode.FindNode('instance_visual_scene');
+  if Assigned(CurNode) then
+  begin
+    _VisualScene := TLabColladaInstanceVisualScene.Create(CurNode, Self);
+  end;
 end;
 
 destructor TLabColladaScene.Destroy;
@@ -1149,8 +1373,8 @@ constructor TLabColladaRoot.Create(
 begin
   inherited Create(XMLNode, nil);
   CurNode := XMLNode.FirstChild;
-  _Geometries := nil;
-  _VisualScenes := nil;
+  _LibGeometries := nil;
+  _LibVisualScenes := nil;
   _Scene := nil;
   while Assigned(CurNode) do
   begin
@@ -1172,14 +1396,14 @@ begin
     end
     else if NodeName = 'library_geometries' then
     begin
-      _Geometries := TLabColladaLibraryGeometries.Create(CurNode, Self);
+      _LibGeometries := TLabColladaLibraryGeometries.Create(CurNode, Self);
     end
     else if NodeName = 'library_controllers' then
     begin
     end
     else if NodeName = 'library_visual_scenes' then
     begin
-      _VisualScenes := TLabColladaLibraryVisualScenes.Create(CurNode, Self);
+      _LibVisualScenes := TLabColladaLibraryVisualScenes.Create(CurNode, Self);
     end
     else if NodeName = 'scene' then
     begin
@@ -1191,8 +1415,8 @@ end;
 
 destructor TLabColladaRoot.Destroy;
 begin
-  if Assigned(_VisualScenes) then _VisualScenes.Free;
-  if Assigned(_Geometries) then _Geometries.Free;
+  if Assigned(_LibVisualScenes) then _LibVisualScenes.Free;
+  if Assigned(_LibGeometries) then _LibGeometries.Free;
   if Assigned(_Scene) then _Scene.Free;
   inherited Destroy;
 end;
@@ -1201,6 +1425,8 @@ procedure TLabColladaParser.ReadDocument(const Document: TXMLDocument);
 begin
   if UpperCase(Document.DocumentElement.NodeName) <> 'COLLADA' then Exit;
   _RootNode := TLabColladaRoot.Create(Document.DocumentElement);
+  _RootNode.Resolve;
+  _RootNode.Initialize;
 end;
 
 constructor TLabColladaParser.Create(const FileName: String);

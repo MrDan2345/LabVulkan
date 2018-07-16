@@ -119,7 +119,7 @@ begin
     device_create_info.enabledExtensionCount := TVkUInt32(Length(device_extensions));
     device_create_info.ppEnabledExtensionNames := PPVkChar(@device_extensions[0]);
   end;
-  LabAssertVkError(vk.CreateDevice(_PhysicalDevice.Ptr.VkHandle, @device_create_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateDevice(_PhysicalDevice.Ptr.VkHandle, @device_create_info, nil, @_Handle));
   if Length(device_extensions) > 0 then
   begin
     LabLog('Device extension count = ' + IntToStr(Length(device_extensions)));
@@ -135,8 +135,8 @@ destructor TLabDevice.Destroy;
 begin
   if LabVkValidHandle(_Handle) then
   begin
-    vk.DeviceWaitIdle(_Handle);
-    vk.DestroyDevice(_Handle, nil);
+    Vulkan.DeviceWaitIdle(_Handle);
+    Vulkan.DestroyDevice(_Handle, nil);
   end;
   inherited Destroy;
   LabLog('TLabDevice.Destroy');

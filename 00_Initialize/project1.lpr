@@ -3,7 +3,6 @@ program project1;
 {$mode objfpc}{$H+}
 
 uses
-  Heaptrc,
   {$IFDEF UNIX}{$IFDEF UseCThreads}
   cthreads,
   {$ENDIF}{$ENDIF}

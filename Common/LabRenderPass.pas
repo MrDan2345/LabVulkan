@@ -84,12 +84,12 @@ begin
   rp_info.pSubpasses := @subpass_descriptions[0];
   rp_info.dependencyCount := 0;
   rp_info.pDependencies := nil;
-  LabAssertVkError(vk.CreateRenderPass(_Device.Ptr.VkHandle, @rp_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateRenderPass(_Device.Ptr.VkHandle, @rp_info, nil, @_Handle));
 end;
 
 destructor TLabRenderPass.Destroy;
 begin
-  vk.DestroyRenderPass(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyRenderPass(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabRenderPass.Destroy');
 end;
@@ -130,13 +130,25 @@ begin
   Result.Flags := Flags;
   Result.PipelineBindPoint := PipelineBindPoint;
   SetLength(Result.InputAttachments, Length(InputAttachments));
-  Move(InputAttachments[0], Result.InputAttachments[0], SizeOf(TVkAttachmentReference) * Length(InputAttachments));
+  if Length(InputAttachments) > 0 then
+  begin
+    Move(InputAttachments[0], Result.InputAttachments[0], SizeOf(TVkAttachmentReference) * Length(InputAttachments));
+  end;
   SetLength(Result.ColorAttachments, Length(ColorAttachments));
-  Move(ColorAttachments[0], Result.ColorAttachments[0], SizeOf(TVkAttachmentReference) * Length(ColorAttachments));
+  if Length(ColorAttachments) > 0 then
+  begin
+    Move(ColorAttachments[0], Result.ColorAttachments[0], SizeOf(TVkAttachmentReference) * Length(ColorAttachments));
+  end;
   SetLength(Result.ResolveAttachments, Length(ResolveAttachments));
-  Move(ResolveAttachments[0], Result.ResolveAttachments[0], SizeOf(TVkAttachmentReference) * Length(ResolveAttachments));
+  if Length(ResolveAttachments) > 0 then
+  begin
+    Move(ResolveAttachments[0], Result.ResolveAttachments[0], SizeOf(TVkAttachmentReference) * Length(ResolveAttachments));
+  end;
   SetLength(Result.PreserveAttachments, Length(PreserveAttachments));
-  Move(PreserveAttachments[0], Result.PreserveAttachments[0], SizeOf(TVkUInt32) * Length(PreserveAttachments));
+  if Length(PreserveAttachments) > 0 then
+  begin
+    Move(PreserveAttachments[0], Result.PreserveAttachments[0], SizeOf(TVkUInt32) * Length(PreserveAttachments));
+  end;
   Result.DepthStencilAttachment := DepthStencilAttachment;
 end;
 

@@ -16,6 +16,8 @@ type
   PLabInt8 = ^TLabInt8;
   TLabUInt8 = TVkUInt8;
   PLabUInt8 = ^TLabUInt8;
+  TLabUInt8Arr = array[Word] of TLabUInt8;
+  PLabUInt8Arr = ^TLabUInt8Arr;
   TLabInt16 = TVkInt16;
   PLabInt16 = ^TLabInt16;
   TLabUInt16 = TVkUInt16;

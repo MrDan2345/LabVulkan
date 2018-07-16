@@ -215,12 +215,12 @@ begin
   pipeline_layout_info.pPushConstantRanges := @APushConstantRanges[0];
   pipeline_layout_info.setLayoutCount := Length(_DescriptorSetLayouts);
   pipeline_layout_info.pSetLayouts := @_DescriptorSetLayouts[0];
-  LabAssertVkError(vk.CreatePipelineLayout(_Device.Ptr.VkHandle, @pipeline_layout_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreatePipelineLayout(_Device.Ptr.VkHandle, @pipeline_layout_info, nil, @_Handle));
 end;
 
 destructor TLabPipelineLayout.Destroy;
 begin
-  vk.DestroyPipelineLayout(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyPipelineLayout(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabPipelineLayout.Destroy');
 end;
@@ -240,12 +240,12 @@ begin
   pipeline_cache_info.initialDataSize := AInitialCacheSize;
   pipeline_cache_info.pInitialData := AInitialCache;
   pipeline_cache_info.flags := AFlags;
-  LabAssertVkError(vk.CreatePipelineCache(_Device.Ptr.VkHandle, @pipeline_cache_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreatePipelineCache(_Device.Ptr.VkHandle, @pipeline_cache_info, nil, @_Handle));
 end;
 
 destructor TLabPipelineCache.Destroy;
 begin
-  vk.DestroyPipelineCache(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyPipelineCache(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabPipelineCache.Destroy');
 end;
@@ -267,7 +267,7 @@ destructor TLabPipeline.Destroy;
 begin
   if LabVkValidHandle(_Handle) then
   begin
-    vk.DestroyPipeline(_Device.Ptr.VkHandle, _Handle, nil);
+    Vulkan.DestroyPipeline(_Device.Ptr.VkHandle, _Handle, nil);
   end;
   inherited Destroy;
   LabLog('TLabPipeline.Destroy');
@@ -342,7 +342,7 @@ begin
   pipeline_info.stageCount := Length(AShaderStages);
   pipeline_info.renderPass := ARenderPass.VkHandle;
   pipeline_info.subpass := ASubpass;
-  LabAssertVkError(vk.CreateGraphicsPipelines(_Device.Ptr.VkHandle, _Cache.Ptr.VkHandle, 1, @pipeline_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateGraphicsPipelines(_Device.Ptr.VkHandle, _Cache.Ptr.VkHandle, 1, @pipeline_info, nil, @_Handle));
 end;
 
 destructor TLabGraphicsPipeline.Destroy;

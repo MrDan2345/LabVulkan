@@ -69,7 +69,7 @@ begin
   create_info.pNext := nil;
   create_info.hinstance_ := _Window.WndClass.hInstance;
   create_info.hwnd_ := _Window.Handle;
-  r := vk.CreateWin32SurfaceKHR(VulkanInstance, @create_info, nil, @_Handle);
+  r := Vulkan.CreateWin32SurfaceKHR(VulkanInstance, @create_info, nil, @_Handle);
   LabAssertVkError(r);
 {$elseif defined(__ANDROID__)}
   GET_INSTANCE_PROC_ADDR(info.inst, CreateAndroidSurfaceKHR);
@@ -85,28 +85,28 @@ begin
   createInfo.pNext = NULL;
   createInfo.flags = 0;
   createInfo.pView = info.window;
-  res = vk.CreateIOSSurfaceMVK(info.inst, &createInfo, NULL, &info.surface);
+  res = Vulkan.CreateIOSSurfaceMVK(info.inst, &createInfo, NULL, &info.surface);
 {$elseif defined(VK_USE_PLATFORM_MACOS_MVK)}
   VkMacOSSurfaceCreateInfoMVK createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK;
   createInfo.pNext = NULL;
   createInfo.flags = 0;
   createInfo.pView = info.window;
-  res = vk.CreateMacOSSurfaceMVK(info.inst, &createInfo, NULL, &info.surface);
+  res = Vulkan.CreateMacOSSurfaceMVK(info.inst, &createInfo, NULL, &info.surface);
 {$elseif defined(VK_USE_PLATFORM_WAYLAND_KHR)}
   VkWaylandSurfaceCreateInfoKHR createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
   createInfo.pNext = NULL;
   createInfo.display = info.display;
   createInfo.surface = info.window;
-  res = vk.CreateWaylandSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
+  res = Vulkan.CreateWaylandSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
 {$else}
   VkXcbSurfaceCreateInfoKHR createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
   createInfo.pNext = NULL;
   createInfo.connection = info.connection;
   createInfo.window = info.window;
-  res = vk.CreateXcbSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
+  res = Vulkan.CreateXcbSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
 {$endif}  // __ANDROID__  && _WIN32
 end;
 
@@ -114,7 +114,7 @@ destructor TLabSurface.Destroy;
 begin
   if LabVkValidHandle(_Handle) then
   begin
-    vk.DestroySurfaceKHR(VulkanInstance, _Handle, nil);
+    Vulkan.DestroySurfaceKHR(VulkanInstance, _Handle, nil);
   end;
   inherited Destroy;
 end;

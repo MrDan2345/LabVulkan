@@ -65,6 +65,7 @@ type
     property Weak: TLabWeakCounter read _Weak write _Weak;
   public
     class constructor CreateClass;
+    class destructor DestroyClass;
     class function Vulkan: TVulkan; inline;
     class function VulkanInstance: TVkInstance; inline;
     procedure AfterConstruction; override;
@@ -76,6 +77,8 @@ type
   TLabStrArrA = array of AnsiString;
 
 implementation
+
+uses LabUtils;
 
 //TLabSharedRef BEGIN
 function TLabSharedRef.GetPtr: T;
@@ -167,8 +170,14 @@ end;
 //TLabClass BEGIN
 class constructor TLabClass.CreateClass;
 begin
+  LabLog('TLabClass.CreateClass');
   _VulkanPtr := @vk;
   _VulkanInstance := 0;
+end;
+
+class destructor TLabClass.DestroyClass;
+begin
+  LabLog('TLabClass.DestroyClass');
 end;
 
 class function TLabClass.Vulkan: TVulkan;
@@ -181,19 +190,18 @@ begin
   Result := _VulkanInstance;
 end;
 
-function TLabClass.QueryInterface(
-  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj
-): Longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+function TLabClass.QueryInterface(constref iid: tguid; out obj): longint;
+  stdcall;
 begin
   if GetInterface(IID, Obj) then Result := S_OK else Result := Longint(E_NOINTERFACE);
 end;
 
-function TLabClass._AddRef: Longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+function TLabClass._AddRef: longint; stdcall;
 begin
   Result := InterlockedIncrement(_RefCount);
 end;
 
-function TLabClass._Release: Longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+function TLabClass._Release: longint; stdcall;
 begin
    Result := InterlockedDecrement(_RefCount);
    if Result = 0 then Self.Destroy;

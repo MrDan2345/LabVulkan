@@ -62,12 +62,12 @@ begin
   frame_buffer_info.width := _Width;
   frame_buffer_info.height := _Height;
   frame_buffer_info.layers := 1;
-  LabAssertVkError(vk.CreateFramebuffer(_Device.Ptr.VkHandle, @frame_buffer_info, nil, @_Handle));
+  LabAssertVkError(Vulkan.CreateFramebuffer(_Device.Ptr.VkHandle, @frame_buffer_info, nil, @_Handle));
 end;
 
 destructor TLabFrameBuffer.Destroy;
 begin
-  vk.DestroyFramebuffer(_Device.Ptr.VkHandle, _Handle, nil);
+  Vulkan.DestroyFramebuffer(_Device.Ptr.VkHandle, _Handle, nil);
   inherited Destroy;
   LabLog('TLabFrameBuffer.Destroy');
 end;

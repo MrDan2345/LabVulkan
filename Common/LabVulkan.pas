@@ -40,6 +40,7 @@ type
     class var _ExtensionsEnabled: TLabListStringShared;
     class var _LayersEnabled: TLabListStringShared;
     var _PhysicalDevices: TLabPhysicalDeviceList;
+    var _Vulkan: TVulkan;
   public
     class property IsEnabled: Boolean read _IsEnabled;
     class property IsActive: Boolean read _IsActive write _IsActive;
@@ -54,6 +55,7 @@ type
     class procedure DisableExtension(const Name: AnsiString);
     class procedure ResetLayers;
     class procedure EnableLayer(const Name: AnsiString);
+    class procedure EnableLayerIfAvailable(const Name: AnsiString);
     class procedure DisableLayer(const Name: AnsiString);
     class constructor CreateClass;
     class destructor DestroyClass;
@@ -132,6 +134,11 @@ begin
   end;
 end;
 
+class procedure TLabVulkan.EnableLayerIfAvailable(const Name: AnsiString);
+begin
+  if Assigned(FindLayer(Name)) then EnableLayer(Name);
+end;
+
 class procedure TLabVulkan.DisableLayer(const Name: AnsiString);
 begin
   _LayersEnabled.Ptr.Remove(Name);
@@ -169,15 +176,18 @@ begin
         extension_count := 0;
         LabAssertVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @extension_count, nil));
         SetLength(_Layers[i].Extensions, extension_count);
-        if Length(extension_properties) < extension_count then
+        if (extension_count > 0) then
         begin
-          SetLength(extension_properties, extension_count);
-        end;
-        LabAssertVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @extension_count, @extension_properties[0]));
-        for j := 0 to extension_count - 1 do
-        begin
-          _Layers[i].Extensions[j].Name := extension_properties[j].extensionName;
-          _Layers[i].Extensions[j].SpecVersion := extension_properties[j].specVersion;
+          if Length(extension_properties) < extension_count then
+          begin
+            SetLength(extension_properties, extension_count);
+          end;
+          LabAssertVkError(Vulkan.EnumerateInstanceExtensionProperties(PVkChar(_Layers[i].Name), @extension_count, @extension_properties[0]));
+          for j := 0 to extension_count - 1 do
+          begin
+            _Layers[i].Extensions[j].Name := extension_properties[j].extensionName;
+            _Layers[i].Extensions[j].SpecVersion := extension_properties[j].specVersion;
+          end;
         end;
       end;
     end;
@@ -231,7 +241,7 @@ begin
   submit_info.pCommandBuffers := @CommandBuffers;
   submit_info.signalSemaphoreCount := Length(SignalSemaphores);
   submit_info.pSignalSemaphores := @SignalSemaphores[0];
-  vk.QueueSubmit(Queue, 1, @submit_info, Fence);
+  Vulkan.QueueSubmit(Queue, 1, @submit_info, Fence);
 end;
 
 class procedure TLabVulkan.QueuePresent(
@@ -250,7 +260,7 @@ begin
   present_info.waitSemaphoreCount := Length(WaitSemaphores);
   present_info.pWaitSemaphores := @WaitSemaphores[0];
   present_info.pResults := nil;
-  vk.QueuePresentKHR(Queue, @present_info);
+  Vulkan.QueuePresentKHR(Queue, @present_info);
 end;
 
 constructor TLabVulkan.Create;
@@ -308,14 +318,13 @@ begin
   begin
     inst_info.ppEnabledExtensionNames := nil;
   end;
-  r := vk.CreateInstance(@inst_info, nil, @_VulkanInstance);
+  r := Vulkan.CreateInstance(@inst_info, nil, @_VulkanInstance);
   LabAssertVkError(r);
-  LoadVulkanInstanceCommands(vk.Commands.GetInstanceProcAddr, _VulkanInstance, inst_commands);
-  new_vk := TVulkan.Create(inst_commands);
-  vk.Free;
-  vk := new_vk;
+  LoadVulkanInstanceCommands(Vulkan.Commands.GetInstanceProcAddr, _VulkanInstance, inst_commands);
+  _Vulkan := TVulkan.Create(inst_commands);
+  _VulkanPtr := @_Vulkan;
   physical_device_count := 0;
-  r := vk.EnumeratePhysicalDevices(_VulkanInstance, @physical_device_count, nil);
+  r := Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @physical_device_count, nil);
   LabAssertVkError(r);
   _PhysicalDevices.Allocate(physical_device_count);
   SetLength(physical_device_arr, physical_device_count);
@@ -353,10 +362,16 @@ end;
 
 destructor TLabVulkan.Destroy;
 begin
+  if Assigned(_Vulkan) then
+  begin
+    _Vulkan.Free;
+    _VulkanPtr := @vk;
+    _Vulkan := nil;
+  end;
   _PhysicalDevices.Free;
   if LabVkValidHandle(_VulkanInstance) then
   begin
-    vk.DestroyInstance(_VulkanInstance, nil);
+    Vulkan.DestroyInstance(_VulkanInstance, nil);
     _VulkanInstance := 0;
   end;
   inherited Destroy;

@@ -107,6 +107,7 @@ type
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
 function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
+function LabCheckLayerAvailable(const LayerName: AnsiString): Boolean;
 procedure LabLog(const Msg: AnsiString; const Offset: Integer = 0);
 procedure LabLogOffset(const Offset: Integer);
 procedure LabAssertVkError(const State: TVkResult);
@@ -669,6 +670,27 @@ begin
   begin
     Result := True;
     Exit;
+  end;
+  Result := False;
+end;
+
+function LabCheckLayerAvailable(const LayerName: AnsiString): Boolean;
+  var layer_count: TVkUInt32;
+  var layer_properties: array of TVkLayerProperties;
+  var i: TVkInt32;
+  var layer_name_lc: AnsiString;
+begin
+  vk.EnumerateInstanceLayerProperties(@layer_count, nil);
+  if layer_count > 0 then
+  begin
+    layer_name_lc := LowerCase(LayerName);
+    SetLength(layer_properties, layer_count);
+    LabAssertVkError(vk.EnumerateInstanceLayerProperties(@layer_count, @layer_properties[0]));
+    for i := 0 to layer_count - 1 do
+    if LowerCase(AnsiString(layer_properties[i].layerName)) = layer_name_lc then
+    begin
+      Exit(True);
+    end;
   end;
   Result := False;
 end;
