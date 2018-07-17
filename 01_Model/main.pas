@@ -49,7 +49,7 @@ type
     var VertexShader: TLabShaderShared;
     var PixelShader: TLabShaderShared;
     var FrameBuffers: TLabFrameBuffers;
-    //var VertexBuffer: TLabVertexBufferShared;
+    var VertexBuffer: TLabVertexBufferShared;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -86,8 +86,9 @@ implementation
 
 constructor TLabApp.Create;
 begin
-  EnableLayer('VK_LAYER_LUNARG_core_validation');
-  EnableLayer('VK_LAYER_LUNARG_parameter_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
   OnInitialize := @Initialize;
   OnFinalize := @Finalize;
   OnLoop := @Loop;
@@ -160,13 +161,13 @@ begin
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
-  //VertexBuffer := TLabVertexBuffer.Create(
-  //  Device, 32, 32,
-  //  [
-  //    LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-  //    LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
-  //  ]
-  //);
+  VertexBuffer := TLabVertexBuffer.Create(
+    Device, 32, 32,
+    [
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
+    ]
+  );
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/box.dae');
   //map := nil;
@@ -249,7 +250,7 @@ begin
   PipelineCache := nil;
   DescriptorSets := nil;
   DescriptorPool := nil;
-  //VertexBuffer := nil;
+  VertexBuffer := nil;
   FrameBuffers := nil;
   PixelShader := nil;
   VertexShader := nil;
