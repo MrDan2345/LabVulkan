@@ -162,10 +162,11 @@ begin
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
   VertexBuffer := TLabVertexBuffer.Create(
-    Device, 32, 32,
+    Device, 36, 36,
     [
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 12),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 24)
     ]
   );
   Scene := TLabScene.Create(Device);
@@ -271,6 +272,7 @@ end;
 procedure TLabApp.Loop;
   var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
+  var i, j, s: Integer;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
@@ -291,16 +293,31 @@ begin
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
   );
-  //CmdBuffer.Ptr.BindPipeline(Pipeline.Ptr);
-  //CmdBuffer.Ptr.BindDescriptorSets(
-  //  VK_PIPELINE_BIND_POINT_GRAPHICS,
-  //  PipelineLayout.Ptr,
-  //  0, 1, DescriptorSets.Ptr, []
-  //);
+  CmdBuffer.Ptr.BindPipeline(Pipeline.Ptr);
+  CmdBuffer.Ptr.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    PipelineLayout.Ptr,
+    0, 1, DescriptorSets.Ptr, []
+  );
+  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
+  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  for i := 0 to Scene.Root.Children.Count - 1 do
+  begin
+    for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
+    begin
+      for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
+      begin
+        CmdBuffer.Ptr.BindVertexBuffers(
+          0,
+          [Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer.VkHandle],
+          [0]
+        );
+        CmdBuffer.Ptr.Draw(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexCount);
+        //CmdBuffer.Ptr.Draw(12 * 3);
+      end;
+    end;
+  end;
   //CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  //CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  //CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
-  //CmdBuffer.Ptr.Draw(12 * 3);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(
