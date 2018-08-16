@@ -183,7 +183,7 @@ begin
   VStride := Triangles.VertexSize;
   SetLength(Buffer, VStride * Triangles.Count * 3);
   BufferPtr := @Buffer[0];
-  for i := 0 to Triangles.Count - 1 do
+  for i := 0 to Triangles.Count * 3 - 1 do
   for j := 0 to Triangles.Inputs.Count - 1 do
   begin
     Offset := Triangles.Inputs[j].Offset;

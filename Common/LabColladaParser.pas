@@ -926,7 +926,7 @@ begin
   CurNode := XMLNode.FindNode('p');
   if Assigned(CurNode) then
   begin
-    SetLength(_Indices, _Count * _Inputs.Count);
+    SetLength(_Indices, _Count * 3 * _Inputs.Count);
     IndexData := CurNode.TextContent;
     p := 1;
     for i := 0 to High(_Indices) do

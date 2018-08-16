@@ -164,9 +164,9 @@ begin
   VertexBuffer := TLabVertexBuffer.Create(
     Device, 36, 36,
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 12),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 24)
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 0),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 12),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 24)
     ]
   );
   Scene := TLabScene.Create(Device);
@@ -212,7 +212,8 @@ begin
       [VertexBuffer.Ptr.MakeBindingDesc(0)],
       [
         VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
-        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0)
+        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0),
+        VertexBuffer.Ptr.MakeAttributeDesc(2, 2, 0)
       ]
     ),
     LabPipelineRasterizationState(),
