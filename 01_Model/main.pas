@@ -314,11 +314,9 @@ begin
           [0]
         );
         CmdBuffer.Ptr.Draw(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexCount);
-        //CmdBuffer.Ptr.Draw(12 * 3);
       end;
     end;
   end;
-  //CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(

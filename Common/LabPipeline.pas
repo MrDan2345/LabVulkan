@@ -291,7 +291,6 @@ constructor TLabGraphicsPipeline.Create(
 );
   var dynamic_state_info: TVkPipelineDynamicStateCreateInfo;
   var pipeline_info: TVkGraphicsPipelineCreateInfo;
-  var dynamic_state_enables: array of TVkDynamicState;
 begin
   inherited Create(ADevice, APipelineCache, VK_PIPELINE_BIND_POINT_GRAPHICS);
   FillChar(dynamic_state_info, SizeOf(dynamic_state_info), 0);
@@ -299,8 +298,6 @@ begin
   dynamic_state_info.pNext := nil;
   dynamic_state_info.pDynamicStates := @ADynamicStates[0];
   dynamic_state_info.dynamicStateCount := Length(ADynamicStates);
-  SetLength(dynamic_state_enables, Length(ADynamicStates));
-  Move(ADynamicStates[0], dynamic_state_enables[0], SizeOf(TVkDynamicState) * Length(ADynamicStates));
 {$ifndef __ANDROID__}
 
 {$else}
