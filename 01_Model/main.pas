@@ -102,7 +102,7 @@ procedure TLabApp.Initialize;
   var map: PVkVoid;
   var ColladaParser: TLabColladaParser;
 begin
-  ColladaParser := TLabColladaParser.Create('../Models/box.dae');
+  ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
   ColladaParser.RootNode.Dump;
   ColladaParser.Free;
   Window := TLabWindow.Create(500, 500);
@@ -172,7 +172,7 @@ begin
     ]
   );
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/skull.dae');
   //map := nil;
   //if (VertexBuffer.Ptr.Map(map)) then
   //begin
@@ -263,7 +263,7 @@ begin
   if not TLabVulkan.IsActive then Exit;
   with Transforms do
   begin
-    Model := LabMatRotationY(LabTimeSec);
+    Model := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
     MVP := Model * View * Projection * Clip;
     UniformData := nil;
     if (UniformBuffer.Ptr.Map(UniformData)) then
