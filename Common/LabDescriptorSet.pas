@@ -16,8 +16,10 @@ type
     var _Bindings: array of TVkDescriptorSetLayoutBinding;
     var _Flags: TVkDescriptorSetLayoutCreateFlags;
     var _Handle: TVkDescriptorSetLayout;
+    var _Hash: TVkUInt32;
   public
     property VkHandle: TVkDescriptorSetLayout read _Handle;
+    property Hash: TVkUInt32 read _Hash;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const ABindings: array of TVkDescriptorSetLayoutBinding;
@@ -95,6 +97,8 @@ begin
   descriptor_set_layout_info.bindingCount := Length(_Bindings);
   descriptor_set_layout_info.pBindings := @_Bindings[0];
   LabAssertVkError(Vulkan.CreateDescriptorSetLayout(_Device.Ptr.VkHandle, @descriptor_set_layout_info, nil, @_Handle));
+  _Hash := LabCRC32(0, @_Flags, SizeOf(_Flags));
+  _Hash := LabCRC32(_Hash, @_Bindings[0], Length(_Bindings) * SizeOf(TVkDescriptorSetLayoutBinding));
 end;
 
 destructor TLabDescriptorSetLayout.Destroy;

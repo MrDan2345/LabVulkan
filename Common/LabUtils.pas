@@ -16,8 +16,8 @@ type
     var _ItemCount: Integer;
   public
     type TItemPtr = ^T;
-    type TCmpFunc = function (const Item0, Item1: T): Integer;
-    type TCmpFuncObj = function (const Item0, Item1: T): Integer of object;
+    type TCmpFunc = function (const Item0, Item1: T): Boolean;
+    type TCmpFuncObj = function (const Item0, Item1: T): Boolean of object;
   protected
     procedure SetItem(const Index: Integer; const Value: T); inline;
     function GetItem(const Index: Integer): T; inline;
@@ -284,35 +284,35 @@ begin
 end;
 
 function TLabList.Search(const CmpFunc: TCmpFunc; const Item: T): Integer;
-  var l, h, m, r: Integer;
+  var l, h, m: Integer;
 begin
   l := 0;
   h := _ItemCount - 1;
   while l <= h do
   begin
     m := (l + h) shr 1;
-    r := CmpFunc(_Items[m], Item);
-    if r = 0 then Exit(m)
-    else if r < 0 then l := m + 1
-    else h := m - 1;
+    if CmpFunc(_Items[m], Item) then h := m - 1 else l := m + 1;
   end;
-  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+  if (l < _ItemCount)
+  and (not CmpFunc(_Items[l], Item))
+  and (not CmpFunc(Item, _Items[l])) then
+  Exit(l) else Exit(-1);
 end;
 
 function TLabList.Search(const CmpFunc: TCmpFuncObj; const Item: T): Integer;
-  var l, h, m, r: Integer;
+  var l, h, m: Integer;
 begin
   l := 0;
   h := _ItemCount - 1;
   while l <= h do
   begin
     m := (l + h) shr 1;
-    r := CmpFunc(_Items[m], Item);
-    if r = 0 then Exit(m)
-    else if r < 0 then l := m + 1
-    else h := m - 1;
+    if CmpFunc(_Items[m], Item) then h := m - 1 else l := m + 1;
   end;
-  if (l < _ItemCount) and (CmpFunc(_Items[l], Item) = 0) then Exit(l) else Exit(-1);
+  if (l < _ItemCount)
+  and (not CmpFunc(_Items[l], Item))
+  and (not CmpFunc(Item, _Items[l])) then
+  Exit(l) else Exit(-1);
 end;
 
 procedure TLabList.Sort(const CmpFunc: TCmpFunc; RangeStart, RangeEnd: Integer);
@@ -324,8 +324,8 @@ begin
   j := RangeEnd;
   pivot := _Items[(RangeStart + RangeEnd) shr 1];
   repeat
-    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
-    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    while CmpFunc(pivot, _Items[i]) do i := i + 1;
+    while CmpFunc(_Items[j], pivot) do j := j - 1;
     if i <= j then
     begin
       tmp := _Items[i];
@@ -347,8 +347,8 @@ begin
   j := RangeEnd;
   pivot := _Items[(RangeStart + RangeEnd) shr 1];
   repeat
-    while CmpFunc(pivot, _Items[i]) > 0 do i := i + 1;
-    while CmpFunc(pivot, _Items[j]) < 0 do j := j - 1;
+    while CmpFunc(pivot, _Items[i]) do i := i + 1;
+    while CmpFunc(_Items[j], pivot) do j := j - 1;
     if i <= j then
     begin
       tmp := _Items[i];

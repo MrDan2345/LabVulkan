@@ -49,6 +49,8 @@ type
   end;
   PLabVertexBufferAttributeFormat = ^TLabVertexBufferAttributeFormat;
 
+  TLabVertexInputAttributeDescriptionArr = array of TVkVertexInputAttributeDescription;
+
   TLabVertexBuffer = class (TLabBuffer)
   private
     var _Stride: TVkUInt32;
@@ -77,6 +79,10 @@ type
       const Location: TVkUInt32;
       const Binding: TVkUInt32
     ): TVkVertexInputAttributeDescription;
+    function MakeAttributeDescArr(
+      const StartingLocation: TVkUInt32;
+      const Binding: TVkUInt32
+    ): TLabVertexInputAttributeDescriptionArr;
   end;
   TLabVertexBufferShared = specialize TLabSharedRef<TLabVertexBuffer>;
 
@@ -254,6 +260,23 @@ begin
   Result.binding := Binding;
   Result.format := _Attributes[AttributeIndex].Format;
   Result.offset := _Attributes[AttributeIndex].Offset;
+end;
+
+function TLabVertexBuffer.MakeAttributeDescArr(
+  const StartingLocation: TVkUInt32;
+  const Binding: TVkUInt32
+): TLabVertexInputAttributeDescriptionArr;
+  var i: TVkUInt32;
+begin
+  SetLength(Result, Length(_Attributes));
+  FillChar(Result[0], Length(Result) * SizeOf(TVkVertexInputAttributeDescription), 0);
+  for i := 0 to High(_Attributes) do
+  begin
+    Result[i].location := StartingLocation + i;
+    Result[i].binding := Binding;
+    Result[i].format := _Attributes[i].Format;
+    Result[i].offset := _Attributes[i].Offset;
+  end;
 end;
 
 constructor TLabUniformBuffer.Create(

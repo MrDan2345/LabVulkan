@@ -38,6 +38,7 @@ type
   public
     function IsValid: Boolean; inline;
     function AsShared: TShared; inline;
+    function Ptr: TPtr; inline;
     class operator := (const Value: TPtr): TSelf; inline;
     class operator := (const Value: TShared): TSelf; inline;
   end;
@@ -140,6 +141,11 @@ end;
 function TLabWeakRef.AsShared: TShared;
 begin
   if IsValid then Result := T((_Weak as TLabWeakCounter).Obj) else Result := nil;
+end;
+
+function TLabWeakRef.Ptr: TPtr;
+begin
+  Result := TPtr((_Weak as TLabWeakCounter).Obj);
 end;
 
 class operator TLabWeakRef.:= (const Value: TPtr): TSelf;

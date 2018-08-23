@@ -4,15 +4,12 @@ interface
 
 uses
   SysUtils,
-  Messages,
   Windows,
   Vulkan,
   LabTypes,
   LabUtils,
   LabPhysicalDevice,
-  LabSurface,
-  LabCommandBuffer,
-  LabSync;
+  LabSurface;
 
 type
   TLabExtension = record

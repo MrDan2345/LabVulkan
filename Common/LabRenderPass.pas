@@ -23,8 +23,10 @@ type
   private
     var _Device: TLabDeviceShared;
     var _Handle: TVkRenderPass;
+    var _Hash: TVkUInt32;
   public
     property VkHandle: TVkRenderPass read _Handle;
+    property Hash: TVkUInt32 read _Hash;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const AAttachments: array of TVkAttachmentDescription;
@@ -68,7 +70,7 @@ constructor TLabRenderPass.Create(
 );
   var subpass_descriptions: array of TVkSubpassDescription;
   var rp_info: TVkRenderPassCreateInfo;
-  var i: TVkInt32;
+  var i, j: TVkInt32;
 begin
   LabLog('TLabRenderPass.Create');
   inherited Create;
@@ -85,6 +87,17 @@ begin
   rp_info.dependencyCount := 0;
   rp_info.pDependencies := nil;
   LabAssertVkError(Vulkan.CreateRenderPass(_Device.Ptr.VkHandle, @rp_info, nil, @_Handle));
+  _Hash := LabCRC32(0, @AAttachments[0], Length(AAttachments) * SizeOf(TVkAttachmentDescription));
+  for i := 0 to High(ASubpasses) do
+  begin
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].Flags, SizeOf(ASubpasses[i].Flags));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].PipelineBindPoint, SizeOf(ASubpasses[i].PipelineBindPoint));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].DepthStencilAttachment, SizeOf(ASubpasses[i].DepthStencilAttachment));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].ColorAttachments[0], Length(ASubpasses[i].ColorAttachments) * SizeOf(TVkAttachmentReference));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].InputAttachments[0], Length(ASubpasses[i].InputAttachments) * SizeOf(TVkAttachmentReference));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].PreserveAttachments[0], Length(ASubpasses[i].PreserveAttachments) * SizeOf(TVkUInt32));
+    _Hash := LabCRC32(_Hash, @ASubpasses[i].ResolveAttachments[0], Length(ASubpasses[i].ResolveAttachments) * SizeOf(TVkAttachmentReference));
+  end;
 end;
 
 destructor TLabRenderPass.Destroy;

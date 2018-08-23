@@ -4,6 +4,7 @@ interface
 
 uses
   Vulkan,
+  SysUtils,
   LabTypes,
   LabUtils,
   LabDevice,
@@ -18,12 +19,14 @@ type
     var _Device: TLabDeviceShared;
     var _Handle: TVkPipelineLayout;
     var _DescriptorSetLayouts: array of TVkDescriptorSetLayout;
+    var _Hash: TVkUInt32;
     function GetDescriptorSetLayouts: PVkDescriptorSetLayout; inline;
     function GetDescriptorSetLayoutCount: TVkInt32; inline;
   public
     property VkHandle: TVkPipelineLayout read _Handle;
     property DescriptorSetLayouts: PVkDescriptorSetLayout read GetDescriptorSetLayouts;
     property DescriptorSetLayoutCount: TVkInt32 read GetDescriptorSetLayoutCount;
+    property Hash: TVkUInt32 read _Hash;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const APushConstantRanges: array of TVkPushConstantRange;
@@ -65,16 +68,28 @@ type
     );
     destructor Destroy; override;
   end;
+  TLabPipelineShared = specialize TLabSharedRef<TLabPipeline>;
+  TLabPipelineWeak = specialize TLabWeakRef<TLabPipeline>;
+  TLabPipelineList = specialize TLabList<TLabPipeline>;
 
   TLabGraphicsPipeline = class (TLabPipeline)
+  private
+    class var _PipelineList: TLabPipelineList;
+    class var _PipelineListSort: Boolean;
+    var _Hash: TVkUInt32;
+    var _Shaders: array of TLabShaderShared;
+    var _RenderPass: TLabRenderPassShared;
+    class function CmpPipelines(const a, b: TLabPipeline): Boolean;
+    class procedure SortPipelineList; inline;
   public
-    constructor Create(
-      const ADevice: TLabDeviceShared;
-      const APipelineCache: TLabPipelineCacheShared;
+    property Hash: TVkUInt32 read _Hash;
+    class constructor CreateClass;
+    class destructor DestroyClass;
+    class function MakeHash(
       const APipelineLayout: TLabPipelineLayout;
       const ADynamicStates: array of TVkDynamicState;
-      const AShaderStages: TLabShaderStages;
-      const ARenderPass: TLabRenderPass;
+      const AShaders: array of TLabShader;
+      const ARenderPass: TLabRenderPassShared;
       const ASubpass: TVkUInt32;
       const AViewportState: TVkPipelineViewportStateCreateInfo;
       const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
@@ -83,10 +98,42 @@ type
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
       const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+    ): TVkUInt32;
+    class function Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
+    class function FindOrCreate(const ADevice: TLabDeviceShared;
+      const APipelineCache: TLabPipelineCacheShared;
+      const APipelineLayout: TLabPipelineLayout;
+      const ADynamicStates: array of TVkDynamicState;
+      const AShaders: array of TLabShader;
+      const ARenderPass: TLabRenderPassShared;
+      const ASubpass: TVkUInt32;
+      const AViewportState: TVkPipelineViewportStateCreateInfo;
+      const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
+      const AVertexInputState: TLabPipelineVertexInputState;
+      const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
+      const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
+      const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
+      const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+    ): TLabGraphicsPipeline;
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const APipelineCache: TLabPipelineCacheShared;
+      const APipelineLayout: TLabPipelineLayout;
+      const ADynamicStates: array of TVkDynamicState;
+      const AShaders: array of TLabShader;
+      const ARenderPass: TLabRenderPassShared;
+      const ASubpass: TVkUInt32;
+      const AViewportState: TVkPipelineViewportStateCreateInfo;
+      const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
+      const AVertexInputState: TLabPipelineVertexInputState;
+      const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
+      const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
+      const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
+      const AColorBlendState: TVkPipelineColorBlendStateCreateInfo;
+      const AHash: TVkUInt32 = 0
     );
     destructor Destroy; override;
   end;
-  TLabPipelineShared = specialize TLabSharedRef<TLabPipeline>;
 
 const
   LabDefaultStencilOpState: TVkStencilOpState = (
@@ -212,10 +259,29 @@ begin
   pipeline_layout_info.sType := VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_info.pNext := nil;
   pipeline_layout_info.pushConstantRangeCount := Length(APushConstantRanges);
-  pipeline_layout_info.pPushConstantRanges := @APushConstantRanges[0];
+  if (Length(APushConstantRanges) > 0) then
+  begin
+    pipeline_layout_info.pPushConstantRanges := @APushConstantRanges[0];
+  end
+  else
+  begin
+    pipeline_layout_info.pPushConstantRanges := nil;
+  end;
   pipeline_layout_info.setLayoutCount := Length(_DescriptorSetLayouts);
-  pipeline_layout_info.pSetLayouts := @_DescriptorSetLayouts[0];
+  if (Length(_DescriptorSetLayouts) > 0) then
+  begin
+    pipeline_layout_info.pSetLayouts := @_DescriptorSetLayouts[0];
+  end
+  else
+  begin
+    pipeline_layout_info.pSetLayouts := nil;
+  end;
   LabAssertVkError(Vulkan.CreatePipelineLayout(_Device.Ptr.VkHandle, @pipeline_layout_info, nil, @_Handle));
+  _Hash := LabCRC32(0, @APushConstantRanges[0], Length(APushConstantRanges) * SizeOf(TVkPushConstantRange));
+  for i := 0 to High(ADescriptorSetLayouts) do
+  begin
+    _Hash := LabCRC32(_Hash, @ADescriptorSetLayouts[i].Ptr.Hash, SizeOf(TVkUInt32));
+  end;
 end;
 
 destructor TLabPipelineLayout.Destroy;
@@ -273,13 +339,34 @@ begin
   LabLog('TLabPipeline.Destroy');
 end;
 
-constructor TLabGraphicsPipeline.Create(
-  const ADevice: TLabDeviceShared;
-  const APipelineCache: TLabPipelineCacheShared;
+class function TLabGraphicsPipeline.CmpPipelines(const a, b: TLabPipeline): Boolean;
+begin
+  Result := TLabGraphicsPipeline(a).Hash > TLabGraphicsPipeline(b).Hash;
+end;
+
+class procedure TLabGraphicsPipeline.SortPipelineList;
+begin
+  if not _PipelineListSort then Exit;
+  _PipelineList.Sort(@CmpPipelines);
+  _PipelineListSort := False;
+end;
+
+class constructor TLabGraphicsPipeline.CreateClass;
+begin
+  _PipelineList := TLabPipelineList.Create(256);
+  _PipelineListSort := False;
+end;
+
+class destructor TLabGraphicsPipeline.DestroyClass;
+begin
+  _PipelineList.Free;
+end;
+
+class function TLabGraphicsPipeline.MakeHash(
   const APipelineLayout: TLabPipelineLayout;
   const ADynamicStates: array of TVkDynamicState;
-  const AShaderStages: TLabShaderStages;
-  const ARenderPass: TLabRenderPass;
+  const AShaders: array of TLabShader;
+  const ARenderPass: TLabRenderPassShared;
   const ASubpass: TVkUInt32;
   const AViewportState: TVkPipelineViewportStateCreateInfo;
   const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
@@ -288,38 +375,162 @@ constructor TLabGraphicsPipeline.Create(
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
   const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+): TVkUInt32;
+  var i: TVkInt32;
+  var ds_hash: TVkUInt32;
+begin
+  Result := APipelineLayout.Hash;
+  ds_hash := 0;
+  for i := 0 to High(ADynamicStates) do
+  begin
+    if TVkUInt32(ADynamicStates[i]) <= 32 then
+    begin
+      ds_hash := ds_hash or (1 shl TVkUInt32(ADynamicStates[i]));
+    end
+    else
+    begin
+      ds_hash := ds_hash or TVkUInt32(ADynamicStates[i]);
+    end;
+  end;
+  Result := LabCRC32(Result, @ds_hash, SizeOf(TVkUInt32));
+  for i := 0 to High(AShaders) do
+  begin
+    Result := LabCRC32(Result, @AShaders[i].Hash, SizeOf(TVkUInt32));
+  end;
+  Result := LabCRC32(Result, @ARenderPass.Ptr.Hash, SizeOf(TVkUInt32));
+  Result := LabCRC32(Result, @ASubpass, SizeOf(ASubpass));
+  Result := LabCRC32(Result, @AViewportState.flags, SizeOf(AViewportState.flags));
+  Result := LabCRC32(Result, @AViewportState.viewportCount, SizeOf(AViewportState.viewportCount));
+  if Assigned(AViewportState.pViewports) then
+  begin
+    Result := LabCRC32(Result, AViewportState.pViewports, AViewportState.viewportCount * SizeOf(TVkViewport));
+  end;
+  Result := LabCRC32(Result, @AViewportState.scissorCount, SizeOf(AViewportState.scissorCount));
+  if Assigned(AViewportState.pScissors) then
+  begin
+    Result := LabCRC32(Result, AViewportState.pScissors, AViewportState.scissorCount * SizeOf(TVkRect2D));
+  end;
+  Result := LabCRC32(Result, @AInputAssemblyState.flags, SizeOf(AInputAssemblyState.flags));
+  Result := LabCRC32(Result, @AInputAssemblyState.topology, SizeOf(AInputAssemblyState.topology));
+  Result := LabCRC32(Result, @AInputAssemblyState.primitiveRestartEnable, SizeOf(AInputAssemblyState.primitiveRestartEnable));
+  Result := LabCRC32(Result, @AVertexInputState.Data.InputBindings[0], Length(AVertexInputState.Data.InputBindings) * SizeOf(TVkVertexInputBindingDescription));
+  Result := LabCRC32(Result, @AVertexInputState.Data.Attributes[0], Length(AVertexInputState.Data.Attributes) * SizeOf(TVkVertexInputAttributeDescription));
+  Result := LabCRC32(Result, @ARasterizationState, SizeOf(ARasterizationState));
+  Result := LabCRC32(Result, @ADepthStencilState, SizeOf(ADepthStencilState));
+  Result := LabCRC32(Result, @AMultisampleState, SizeOf(AMultisampleState));
+  Result := LabCRC32(Result, @AColorBlendState.flags, SizeOf(AColorBlendState.flags));
+  Result := LabCRC32(Result, @AColorBlendState.logicOp, SizeOf(AColorBlendState.logicOp));
+  Result := LabCRC32(Result, @AColorBlendState.logicOpEnable, SizeOf(AColorBlendState.logicOpEnable));
+  Result := LabCRC32(Result, @AColorBlendState.blendConstants, SizeOf(AColorBlendState.blendConstants));
+  Result := LabCRC32(Result, AColorBlendState.pAttachments, AColorBlendState.attachmentCount * SizeOf(TVkPipelineColorBlendAttachmentState));
+end;
+
+class function TLabGraphicsPipeline.Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
+  var l, h, m: Integer;
+begin
+  SortPipelineList;
+  l := 0;
+  h := _PipelineList.Count - 1;
+  while l <= h do
+  begin
+    m := (l + h) shr 1;
+    if TLabGraphicsPipeline(_PipelineList[m]).Hash > AHash then
+    h := m - 1
+    else if TLabGraphicsPipeline(_PipelineList[m]).Hash < AHash then
+    l := m + 1
+    else Exit(TLabGraphicsPipeline(_PipelineList[m]));
+  end;
+  if (l < _PipelineList.Count)
+  and (TLabGraphicsPipeline(_PipelineList[l]).Hash = AHash)
+  then Exit(TLabGraphicsPipeline(_PipelineList[l])) else Exit(nil);
+end;
+
+class function TLabGraphicsPipeline.FindOrCreate(
+  const ADevice: TLabDeviceShared;
+  const APipelineCache: TLabPipelineCacheShared;
+  const APipelineLayout: TLabPipelineLayout;
+  const ADynamicStates: array of TVkDynamicState;
+  const AShaders: array of TLabShader; const ARenderPass: TLabRenderPassShared;
+  const ASubpass: TVkUInt32;
+  const AViewportState: TVkPipelineViewportStateCreateInfo;
+  const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
+  const AVertexInputState: TLabPipelineVertexInputState;
+  const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
+  const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
+  const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
+  const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+): TLabGraphicsPipeline;
+  var PipelineHash: TVkUInt32;
+begin
+  PipelineHash := MakeHash(
+    APipelineLayout,
+    ADynamicStates,
+    AShaders,
+    ARenderPass,
+    ASubpass,
+    AViewportState,
+    AInputAssemblyState,
+    AVertexInputState,
+    ARasterizationState,
+    ADepthStencilState,
+    AMultisampleState,
+    AColorBlendState
+  );
+  Result := Find(PipelineHash);
+  if not Assigned(Result) then
+  begin
+    Result := TLabGraphicsPipeline.Create(
+      ADevice,
+      APipelineCache,
+      APipelineLayout,
+      ADynamicStates,
+      AShaders,
+      ARenderPass,
+      ASubpass,
+      AViewportState,
+      AInputAssemblyState,
+      AVertexInputState,
+      ARasterizationState,
+      ADepthStencilState,
+      AMultisampleState,
+      AColorBlendState,
+      PipelineHash
+    );
+  end;
+end;
+
+constructor TLabGraphicsPipeline.Create(
+  const ADevice: TLabDeviceShared;
+  const APipelineCache: TLabPipelineCacheShared;
+  const APipelineLayout: TLabPipelineLayout;
+  const ADynamicStates: array of TVkDynamicState;
+  const AShaders: array of TLabShader;
+  const ARenderPass: TLabRenderPassShared;
+  const ASubpass: TVkUInt32;
+  const AViewportState: TVkPipelineViewportStateCreateInfo;
+  const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
+  const AVertexInputState: TLabPipelineVertexInputState;
+  const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
+  const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
+  const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
+  const AColorBlendState: TVkPipelineColorBlendStateCreateInfo;
+  const AHash: TVkUInt32
 );
+  var i: TVkInt32;
   var dynamic_state_info: TVkPipelineDynamicStateCreateInfo;
+  var shader_stages: TLabShaderStages;
   var pipeline_info: TVkGraphicsPipelineCreateInfo;
 begin
   inherited Create(ADevice, APipelineCache, VK_PIPELINE_BIND_POINT_GRAPHICS);
+  SetLength(_Shaders, Length(AShaders));
+  for i := 0 to High(_Shaders) do _Shaders[i] := AShaders[i];
+  shader_stages := LabShaderStages(_Shaders);
+  _RenderPass := ARenderPass;
   FillChar(dynamic_state_info, SizeOf(dynamic_state_info), 0);
   dynamic_state_info.sType := VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic_state_info.pNext := nil;
   dynamic_state_info.pDynamicStates := @ADynamicStates[0];
   dynamic_state_info.dynamicStateCount := Length(ADynamicStates);
-{$ifndef __ANDROID__}
-
-{$else}
-  // Temporary disabling dynamic viewport on Android because some of drivers doesn't
-  // support the feature.
-  VkViewport viewports;
-  viewports.minDepth = 0.0f;
-  viewports.maxDepth = 1.0f;
-  viewports.x = 0;
-  viewports.y = 0;
-  viewports.width = info.width;
-  viewports.height = info.height;
-  VkRect2D scissor;
-  scissor.extent.width = info.width;
-  scissor.extent.height = info.height;
-  scissor.offset.x = 0;
-  scissor.offset.y = 0;
-  vp.viewportCount = NUM_VIEWPORTS;
-  vp.scissorCount = NUM_SCISSORS;
-  vp.pScissors = &scissor;
-  vp.pViewports = &viewports;
-{$endif}
   pipeline_info.sType := VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   pipeline_info.pNext := nil;
   pipeline_info.layout := APipelineLayout.VkHandle;
@@ -335,15 +546,52 @@ begin
   pipeline_info.pDynamicState := @dynamic_state_info;
   pipeline_info.pViewportState := @AViewportState;
   pipeline_info.pDepthStencilState := @ADepthStencilState;
-  pipeline_info.pStages := @AShaderStages[0];
-  pipeline_info.stageCount := Length(AShaderStages);
-  pipeline_info.renderPass := ARenderPass.VkHandle;
+  pipeline_info.stageCount := Length(shader_stages);
+  if Length(shader_stages) > 0 then
+  begin
+    pipeline_info.pStages := @shader_stages[0];
+  end
+  else
+  begin
+    pipeline_info.pStages := nil;
+  end;
+  pipeline_info.renderPass := _RenderPass.Ptr.VkHandle;
   pipeline_info.subpass := ASubpass;
   LabAssertVkError(Vulkan.CreateGraphicsPipelines(_Device.Ptr.VkHandle, _Cache.Ptr.VkHandle, 1, @pipeline_info, nil, @_Handle));
+  if AHash = 0 then
+  begin
+    _Hash := MakeHash(
+      APipelineLayout,
+      ADynamicStates,
+      AShaders,
+      ARenderPass,
+      ASubpass,
+      AViewportState,
+      AInputAssemblyState,
+      AVertexInputState,
+      ARasterizationState,
+      ADepthStencilState,
+      AMultisampleState,
+      AColorBlendState
+    );
+  end
+  else
+  begin
+    _Hash := AHash;
+  end;
+  _PipelineList.Add(Self);
+  _PipelineListSort := True;
 end;
 
 destructor TLabGraphicsPipeline.Destroy;
+  var i: TVkInt32;
 begin
+  SortPipelineList;
+  i := _PipelineList.Search(@CmpPipelines, Self);
+  if (i > -1) then
+  begin
+    _PipelineList.Delete(i);
+  end;
   inherited Destroy;
 end;
 
@@ -353,6 +601,7 @@ function LabPushConstantRange(
   const Size: TVkUInt32
 ): TVkPushConstantRange;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.stageFlags := StageFlags;
   Result.offset := Offset;
   Result.size := Size;
@@ -366,6 +615,7 @@ function LabPipelineViewportState(
   const Flags: TVkPipelineViewportStateCreateFlags
 ): TVkPipelineViewportStateCreateInfo;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -381,6 +631,7 @@ function LabPipelineInputAssemblyState(
   const Flags: TVkPipelineInputAssemblyStateCreateFlags
 ): TVkPipelineInputAssemblyStateCreateInfo;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -394,6 +645,7 @@ function LabPipelineVertexInputState(
   const Flags: TVkPipelineVertexInputStateCreateFlags
 ): TLabPipelineVertexInputState;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   SetLength(Result.Data.InputBindings, Length(VertexBindingDescriptions));
   Move(VertexBindingDescriptions[0], Result.Data.InputBindings[0], SizeOf(TVkVertexInputBindingDescription) * Length(VertexBindingDescriptions));
   SetLength(Result.Data.Attributes, Length(VertexAttributeDescriptions));
@@ -421,6 +673,7 @@ function LabPipelineRasterizationState(
   const Flags: TVkPipelineRasterizationStateCreateFlags
 ): TVkPipelineRasterizationStateCreateInfo;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -449,6 +702,7 @@ function LabPipelineDepthStencilState(
   const Flags: TVkPipelineDepthStencilStateCreateFlags
 ): TVkPipelineDepthStencilStateCreateInfo;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -473,6 +727,7 @@ function LabPipelineMultisampleState(
   const Flags: TVkPipelineMultisampleStateCreateFlags
 ): TVkPipelineMultisampleStateCreateInfo;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -494,6 +749,7 @@ function LabPipelineColorBlendState(
 ): TVkPipelineColorBlendStateCreateInfo;
   var i: Integer;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;

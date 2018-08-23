@@ -7,6 +7,8 @@ interface
 
 uses
   Vulkan,
+  LabTypes,
+  LabUtils,
   LabMath,
   LabWindow,
   LabSwapChain,
@@ -201,26 +203,6 @@ begin
     []
   );
   PipelineCache := TLabPipelineCache.Create(Device);
-  Pipeline := TLabGraphicsPipeline.Create(
-    Device, PipelineCache, PipelineLayout.Ptr,
-    [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    LabShaderStages([VertexShader.Ptr, PixelShader.Ptr]),
-    RenderPass.Ptr, 0,
-    LabPipelineViewportState(),
-    LabPipelineInputAssemblyState(),
-    LabPipelineVertexInputState(
-      [VertexBuffer.Ptr.MakeBindingDesc(0)],
-      [
-        VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
-        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0),
-        VertexBuffer.Ptr.MakeAttributeDesc(2, 2, 0)
-      ]
-    ),
-    LabPipelineRasterizationState(),
-    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-    LabPipelineMultisampleState(),
-    LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
-  );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   fov := LabDegToRad * 45;
@@ -274,6 +256,8 @@ procedure TLabApp.Loop;
   var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var i, j, s: Integer;
+  var CurPipeline: TLabGraphicsPipeline;
+  var vb: TLabVertexBuffer;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
@@ -294,20 +278,48 @@ begin
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
   );
-  CmdBuffer.Ptr.BindPipeline(Pipeline.Ptr);
-  CmdBuffer.Ptr.BindDescriptorSets(
-    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    PipelineLayout.Ptr,
-    0, 1, DescriptorSets.Ptr, []
-  );
-  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  CurPipeline := nil;
   for i := 0 to Scene.Root.Children.Count - 1 do
   begin
     for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
     begin
       for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
       begin
+        vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
+        Pipeline := TLabGraphicsPipeline.FindOrCreate(
+          Device, PipelineCache, PipelineLayout.Ptr,
+          [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+          [VertexShader.Ptr, PixelShader.Ptr],
+          RenderPass.Ptr, 0,
+          LabPipelineViewportState(),
+          LabPipelineInputAssemblyState(),
+          LabPipelineVertexInputState(
+            [vb.MakeBindingDesc(0)],
+            vb.MakeAttributeDescArr(0, 0)
+          ),
+          LabPipelineRasterizationState(
+            VK_FALSE, VK_FALSE,
+            VK_POLYGON_MODE_FILL,
+            TVkFlags(VK_CULL_MODE_BACK_BIT),
+            VK_FRONT_FACE_COUNTER_CLOCKWISE
+          ),
+          LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
+          LabPipelineMultisampleState(),
+          LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
+        );
+        if not Assigned(CurPipeline)
+        or (CurPipeline.Hash <> TLabGraphicsPipeline(Pipeline.Ptr).Hash) then
+        begin
+          CurPipeline := TLabGraphicsPipeline(Pipeline.Ptr);
+          CmdBuffer.Ptr.BindPipeline(Pipeline.Ptr);
+          CmdBuffer.Ptr.BindDescriptorSets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            PipelineLayout.Ptr,
+            0, 1, DescriptorSets.Ptr, []
+          );
+          CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
+          CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+        end;
         CmdBuffer.Ptr.BindVertexBuffers(
           0,
           [Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer.VkHandle],
