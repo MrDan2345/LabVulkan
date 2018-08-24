@@ -51,7 +51,6 @@ type
     var VertexShader: TLabShaderShared;
     var PixelShader: TLabShaderShared;
     var FrameBuffers: TLabFrameBuffers;
-    var VertexBuffer: TLabVertexBufferShared;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -88,9 +87,11 @@ implementation
 
 constructor TLabApp.Create;
 begin
+  //EnableLayerIfAvailable('VK_LAYER_LUNARG_api_dump');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_object_tracker');
   OnInitialize := @Initialize;
   OnFinalize := @Finalize;
   OnLoop := @Loop;
@@ -99,7 +100,6 @@ end;
 
 procedure TLabApp.Initialize;
   var fov: TVkFloat;
-  var map: PVkVoid;
   var ColladaParser: TLabColladaParser;
 begin
   ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
@@ -163,22 +163,8 @@ begin
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
-  VertexBuffer := TLabVertexBuffer.Create(
-    Device, 36, 36,
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 12),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 24)
-    ]
-  );
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/skull.dae');
-  //map := nil;
-  //if (VertexBuffer.Ptr.Map(map)) then
-  //begin
-  //  Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
-  //  VertexBuffer.Ptr.Unmap;
-  //end;
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
@@ -213,7 +199,7 @@ begin
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
+    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, -1, 0));
     Model := LabMatIdentity;
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
@@ -228,13 +214,13 @@ end;
 
 procedure TLabApp.Finalize;
 begin
+  Scene.Free;
   Fence := nil;
   Semaphore := nil;
   Pipeline := nil;
   PipelineCache := nil;
   DescriptorSets := nil;
   DescriptorPool := nil;
-  VertexBuffer := nil;
   FrameBuffers := nil;
   PixelShader := nil;
   VertexShader := nil;

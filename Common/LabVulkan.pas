@@ -95,7 +95,7 @@ begin
   for i := 0 to High(_Layers) do
   if _Layers[i].Name = Name then
   begin
-    Result := @_Layers[i];
+    Exit(@_Layers[i]);
   end;
   Result := nil;
 end;
