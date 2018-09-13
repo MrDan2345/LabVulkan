@@ -53,12 +53,14 @@ type
     destructor Destroy; override;
   end;
 
+  TLabClassCallback = procedure (const Obj: TLabClass) of object;
   TLabClass = class (TObject, IUnknown)
   protected
     class var _VulkanPtr: ^TVulkan;
     class var _VulkanInstance: TVkInstance;
     var _RefCount: Longint;
     var _Weak: TLabWeakCounter;
+    var _OnDestroy: TLabClassCallback;
     function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
@@ -73,9 +75,11 @@ type
     procedure BeforeDestruction; override;
     class function NewInstance: TObject; override;
     property RefCount: Longint read _RefCount;
+    property OnDestroy: TLabClassCallback read _OnDestroy write _OnDestroy;
   end;
 
   TLabStrArrA = array of AnsiString;
+  TLabByteArr = array of TVkUInt8;
 
 implementation
 
@@ -220,6 +224,7 @@ end;
 
 procedure TLabClass.BeforeDestruction;
 begin
+  if Assigned(_OnDestroy) then OnDestroy(Self);
   if Assigned(_Weak) then _Weak._Obj := nil;
 end;
 

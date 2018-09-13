@@ -35,6 +35,7 @@ type
     property VkHandle: TVkDevice read _Handle;
     function MemoryTypeFromProperties(const TypeBits: TVkUInt32; const RequirementsMask: TVkFlags; var TypeIndex: TVkUInt32): Boolean;
     function GetQueue(const QueueFamilyIndex, QueueIndex: TVkUInt32): TVkQueue; inline;
+    procedure WaitIdle; inline;
   end;
   TLabDeviceShared = specialize TLabSharedRef<TLabDevice>;
 
@@ -169,6 +170,11 @@ end;
 function TLabDevice.GetQueue(const QueueFamilyIndex, QueueIndex: TVkUInt32): TVkQueue;
 begin
   Vulkan.GetDeviceQueue(_Handle, QueueFamilyIndex, QueueIndex, @Result);
+end;
+
+procedure TLabDevice.WaitIdle;
+begin
+  Vulkan.DeviceWaitIdle(_Handle);
 end;
 
 //TLabDevice END

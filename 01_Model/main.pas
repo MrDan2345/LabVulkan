@@ -32,6 +32,12 @@ uses
   Classes;
 
 type
+  TShaderManager = class (TLabClass)
+  public
+    class constructor CreateClass;
+    class destructor DestroyClass;
+  end;
+
   TLabApp = class (TLabVulkan)
   public
     var Window: TLabWindow;
@@ -48,8 +54,8 @@ type
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
-    var VertexShader: TLabShaderShared;
-    var PixelShader: TLabShaderShared;
+    //var VertexShader: TLabSceneVertexShaderShared;
+    //var PixelShader: TLabScenePixelShaderShared;
     var FrameBuffers: TLabFrameBuffers;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
@@ -84,6 +90,16 @@ var
   App: TLabApp;
 
 implementation
+
+class constructor TShaderManager.CreateClass;
+begin
+
+end;
+
+class destructor TShaderManager.DestroyClass;
+begin
+
+end;
 
 constructor TLabApp.Create;
 begin
@@ -160,11 +176,13 @@ begin
       )
     ]
   );
-  VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
-  PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
+  //VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
+  //PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/skull.dae');
+  //VertexShader := TLabSceneShaderFactory.MakeVertexShader(Scene);
+  //PixelShader := TLabSceneShaderFactory.MakePixelShader(Scene);
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
@@ -222,8 +240,8 @@ begin
   DescriptorSets := nil;
   DescriptorPool := nil;
   FrameBuffers := nil;
-  PixelShader := nil;
-  VertexShader := nil;
+  //PixelShader := nil;
+  //VertexShader := nil;
   RenderPass := nil;
   PipelineLayout := nil;
   DescriptorSetLayout := nil;
@@ -244,6 +262,8 @@ procedure TLabApp.Loop;
   var i, j, s: Integer;
   var CurPipeline: TLabGraphicsPipeline;
   var vb: TLabVertexBuffer;
+  var vs: TLabSceneVertexShader;
+  var ps: TLabScenePixelShader;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
@@ -272,10 +292,12 @@ begin
       for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
       begin
         vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
+        vs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexShader.Ptr;
+        ps := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].PixelShader.Ptr;
         Pipeline := TLabGraphicsPipeline.FindOrCreate(
           Device, PipelineCache, PipelineLayout.Ptr,
           [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-          [VertexShader.Ptr, PixelShader.Ptr],
+          [vs.Shader, ps.Shader],
           RenderPass.Ptr, 0,
           LabPipelineViewportState(),
           LabPipelineInputAssemblyState(),

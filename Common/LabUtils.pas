@@ -119,6 +119,7 @@ procedure LabProfileStop;
 function LabEncodeURL(const URL: String): String;
 function LabDecodeURL(const URL: String): String;
 function LabStrExplode(const Str: AnsiString; const Separator: AnsiString): TLabStrArrA;
+function LabStrReplace(const Str, PatternOld, PatternNew: AnsiString): AnsiString;
 function LabCRC32(const CRC: TVkUInt32; const Value: Pointer; const Count: TVkInt32): TVkUInt32;
 
 implementation
@@ -845,6 +846,31 @@ begin
     Inc(CurElement);
   end;
   SetLength(Result, CurElement);
+end;
+
+function LabStrReplace(const Str, PatternOld, PatternNew: AnsiString): AnsiString;
+  var StrArr: TLabStrArrA;
+  var i, n: TVkInt32;
+begin
+  if (Length(PatternOld) > 0) and (Length(Str) > 0) then
+  begin
+    StrArr := LabStrExplode(Str, PatternOld);
+    SetLength(Result, Length(Str) + Length(PatternNew) * Length(StrArr));
+    n := 1;
+    for i := 0 to High(StrArr) - 1 do
+    begin
+      Move(StrArr[i][1], Result[n], Length(StrArr[i]));
+      Inc(n, Length(StrArr[i]));
+      Move(PatternNew[1], Result[n], Length(PatternNew));
+      Inc(n, Length(PatternNew));
+    end;
+    i := High(StrArr);
+    Move(StrArr[i][1], Result[n], Length(StrArr[i]));
+    Inc(n, Length(StrArr[i]));
+    SetLength(Result, n - 1);
+  end
+  else
+  Result := Str;
 end;
 
 function LabCRC32(

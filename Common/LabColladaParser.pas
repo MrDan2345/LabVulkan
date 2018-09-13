@@ -163,23 +163,41 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaVertexAttributeSemantic = (
+    as_invalid,
+    as_position,
+    as_normal,
+    as_tangent,
+    as_binormal,
+    as_color,
+    as_texcoord
+  );
+  TLabColladaVertexAttribute = record
+    Semantic: TLabColladaVertexAttributeSemantic;
+    DataType: TLabColladaArrayType;
+    DataCount: TVkUInt8;
+    SetNumber: TVkUInt8;
+  end;
+  TLabColladaVertexDescriptor = array of TLabColladaVertexAttribute;
   TLabColladaTriangles = class (TLabColladaObject)
   private
     _MaterialRef: DOMString;
     _Count: TVkInt32;
     _Inputs: TLabColladaInputList;
     _Indices: array of TLabInt32;
-    _VertexDescripttion: TLabColladaInputList;
+    _VertexLayout: TLabColladaInputList;
     function GetVertexSize: TVkInt32;
     function GetIndices: PLabInt32Arr; inline;
+    function GetVertexDescriptor: TLabColladaVertexDescriptor;
   protected
     procedure InitializeObject; override;
   public
     property Count: TVkInt32 read _Count;
     property Inputs: TLabColladaInputList read _Inputs;
     property Indices: PLabInt32Arr read GetIndices;
-    property VertexDescription: TLabColladaInputList read _VertexDescripttion;
+    property VertexLayout: TLabColladaInputList read _VertexLayout;
     property VertexSize: TVkInt32 read GetVertexSize;
+    property VertexDescriptor: TLabColladaVertexDescriptor read GetVertexDescriptor;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
     function CopyInputData(const Target: Pointer; const Input: TLabColladaInput; const Index: TVkInt32): Pointer;
@@ -859,9 +877,9 @@ function TLabColladaTriangles.GetVertexSize: TVkInt32;
   var src: TLabColladaSource;
 begin
   Result := 0;
-  for i := 0 to _VertexDescripttion.Count - 1 do
+  for i := 0 to _VertexLayout.Count - 1 do
   begin
-    src := TLabColladaSource(_VertexDescripttion[i].Source);
+    src := TLabColladaSource(_VertexLayout[i].Source);
     Result += src.Accessor.Source.ItemSize * src.Accessor.Stride;
   end;
 end;
@@ -869,6 +887,65 @@ end;
 function TLabColladaTriangles.GetIndices: PLabInt32Arr;
 begin
   Result := @_Indices[0];
+end;
+
+function TLabColladaTriangles.GetVertexDescriptor: TLabColladaVertexDescriptor;
+  var CurAttr: TVkInt32;
+  procedure AddInput(const Input: TLabColladaInput);
+    const SemanticMap: array[0..5] of record
+      Name: String;
+      Value: TLabColladaVertexAttributeSemantic;
+    end = (
+      (Name: 'POSITION'; Value: as_position),
+      (Name: 'COLOR'; Value: as_color),
+      (Name: 'NORMAL'; Value: as_normal),
+      (Name: 'TANGENT'; Value: as_tangent),
+      (Name: 'BINORMAL'; Value: as_binormal),
+      (Name: 'TEXCOORD'; Value: as_texcoord)
+    );
+    var Vertices: TLabColladaVertices;
+    var Source: TLabColladaSource;
+    var i: TVkInt32;
+  begin
+    if not Assigned(Input) or not Assigned(Input.Source) then Exit;
+    if Input.Source is TLabColladaVertices then
+    begin
+      Vertices := TLabColladaVertices(Input.Source);
+      for i := 0 to Vertices.Inputs.Count - 1 do
+      begin
+        AddInput(Vertices.Inputs[i]);
+      end;
+    end
+    else if Input.Source is TLabColladaSource then
+    begin
+      Source := TLabColladaSource(Input.Source);
+      if Source.DataArray.ArrayType in [at_bool, at_float, at_int] then
+      begin
+        for i := 0 to High(SemanticMap) do
+        if SemanticMap[i].Name = Input.Semantic then
+        begin
+          Result[CurAttr].Semantic := SemanticMap[i].Value;
+          Result[CurAttr].DataType := Source.DataArray.ArrayType;
+          Result[CurAttr].DataCount := Source.Accessor.Stride;
+          Result[CurAttr].SetNumber := Input.InputSet;
+          Inc(CurAttr);
+          Break;
+        end;
+      end;
+    end;
+  end;
+  var i: TVkInt32;
+begin
+  SetLength(Result, Inputs.Count);
+  CurAttr := 0;
+  for i := 0 to Inputs.Count - 1 do
+  begin
+    AddInput(Inputs[i]);
+  end;
+  if Length(Result) <> CurAttr then
+  begin
+    SetLength(Result, CurAttr);
+  end;
 end;
 
 procedure TLabColladaTriangles.InitializeObject;
@@ -887,13 +964,13 @@ procedure TLabColladaTriangles.InitializeObject;
     end
     else
     begin
-      _VertexDescripttion.Add(Input);
+      _VertexLayout.Add(Input);
     end;
   end;
   var i: TVkInt32;
 begin
   inherited InitializeObject;
-  _VertexDescripttion.Clear;
+  _VertexLayout.Clear;
   for i := 0 to _Inputs.Count - 1 do
   begin
     ProcessInput(_Inputs[i]);
@@ -912,7 +989,7 @@ begin
   _MaterialRef := FindAttribute(XMLNode, 'material');
   _Count := StrToIntDef(AnsiString(FindAttribute(XMLNode, 'count')), 0);
   _Inputs := TLabColladaInputList.Create;
-  _VertexDescripttion := TLabColladaInputList.Create;
+  _VertexLayout := TLabColladaInputList.Create;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
@@ -938,7 +1015,7 @@ end;
 
 destructor TLabColladaTriangles.Destroy;
 begin
-  _VertexDescripttion.Free;
+  _VertexLayout.Free;
   while _Inputs.Count > 0 do _Inputs.Pop.Free;
   _Inputs.Free;
   inherited Destroy;
