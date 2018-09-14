@@ -54,8 +54,6 @@ type
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
-    //var VertexShader: TLabSceneVertexShaderShared;
-    //var PixelShader: TLabScenePixelShaderShared;
     var FrameBuffers: TLabFrameBuffers;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
@@ -176,13 +174,9 @@ begin
       )
     ]
   );
-  //VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
-  //PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/skull.dae');
-  //VertexShader := TLabSceneShaderFactory.MakeVertexShader(Scene);
-  //PixelShader := TLabSceneShaderFactory.MakePixelShader(Scene);
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
@@ -240,8 +234,6 @@ begin
   DescriptorSets := nil;
   DescriptorPool := nil;
   FrameBuffers := nil;
-  //PixelShader := nil;
-  //VertexShader := nil;
   RenderPass := nil;
   PipelineLayout := nil;
   DescriptorSetLayout := nil;

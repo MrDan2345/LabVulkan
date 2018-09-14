@@ -93,10 +93,34 @@ begin
     _Hash := LabCRC32(_Hash, @ASubpasses[i].Flags, SizeOf(ASubpasses[i].Flags));
     _Hash := LabCRC32(_Hash, @ASubpasses[i].PipelineBindPoint, SizeOf(ASubpasses[i].PipelineBindPoint));
     _Hash := LabCRC32(_Hash, @ASubpasses[i].DepthStencilAttachment, SizeOf(ASubpasses[i].DepthStencilAttachment));
-    _Hash := LabCRC32(_Hash, @ASubpasses[i].ColorAttachments[0], Length(ASubpasses[i].ColorAttachments) * SizeOf(TVkAttachmentReference));
-    _Hash := LabCRC32(_Hash, @ASubpasses[i].InputAttachments[0], Length(ASubpasses[i].InputAttachments) * SizeOf(TVkAttachmentReference));
-    _Hash := LabCRC32(_Hash, @ASubpasses[i].PreserveAttachments[0], Length(ASubpasses[i].PreserveAttachments) * SizeOf(TVkUInt32));
-    _Hash := LabCRC32(_Hash, @ASubpasses[i].ResolveAttachments[0], Length(ASubpasses[i].ResolveAttachments) * SizeOf(TVkAttachmentReference));
+    if Length(ASubpasses[i].ColorAttachments) > 0 then
+    begin
+      _Hash := LabCRC32(
+        _Hash, @ASubpasses[i].ColorAttachments[0],
+        Length(ASubpasses[i].ColorAttachments) * SizeOf(TVkAttachmentReference)
+      );
+    end;
+    if Length(ASubpasses[i].InputAttachments) > 0 then
+    begin
+      _Hash := LabCRC32(
+        _Hash, @ASubpasses[i].InputAttachments[0],
+        Length(ASubpasses[i].InputAttachments) * SizeOf(TVkAttachmentReference)
+      );
+    end;
+    if Length(ASubpasses[i].PreserveAttachments) > 0 then
+    begin
+      _Hash := LabCRC32(
+        _Hash, @ASubpasses[i].PreserveAttachments[0],
+        Length(ASubpasses[i].PreserveAttachments) * SizeOf(TVkUInt32)
+      );
+    end;
+    if Length(ASubpasses[i].ResolveAttachments) > 0 then
+    begin
+      _Hash := LabCRC32(
+        _Hash, @ASubpasses[i].ResolveAttachments[0],
+        Length(ASubpasses[i].ResolveAttachments) * SizeOf(TVkAttachmentReference)
+      );
+    end;
   end;
 end;
 

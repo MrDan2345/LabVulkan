@@ -85,9 +85,11 @@ implementation
 
 constructor TLabApp.Create;
 begin
+  //EnableLayerIfAvailable('VK_LAYER_LUNARG_api_dump');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
+  EnableLayerIfAvailable('VK_LAYER_LUNARG_object_tracker');
   OnInitialize := @Initialize;
   OnFinalize := @Finalize;
   OnLoop := @Loop;
@@ -200,7 +202,7 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    LabShaderStages([VertexShader.Ptr, PixelShader.Ptr]),
+    [VertexShader.Ptr, PixelShader.Ptr],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),
