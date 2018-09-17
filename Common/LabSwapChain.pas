@@ -61,7 +61,7 @@ type
       )
     );
     destructor Destroy; override;
-    function AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
+    function AcquireNextImage(const Semaphore: TLabSemaphoreShared; var ImageIndex: TVkUInt32): TVkResult;
   end;
   TLabSwapChainShared = specialize TLabSharedRef<TLabSwapChain>;
 
@@ -339,17 +339,15 @@ begin
   LabLog('TLabSwapChain.Destroy');
 end;
 
-function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkUInt32;
+function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared; var ImageIndex: TVkUInt32): TVkResult;
 begin
-  LabAssertVkError(
-    Vulkan.AcquireNextImageKHR(
-      _Device.Ptr.VkHandle,
-      _Handle,
-      High(TVkUInt64),
-      Semaphore.Ptr.VkHandle,
-      VK_NULL_HANDLE,
-      @Result
-    )
+  Result := Vulkan.AcquireNextImageKHR(
+    _Device.Ptr.VkHandle,
+    _Handle,
+    High(TVkUInt64),
+    Semaphore.Ptr.VkHandle,
+    VK_NULL_HANDLE,
+    @ImageIndex
   );
 end;
 

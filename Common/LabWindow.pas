@@ -16,6 +16,7 @@ type
   TLabWindow = class;
 
   TLabWindowProc = procedure (const Window: TLabWindow) of Object;
+  TLabWindowMode = (wm_normal, wm_minimized, wm_maximized);
 
   TLabWindow = class (TLabClass)
   private
@@ -23,6 +24,7 @@ type
     class var _WndClassName: AnsiString;
     var _Width: Integer;
     var _Height: Integer;
+    var _Mode: TLabWindowMode;
     var _Handle: HWND;
     var _Instance: HINST;
     var _Caption: AnsiString;
@@ -35,6 +37,7 @@ type
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
+    procedure Resize(const NewWidth, NewHeight: Integer; const NewMode: TLabWindowMode);
   public
     class constructor CreateClass;
     class destructor DestroyClass;
@@ -48,6 +51,7 @@ type
     property Height: Integer read _Height;
     property Caption: AnsiString read _Caption write SetCaption;
     property Handle: HWND read _Handle;
+    property Mode: TLabWindowMode read _Mode;
     property Instance: HINST read _Instance;
     property OnCreate: TLabWindowProc read _OnCreate write _OnCreate;
     property OnClose: TLabWindowProc read _OnClose write _OnClose;
@@ -60,12 +64,14 @@ implementation
 
 function LabMessageHandler(Wnd: HWnd; Msg: UInt; wParam: WPARAM; lParam: LPARAM): LResult; stdcall;
   var Window: TLabWindow;
+  var Mode: TLabWindowMode;
 begin
+  Window := TLabWindow(GetWindowLongPtrA(Wnd, GWLP_USERDATA));
+  if not Assigned(Window) then Exit;
   case Msg of
     WM_DESTROY, WM_QUIT, WM_CLOSE:
     begin
-      Window := TLabWindow(GetWindowLongPtrA(Wnd, GWLP_USERDATA));
-      if Assigned(Window) then Window.Close;
+      Window.Close;
     end;
     WM_CHAR:
     begin
@@ -126,11 +132,12 @@ begin
     end;
     WM_SIZE:
     begin
-      //if wParam <> SIZE_MINIMIZED then
-      //begin
-      //  if wParam = SIZE_MAXIMIZED then WindowMode := 1 else WindowMode := 0;
-      //  g2.Window.AddMessage(@g2.Window.OnResize, WindowMode, lParam and $ffff, (lParam shr 16) and $ffff);
-      //end;
+      case wParam of
+        SIZE_MINIMIZED: Mode := wm_minimized;
+        SIZE_MAXIMIZED: Mode := wm_maximized;
+        else Mode := wm_normal;
+      end;
+      Window.Resize(lParam and $ffff, (lParam shr 16) and $ffff, Mode);
     end;
   end;
   Result := DefWindowProc(Wnd, Msg, wParam, lParam);
@@ -198,6 +205,13 @@ begin
   if Assigned(_OnClose) then _OnClose(Self);
 end;
 
+procedure TLabWindow.Resize(const NewWidth, NewHeight: Integer; const NewMode: TLabWindowMode);
+begin
+  _Mode := NewMode;
+  _Width := NewWidth;
+  _Height := NewHeight;
+end;
+
 class constructor TLabWindow.CreateClass;
 begin
   LabLog('TLabWindow.CreateClass');
@@ -240,6 +254,7 @@ begin
   inherited Create;
   _Width := NewWidth;
   _Height := NewHeight;
+  _Mode := wm_normal;
   Initialize;
 end;
 

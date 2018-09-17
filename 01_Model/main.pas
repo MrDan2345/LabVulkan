@@ -226,6 +226,7 @@ end;
 
 procedure TLabApp.Finalize;
 begin
+  Device.Ptr.WaitIdle;
   Scene.Free;
   Fence := nil;
   Semaphore := nil;
@@ -259,6 +260,7 @@ procedure TLabApp.Loop;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
+  if Window.Mode = wm_minimized then Exit;
   with Transforms do
   begin
     Model := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
