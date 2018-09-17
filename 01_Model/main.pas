@@ -48,13 +48,13 @@ type
     var CmdBuffer: TLabCommandBufferShared;
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
-    var DepthBuffer: TLabDepthBufferShared;
+    var DepthBuffers: array of TLabDepthBufferShared;
+    var FrameBuffers: array of TLabFrameBufferShared;
     var UniformBuffer: TLabUniformBufferShared;
     var DescriptorSetLayout: TLabDescriptorSetLayoutShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
-    var FrameBuffers: TLabFrameBuffers;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -67,6 +67,9 @@ type
       MVP: TLabMat;
     end;
     constructor Create;
+    procedure SwapchainCreate;
+    procedure SwapchainDestroy;
+    procedure UpdateTransforms;
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
@@ -112,33 +115,15 @@ begin
   inherited Create;
 end;
 
-procedure TLabApp.Initialize;
-  var fov: TVkFloat;
-  var ColladaParser: TLabColladaParser;
+procedure TLabApp.SwapchainCreate;
+  var i: Integer;
 begin
-  ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
-  ColladaParser.RootNode.Dump;
-  ColladaParser.Free;
-  Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Model';
-  Device := TLabDevice.Create(
-    PhysicalDevices[0],
-    [
-      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT))),
-      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT)))
-    ],
-    [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
-  );
-  Surface := TLabSurface.Create(Window);
   SwapChain := TLabSwapChain.Create(Device, Surface);
-  CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
-  CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  DepthBuffer := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
-  DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
-  );
-  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
+  SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
+  for i := 0 to SwapChain.Ptr.ImageCount - 1 do
+  begin
+    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
+  end;
   RenderPass := TLabRenderPass.Create(
     Device,
     [
@@ -154,7 +139,7 @@ begin
         0
       ),
       LabAttachmentDescription(
-        DepthBuffer.Ptr.Format,
+        DepthBuffers[0].Ptr.Format,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -174,7 +159,71 @@ begin
       )
     ]
   );
-  FrameBuffers := LabFrameBuffers(Device, RenderPass.Ptr, SwapChain.Ptr, DepthBuffer.Ptr);
+  SetLength(FrameBuffers, SwapChain.Ptr.ImageCount);
+  for i := 0 to SwapChain.Ptr.ImageCount - 1 do
+  begin
+    FrameBuffers[i] := TLabFrameBuffer.Create(
+      Device, RenderPass.Ptr,
+      SwapChain.Ptr.Width, SwapChain.Ptr.Height,
+      [SwapChain.Ptr.Images[i]^.View.VkHandle, DepthBuffers[i].Ptr.View.VkHandle]
+    );
+  end;
+end;
+
+procedure TLabApp.SwapchainDestroy;
+begin
+  FrameBuffers := nil;
+  DepthBuffers := nil;
+  RenderPass := nil;
+  SwapChain := nil;
+end;
+
+procedure TLabApp.UpdateTransforms;
+  var fov: TVkFloat;
+begin
+  fov := LabDegToRad * 45;
+  with Transforms do
+  begin
+    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, -1, 0));
+    Model := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
+    // Vulkan clip space has inverted Y and half Z.
+    Clip := LabMat(
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 0.5, 0,
+      0, 0, 0.5, 1
+    );
+    MVP := Model * View * Projection * Clip;
+  end;
+end;
+
+procedure TLabApp.Initialize;
+  var fov: TVkFloat;
+  var ColladaParser: TLabColladaParser;
+begin
+  ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
+  ColladaParser.RootNode.Dump;
+  ColladaParser.Free;
+  Window := TLabWindow.Create(500, 500);
+  Window.Caption := 'Vulkan Model';
+  Device := TLabDevice.Create(
+    PhysicalDevices[0],
+    [
+      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT))),
+      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT)))
+    ],
+    [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
+  );
+  Surface := TLabSurface.Create(Window);
+  SwapChainCreate;
+  CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
+  CmdBuffer := TLabCommandBuffer.Create(CmdPool);
+  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
+  DescriptorSetLayout := TLabDescriptorSetLayout.Create(
+    Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
+  );
+  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/skull.dae');
   DescriptorPool := TLabDescriptorPool.Create(
@@ -203,30 +252,12 @@ begin
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
-  fov := LabDegToRad * 45;
-  if (Window.Width > Window.Height) then
-  begin
-    fov *= Window.Height / Window.Width;
-  end;
-  with Transforms do
-  begin
-    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, -1, 0));
-    Model := LabMatIdentity;
-    // Vulkan clip space has inverted Y and half Z.
-    Clip := LabMat(
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 0.5, 0,
-      0, 0, 0.5, 1
-    );
-    MVP := Model * View * Projection * Clip;
-  end;
 end;
 
 procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
+  SwapchainDestroy;
   Scene.Free;
   Fence := nil;
   Semaphore := nil;
@@ -234,15 +265,11 @@ begin
   PipelineCache := nil;
   DescriptorSets := nil;
   DescriptorPool := nil;
-  FrameBuffers := nil;
-  RenderPass := nil;
   PipelineLayout := nil;
   DescriptorSetLayout := nil;
   UniformBuffer := nil;
-  DepthBuffer := nil;
   CmdBuffer := nil;
   CmdPool := nil;
-  SwapChain := nil;
   Surface := nil;
   Device := nil;
   Window.Free;
@@ -257,23 +284,34 @@ procedure TLabApp.Loop;
   var vb: TLabVertexBuffer;
   var vs: TLabSceneVertexShader;
   var ps: TLabScenePixelShader;
+  var r: TVkResult;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
   if Window.Mode = wm_minimized then Exit;
-  with Transforms do
+  UpdateTransforms;
+  UniformData := nil;
+  if (UniformBuffer.Ptr.Map(UniformData)) then
   begin
-    Model := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
-    MVP := Model * View * Projection * Clip;
-    UniformData := nil;
-    if (UniformBuffer.Ptr.Map(UniformData)) then
-    begin
-      Move(MVP, UniformData^, SizeOf(MVP));
-      UniformBuffer.Ptr.Unmap;
-    end;
+    Move(Transforms.MVP, UniformData^, SizeOf(Transforms.MVP));
+    UniformBuffer.Ptr.Unmap;
   end;
   CmdBuffer.Ptr.RecordBegin();
-  cur_buffer := SwapChain.Ptr.AcquireNextImage(Semaphore);
+  r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
+  if (r = VK_ERROR_OUT_OF_DATE_KHR)
+  or (SwapChain.Ptr.Width <> Window.Width)
+  or (SwapChain.Ptr.Height <> Window.Height) then
+  begin
+    LabLogVkError(r);
+    Device.Ptr.WaitIdle;
+    SwapchainDestroy;
+    SwapchainCreate;
+    Exit;
+  end
+  else
+  begin
+    LabAssertVkError(r);
+  end;
   CmdBuffer.Ptr.BeginRenderPass(
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]

@@ -67,7 +67,7 @@ function LabMessageHandler(Wnd: HWnd; Msg: UInt; wParam: WPARAM; lParam: LPARAM)
   var Mode: TLabWindowMode;
 begin
   Window := TLabWindow(GetWindowLongPtrA(Wnd, GWLP_USERDATA));
-  if not Assigned(Window) then Exit;
+  if not Assigned(Window) then Exit(DefWindowProc(Wnd, Msg, wParam, lParam));
   case Msg of
     WM_DESTROY, WM_QUIT, WM_CLOSE:
     begin

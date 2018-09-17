@@ -65,6 +65,7 @@ type
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
+    procedure UpdateTransforms;
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
@@ -160,13 +161,35 @@ procedure TLabApp.SwapchainDestroy;
 begin
   FrameBuffers := nil;
   DepthBuffers := nil;
-  //CmdBuffer := nil;
   RenderPass := nil;
   SwapChain := nil;
 end;
 
-procedure TLabApp.Initialize;
+procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
+begin
+  fov := LabDegToRad * 45;
+  if (Window.Width > Window.Height) then
+  begin
+    fov *= Window.Height / Window.Width;
+  end;
+  with Transforms do
+  begin
+    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
+    Model := LabMatRotationY(LabTimeSec);
+    // Vulkan clip space has inverted Y and half Z.
+    Clip := LabMat(
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 0.5, 0,
+      0, 0, 0.5, 1
+    );
+    MVP := Model * View * Projection * Clip;
+  end;
+end;
+
+procedure TLabApp.Initialize;
   var map: PVkVoid;
 begin
   Window := TLabWindow.Create(500, 500);
@@ -252,25 +275,6 @@ begin
   );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
-  fov := LabDegToRad * 45;
-  if (Window.Width > Window.Height) then
-  begin
-    fov *= Window.Height / Window.Width;
-  end;
-  with Transforms do
-  begin
-    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
-    Model := LabMatIdentity;
-    // Vulkan clip space has inverted Y and half Z.
-    Clip := LabMat(
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 0.5, 0,
-      0, 0, 0.5, 1
-    );
-    MVP := Model * View * Projection * Clip;
-  end;
 end;
 
 procedure TLabApp.Finalize;
@@ -308,19 +312,17 @@ procedure TLabApp.Loop;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
-  with Transforms do
+  UpdateTransforms;
+  UniformData := nil;
+  if (UniformBuffer.Ptr.Map(UniformData)) then
   begin
-    Model := LabMatRotationY(LabTimeSec);
-    MVP := Model * View * Projection * Clip;
-    UniformData := nil;
-    if (UniformBuffer.Ptr.Map(UniformData)) then
-    begin
-      Move(MVP, UniformData^, SizeOf(MVP));
-      UniformBuffer.Ptr.Unmap;
-    end;
+    Move(Transforms.MVP, UniformData^, SizeOf(Transforms.MVP));
+    UniformBuffer.Ptr.Unmap;
   end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
-  if r = VK_ERROR_OUT_OF_DATE_KHR then
+  if (r = VK_ERROR_OUT_OF_DATE_KHR)
+  or (SwapChain.Ptr.Width <> Window.Width)
+  or (SwapChain.Ptr.Height <> Window.Height) then
   begin
     LabLogVkError(r);
     Device.Ptr.WaitIdle;
