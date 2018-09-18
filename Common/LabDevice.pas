@@ -52,8 +52,8 @@ constructor TLabDevice.Create(
   var queue_create_infos: array of TVkDeviceQueueCreateInfo;
   var device_create_info: TVkDeviceCreateInfo;
   var device_extensions: array of AnsiString;
-  var add_swapchain_extension: Boolean;
-  var i: Integer;
+  var add_swapchain_extension, add_quieue_request: Boolean;
+  var i, j, request_queue_count: Integer;
 begin
   LabLog('TLabDevice.Create');
   LabLogOffset(2);
@@ -74,13 +74,23 @@ begin
     LabLogOffset(-2);
   end;
   SetLength(queue_create_infos, Length(ARequestedQueues));
+  request_queue_count := 0;
   for i := 0 to High(ARequestedQueues) do
   begin
-    LabZeroMem(@queue_create_infos[i], SizeOf(TVkDeviceQueueCreateInfo));
-    queue_create_infos[i].sType := VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_infos[i].queueFamilyIndex := ARequestedQueues[i].FamilyIndex;
-    queue_create_infos[i].queueCount := ARequestedQueues[i].QueueCount;
-    queue_create_infos[i].pQueuePriorities := @ARequestedQueues[i].Priority;
+    add_quieue_request := True;
+    for j := i - 1 downto 0 do
+    if ARequestedQueues[j].FamilyIndex = ARequestedQueues[i].FamilyIndex then
+    begin
+      add_quieue_request := False;
+      Break;
+    end;
+    if not add_quieue_request then Continue;
+    LabZeroMem(@queue_create_infos[request_queue_count], SizeOf(TVkDeviceQueueCreateInfo));
+    queue_create_infos[request_queue_count].sType := VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_infos[request_queue_count].queueFamilyIndex := ARequestedQueues[i].FamilyIndex;
+    queue_create_infos[request_queue_count].queueCount := ARequestedQueues[i].QueueCount;
+    queue_create_infos[request_queue_count].pQueuePriorities := @ARequestedQueues[i].Priority;
+    Inc(request_queue_count);
   end;
   add_swapchain_extension := True;
   SetLength(device_extensions, Length(ADeviceExtensions));
@@ -101,7 +111,7 @@ begin
   end;
   LabZeroMem(@device_create_info, SizeOf(TVkDeviceCreateInfo));
   device_create_info.sType := VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.queueCreateInfoCount := Length(queue_create_infos);
+  device_create_info.queueCreateInfoCount := request_queue_count;
   device_create_info.pQueueCreateInfos := @queue_create_infos[0];
   device_create_info.pEnabledFeatures := _PhysicalDevice.Ptr.Features;
   if LabCheckDeviceExtensionPresent(_PhysicalDevice.Ptr.VkHandle, VK_EXT_DEBUG_MARKER_EXTENSION_NAME) then

@@ -177,7 +177,7 @@ begin
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
-    Model := LabMatRotationY(LabTimeSec);
+    Model := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
@@ -288,17 +288,13 @@ begin
   DescriptorSets := nil;
   DescriptorPool := nil;
   VertexBuffer := nil;
-  //FrameBuffers := nil;
   PixelShader := nil;
   VertexShader := nil;
-  //RenderPass := nil;
   PipelineLayout := nil;
   DescriptorSetLayout := nil;
   UniformBuffer := nil;
-  //DepthBuffers := nil;
   CmdBuffer := nil;
   CmdPool := nil;
-  //SwapChain := nil;
   Surface := nil;
   Device := nil;
   Window.Free;
@@ -312,6 +308,13 @@ procedure TLabApp.Loop;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
+  if (SwapChain.Ptr.Width <> Window.Width)
+  or (SwapChain.Ptr.Height <> Window.Height) then
+  begin
+    Device.Ptr.WaitIdle;
+    SwapchainDestroy;
+    SwapchainCreate;
+  end;
   UpdateTransforms;
   UniformData := nil;
   if (UniformBuffer.Ptr.Map(UniformData)) then
@@ -320,10 +323,7 @@ begin
     UniformBuffer.Ptr.Unmap;
   end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
-  if (r = VK_ERROR_OUT_OF_DATE_KHR)
-  or (r = VK_SUBOPTIMAL_KHR)
-  or (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
     Device.Ptr.WaitIdle;

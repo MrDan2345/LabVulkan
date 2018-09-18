@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="10"/>
+    <BuildModes Active="Default"/>
+    <Units Count="12">
+      <Unit0>
+        <Filename Value="project1.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <TopLine Value="10"/>
+        <CursorPos X="25" Y="32"/>
+        <UsageCount Value="23"/>
+        <Loaded Value="True"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="main.pas"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="171"/>
+        <CursorPos X="94" Y="189"/>
+        <UsageCount Value="12"/>
+        <Loaded Value="True"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="..\Common\LabVulkan.pas"/>
+        <EditorIndex Value="8"/>
+        <TopLine Value="331"/>
+        <CursorPos X="31" Y="347"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\inc\objpash.inc"/>
+        <EditorIndex Value="11"/>
+        <TopLine Value="179"/>
+        <CursorPos X="11" Y="194"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="..\Vulkan.pas"/>
+        <EditorIndex Value="10"/>
+        <TopLine Value="2439"/>
+        <CursorPos X="30" Y="2459"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="..\Common\LabPhysicalDevice.pas"/>
+        <EditorIndex Value="9"/>
+        <TopLine Value="70"/>
+        <CursorPos Y="87"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="..\Common\LabDevice.pas"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="38"/>
+        <CursorPos X="56" Y="85"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="..\Common\LabSync.pas"/>
+        <EditorIndex Value="6"/>
+        <TopLine Value="83"/>
+        <CursorPos X="103" Y="101"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="..\Common\LabSwapChain.pas"/>
+        <EditorIndex Value="5"/>
+        <TopLine Value="322"/>
+        <CursorPos X="5" Y="322"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="..\Common\LabPlatform.pas"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="16"/>
+        <CursorPos X="52" Y="45"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit9>
+      <Unit10>
+        <Filename Value="..\Common\LabMath.pas"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="446"/>
+        <CursorPos X="56" Y="462"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit10>
+      <Unit11>
+        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\sysutils\sysutilh.inc"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="12"/>
+        <CursorPos X="10" Y="28"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit11>
+    </Units>
+  </ProjectSession>
+</CONFIG>

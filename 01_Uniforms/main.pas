@@ -177,7 +177,7 @@ begin
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
-    World := LabMatRotationY(LabTimeSec);
+    World := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
@@ -197,8 +197,7 @@ begin
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
-      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT))),
-      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT)))
+      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT)))
     ],
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
@@ -308,6 +307,13 @@ procedure TLabApp.Loop;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive then Exit;
+  if (SwapChain.Ptr.Width <> Window.Width)
+  or (SwapChain.Ptr.Height <> Window.Height) then
+  begin
+    Device.Ptr.WaitIdle;
+    SwapchainDestroy;
+    SwapchainCreate;
+  end;
   UpdateTransforms;
   UniformData := nil;
   if (UniformBuffer.Ptr.Map(UniformData)) then
@@ -316,10 +322,7 @@ begin
     UniformBuffer.Ptr.Unmap;
   end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
-  if (r = VK_ERROR_OUT_OF_DATE_KHR)
-  or (r = VK_SUBOPTIMAL_KHR)
-  or (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
     Device.Ptr.WaitIdle;

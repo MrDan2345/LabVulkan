@@ -261,6 +261,16 @@ begin
 end;
 
 constructor TLabVulkan.Create;
+  function GetDeviceTypeName(const DeviceType: TVkPhysicalDeviceType): String;
+  begin
+    case DeviceType of
+      VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: Exit('Integrated GPU');
+      VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: Exit('Discrete GPU');
+      VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: Exit('Virtual GPU');
+      VK_PHYSICAL_DEVICE_TYPE_CPU: Exit('CPU');
+    end;
+    Exit('OTHER');
+  end;
   var app_info: TVkApplicationInfo;
   var inst_info: TVkInstanceCreateInfo;
   var inst_commands: TVulkanCommands;
@@ -326,9 +336,43 @@ begin
   _PhysicalDevices.Allocate(physical_device_count);
   SetLength(physical_device_arr, physical_device_count);
   LabAssertVkError(Vulkan.EnumeratePhysicalDevices(_VulkanInstance, @physical_device_count, @physical_device_arr[0]));
+  LabLog('Physical device count = ' + IntToStr(_PhysicalDevices.Count));
   for i := 0 to physical_device_count - 1 do
   begin
     _PhysicalDevices[i] := TLabPhysicalDevice.Create(physical_device_arr[i]);
+    LabLog('Physical device[' + IntToStr(i) + ']:', 2);
+    LabLog('API Version = ' + IntToStr(_PhysicalDevices[i].Ptr.Properties^.apiVersion));
+    LabLog('Device ID = ' + IntToStr(_PhysicalDevices[i].Ptr.Properties^.deviceID));
+    LabLog('Device Name = ' + _PhysicalDevices[i].Ptr.Properties^.deviceName);
+    LabLog('Device Type = ' + GetDeviceTypeName(_PhysicalDevices[i].Ptr.Properties^.deviceType));
+    LabLog('Driver Version = ' + IntToStr(_PhysicalDevices[i].Ptr.Properties^.driverVersion));
+    LabLog('Queue family count = ' + IntToStr(_PhysicalDevices[i].Ptr.QueueFamilyCount));
+    for j := 0 to _PhysicalDevices[i].Ptr.QueueFamilyCount - 1 do
+    begin
+      LabLog('Queue family[' + IntToStr(j) + ']:', 2);
+      if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_GRAPHICS_BIT) > 0 then
+      begin
+        LabLog('GRAPHICS');
+      end;
+      if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_COMPUTE_BIT) > 0 then
+      begin
+        LabLog('COMPUTE');
+      end;
+      if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_TRANSFER_BIT) > 0 then
+      begin
+        LabLog('TRANSFER');
+      end;
+      if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_SPARSE_BINDING_BIT) > 0 then
+      begin
+        LabLog('SPARSE BINDING');
+      end;
+      if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_PROTECTED_BIT) > 0 then
+      begin
+        LabLog('PROTECTED');
+      end;
+      LabLogOffset(-2);
+    end;
+    LabLogOffset(-2);
   end;
   if _ExtensionsEnabled.Ptr.Count > 0 then
   begin
@@ -339,7 +383,6 @@ begin
     end;
     LabLogOffset(-2);
   end;
-  LabLog('Physical device count = ' + IntToStr(_PhysicalDevices.Count));
   LabLog('Layer count = ' + IntToStr(Length(_Layers)));
   LabLogOffset(2);
   for i := 0 to High(_Layers) do
