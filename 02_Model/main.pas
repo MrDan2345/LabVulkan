@@ -1,4 +1,4 @@
-unit Main;
+unit main;
 
 {$macro on}
 {$include LabPlatform.inc}
@@ -60,11 +60,10 @@ type
     var PipelineCache: TLabPipelineCacheShared;
     var Scene: TLabScene;
     var Transforms: record
-      Projection: TLabMat;
+      World: TLabMat;
       View: TLabMat;
-      Model: TLabMat;
-      Clip: TLabMat;
-      MVP: TLabMat;
+      Projection: TLabMat;
+      WVP: TLabMat;
     end;
     constructor Create;
     procedure SwapchainCreate;
@@ -180,13 +179,14 @@ end;
 
 procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
+  var Clip: TLabMat;
 begin
   fov := LabDegToRad * 45;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
     View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, -1, 0));
-    Model := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
+    World := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY(LabTimeSec);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
@@ -194,7 +194,7 @@ begin
       0, 0, 0.5, 0,
       0, 0, 0.5, 1
     );
-    MVP := Model * View * Projection * Clip;
+    WVP := World * View * Projection * Clip;
   end;
 end;
 
@@ -219,7 +219,7 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
+  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
   DescriptorSetLayout := TLabDescriptorSetLayout.Create(
     Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
   );
@@ -293,12 +293,13 @@ begin
   UniformData := nil;
   if (UniformBuffer.Ptr.Map(UniformData)) then
   begin
-    Move(Transforms.MVP, UniformData^, SizeOf(Transforms.MVP));
+    Move(Transforms, UniformData^, SizeOf(Transforms));
     UniformBuffer.Ptr.Unmap;
   end;
   CmdBuffer.Ptr.RecordBegin();
   r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
   if (r = VK_ERROR_OUT_OF_DATE_KHR)
+  or (r = VK_SUBOPTIMAL_KHR)
   or (SwapChain.Ptr.Width <> Window.Width)
   or (SwapChain.Ptr.Height <> Window.Height) then
   begin

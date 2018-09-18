@@ -201,9 +201,12 @@ class function TLabSceneShaderFactory.MakeVertexShader(
   var ShaderCode: String = '#version 400'#$D#$A +
     '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
     '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
-    'layout (std140, binding = 0) uniform t_unif {'#$D#$A +
-    '  mat4 mvp;'#$D#$A +
-    '} unif;'#$D#$A +
+    'layout (std140, binding = 0) uniform t_xf {'#$D#$A +
+    '  mat4 w;'#$D#$A +
+    '  mat4 v;'#$D#$A +
+    '  mat4 p;'#$D#$A +
+    '  mat4 wvp;'#$D#$A +
+    '} xf;'#$D#$A +
     '<$attribs$>' +
     //'layout (location = 0) in vec3 in_position;'#$D#$A +
     //'layout (location = 1) in vec3 in_normal;'#$D#$A +
@@ -217,7 +220,7 @@ class function TLabSceneShaderFactory.MakeVertexShader(
     '<$code$>' +
     //'  out_normal = in_normal;'#$D#$A +
     //'  out_color = in_color;'#$D#$A +
-    //'  gl_Position = unif.mvp * vec4(in_position, 1);'#$D#$A +
+    //'  gl_Position = xf.wvp * vec4(in_position, 1);'#$D#$A +
     '}'
   ;
   var StrAttrIn: String;
@@ -241,10 +244,10 @@ begin
     begin
       case Desc[i].DataCount of
         0: StrCode += '  gl_Position = vec4(0, 0, 0, 1);'#$D#$A;
-        1: StrCode += '  gl_Position = unif.mvp * vec4(in_position, 0, 0, 1);'#$D#$A;
-        2: StrCode += '  gl_Position = unif.mvp * vec4(in_position, 0, 1);'#$D#$A;
-        3: StrCode += '  gl_Position = unif.mvp * vec4(in_position, 1);'#$D#$A;
-        4: StrCode += '  gl_Position = unif.mvp * in_position;'#$D#$A;
+        1: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 0, 0, 1);'#$D#$A;
+        2: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 0, 1);'#$D#$A;
+        3: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 1);'#$D#$A;
+        4: StrCode += '  gl_Position = xf.wvp * in_position;'#$D#$A;
       end;
     end
     else

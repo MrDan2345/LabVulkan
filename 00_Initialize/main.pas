@@ -1,4 +1,4 @@
-unit Main;
+unit main;
 
 {$macro on}
 {$include LabPlatform.inc}
@@ -321,6 +321,7 @@ begin
   end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
   if (r = VK_ERROR_OUT_OF_DATE_KHR)
+  or (r = VK_SUBOPTIMAL_KHR)
   or (SwapChain.Ptr.Width <> Window.Width)
   or (SwapChain.Ptr.Height <> Window.Height) then
   begin
