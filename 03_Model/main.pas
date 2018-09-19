@@ -29,7 +29,8 @@ uses
   LabSync,
   LabColladaParser,
   LabScene,
-  Classes;
+  Classes,
+  sysutils;
 
 type
   TShaderManager = class (TLabClass)
@@ -220,6 +221,16 @@ begin
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(SwapChain.Ptr.QueueFamilyGraphics, [CmdBuffer.Ptr.VkHandle], [], [], VK_NULL_HANDLE);
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
+  for i := 0 to Scene.Root.Children.Count - 1 do
+  begin
+    for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
+    begin
+      for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
+      begin
+        FreeAndNil(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBufferStaging);
+      end;
+    end;
+  end;
 end;
 
 procedure TLabApp.Initialize;

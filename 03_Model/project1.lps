@@ -10,7 +10,7 @@
         <IsPartOfProject Value="True"/>
         <TopLine Value="10"/>
         <CursorPos X="25" Y="32"/>
-        <UsageCount Value="23"/>
+        <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit0>
       <Unit1>
@@ -18,7 +18,7 @@
         <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
         <TopLine Value="199"/>
-        <CursorPos X="52" Y="222"/>
+        <CursorPos X="99" Y="229"/>
         <UsageCount Value="12"/>
         <Loaded Value="True"/>
       </Unit1>
@@ -97,8 +97,8 @@
       <Unit11>
         <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\sysutils\sysutilh.inc"/>
         <EditorIndex Value="6"/>
-        <TopLine Value="12"/>
-        <CursorPos X="10" Y="28"/>
+        <TopLine Value="304"/>
+        <CursorPos X="13" Y="320"/>
         <UsageCount Value="10"/>
         <Loaded Value="True"/>
       </Unit11>
@@ -113,8 +113,8 @@
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="656"/>
-        <CursorPos X="39" Y="671"/>
+        <TopLine Value="81"/>
+        <CursorPos X="7" Y="97"/>
         <UsageCount Value="10"/>
         <Loaded Value="True"/>
       </Unit13>
