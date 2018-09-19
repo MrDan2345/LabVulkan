@@ -52,6 +52,7 @@ type
     var VertexShader: TLabShaderShared;
     var PixelShader: TLabShaderShared;
     var VertexBuffer: TLabVertexBufferShared;
+    var VertexBufferStaging: TLabBufferShared;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -66,6 +67,7 @@ type
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
     procedure UpdateTransforms;
+    procedure TransferBuffers;
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
@@ -189,6 +191,22 @@ begin
   end;
 end;
 
+procedure TLabApp.TransferBuffers;
+begin
+  CmdBuffer.Ptr.RecordBegin;
+  CmdBuffer.Ptr.CopyBuffer(VertexBufferStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
+  CmdBuffer.Ptr.RecordEnd;
+  QueueSubmit(
+    SwapChain.Ptr.QueueFamilyGraphics,
+    [CmdBuffer.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE
+  );
+  QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
+  VertexBufferStaging := nil;
+end;
+
 procedure TLabApp.Initialize;
   var map: PVkVoid;
 begin
@@ -222,13 +240,20 @@ begin
     [
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
-    ]
+    ],
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexBufferStaging := TLabBuffer.Create(
+    Device, VertexBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
   );
   map := nil;
-  if (VertexBuffer.Ptr.Map(map)) then
+  if (VertexBufferStaging.Ptr.Map(map)) then
   begin
     Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
-    VertexBuffer.Ptr.Unmap;
+    VertexBufferStaging.Ptr.Unmap;
   end;
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
@@ -275,6 +300,7 @@ begin
   );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
+  TransferBuffers;
 end;
 
 procedure TLabApp.Finalize;

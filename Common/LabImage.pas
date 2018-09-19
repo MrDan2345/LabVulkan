@@ -48,6 +48,7 @@ type
       const ATiling: TVkImageTiling = VK_IMAGE_TILING_OPTIMAL;
       const AImageType: TVkImageType = VK_IMAGE_TYPE_2D;
       const ASharingMode: TVkSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
       const AFlags: TVkImageCreateFlags = 0
     );
     destructor Destroy; override;
@@ -99,7 +100,10 @@ constructor TLabImage.Create(const ADevice: TLabDeviceShared;
   const AHeight: TVkInt32; const ADepth: TVkInt32; const AMipLevels: TVkInt32;
   const ALayers: TVkInt32; const ASamples: TVkSampleCountFlagBits;
   const ATiling: TVkImageTiling; const AImageType: TVkImageType;
-  const ASharingMode: TVkSharingMode; const AFlags: TVkImageCreateFlags);
+  const ASharingMode: TVkSharingMode;
+  const AMemoryFlags: TVkFlags;
+  const AFlags: TVkImageCreateFlags
+);
   var pass: Boolean;
   var image_info: TVkImageCreateInfo;
   var mem_alloc: TVkMemoryAllocateInfo;
@@ -160,7 +164,7 @@ begin
   mem_alloc.allocationSize := mem_reqs.size;
   pass := _Device.Ptr.MemoryTypeFromProperties(
     mem_reqs.memoryTypeBits,
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    AMemoryFlags,
     mem_alloc.memoryTypeIndex
   );
   assert(pass);
@@ -251,9 +255,11 @@ begin
   inherited Create(
     ADevice,
     depth_format,
-    TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), [],
+    TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT),
+    [],
     AWidth, AHeight, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT,
-    tiling, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE
+    tiling, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   aspect_mask := TVkFlags(VK_IMAGE_ASPECT_DEPTH_BIT);
   if (depth_format = VK_FORMAT_D16_UNORM_S8_UINT)

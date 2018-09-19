@@ -29,8 +29,8 @@ type
       const AUsage: TVkBufferUsageFlags;
       const AQueueFamilyIndices: array of TVkUInt32;
       const ASharingMode: TVkSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-      const AFlags: TVkBufferCreateFlags = 0;
-      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+      const AFlags: TVkBufferCreateFlags = 0
     );
     destructor Destroy; override;
     function Map(
@@ -66,7 +66,9 @@ type
       const ADevice: TLabDeviceShared;
       const ABufferSize: TVkDeviceSize;
       const AStride: TVkUInt32;
-      const Attributes: array of TLabVertexBufferAttributeFormat
+      const AAttributes: array of TLabVertexBufferAttributeFormat;
+      const AUsageFlags: TVkFlags = TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
     );
     destructor Destroy; override;
     procedure SetAttributes(const NewAttributes: array of TLabVertexBufferAttributeFormat);
@@ -121,6 +123,12 @@ function LabVertexInputBindingDescription(
   const InputRate: TVkVertexInputRate = VK_VERTEX_INPUT_RATE_VERTEX
 ): TVkVertexInputBindingDescription;
 
+function LabBufferCopy(
+  const Size: TVkDeviceSize;
+  const SrcOffset: TVkDeviceSize = 0;
+  const DstOffset: TVkDeviceSize = 0
+): TVkBufferCopy;
+
 implementation
 
 function TLabBuffer.GetBufferInfo: PVkDescriptorBufferInfo;
@@ -134,8 +142,8 @@ constructor TLabBuffer.Create(
   const AUsage: TVkBufferUsageFlags;
   const AQueueFamilyIndices: array of TVkUInt32;
   const ASharingMode: TVkSharingMode;
-  const AFlags: TVkBufferCreateFlags;
-  const AMemoryFlags: TVkFlags
+  const AMemoryFlags: TVkFlags;
+  const AFlags: TVkBufferCreateFlags
 );
   var buffer_info: TVkBufferCreateInfo;
   var memory_reqs: TVkMemoryRequirements;
@@ -218,12 +226,15 @@ end;
 
 constructor TLabVertexBuffer.Create(const ADevice: TLabDeviceShared;
   const ABufferSize: TVkDeviceSize; const AStride: TVkUInt32;
-  const Attributes: array of TLabVertexBufferAttributeFormat);
+  const AAttributes: array of TLabVertexBufferAttributeFormat;
+  const AUsageFlags: TVkFlags;
+  const AMemoryFlags: TVkFlags
+);
 begin
   LabLog('TLabVertexBuffer.Create');
-  inherited Create(ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT), []);
+  inherited Create(ADevice, ABufferSize, AUsageFlags, []);
   _Stride := AStride;
-  SetAttributes(Attributes);
+  SetAttributes(AAttributes);
 end;
 
 destructor TLabVertexBuffer.Destroy;
@@ -318,6 +329,18 @@ begin
   Result.binding := Binding;
   Result.stride := Stride;
   Result.inputRate := InputRate;
+end;
+
+function LabBufferCopy(
+  const Size: TVkDeviceSize;
+  const SrcOffset: TVkDeviceSize;
+  const DstOffset: TVkDeviceSize
+): TVkBufferCopy;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.srcOffset := SrcOffset;
+  Result.dstOffset := DstOffset;
+  Result.size := Size;
 end;
 
 end.

@@ -94,6 +94,7 @@ type
     private
       var _Geometry: TLabSceneGeometry;
     public
+      VertexBufferStaging: TLabBuffer;
       VertexBuffer: TLabVertexBuffer;
       VertexCount: TVkInt32;
       VertexShader: TLabSceneVertexShaderShared;
@@ -657,12 +658,22 @@ begin
     );
     Offset += Source.DataArray.ItemSize * Source.Accessor.Stride;
   end;
-  VertexBuffer := TLabVertexBuffer.Create(_Geometry.Scene.Device, Length(Buffer), VStride, Attributes);
+  VertexBuffer := TLabVertexBuffer.Create(
+    _Geometry.Scene.Device,
+    Length(Buffer), VStride, Attributes,
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexBufferStaging := TLabBuffer.Create(
+    _Geometry.Scene.Device, VertexBuffer.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
   MapPtr := nil;
-  if VertexBuffer.Map(MapPtr) then
+  if VertexBufferStaging.Map(MapPtr) then
   begin
     Move(Buffer[0], MapPtr^, Length(Buffer));
-    VertexBuffer.Unmap;
+    VertexBufferStaging.Unmap;
   end;
   Desc := Triangles.VertexDescriptor;
   VertexShader := TLabSceneShaderFactory.MakeVertexShader(_Geometry.Scene, Desc);

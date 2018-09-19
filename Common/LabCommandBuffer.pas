@@ -11,7 +11,8 @@ uses
   LabRenderPass,
   LabFrameBuffer,
   LabPipeline,
-  LabDescriptorSet;
+  LabDescriptorSet,
+  LabBuffer;
 
 type
   TLabCommandBuffer = class (TLabClass)
@@ -64,6 +65,7 @@ type
       const FirstVertex: TVkUInt32 = 0;
       const FirstInstance: TVkUInt32 = 0
     );
+    procedure CopyBuffer(const Src, Dst: TVkBuffer; const Regions: array of TVkBufferCopy);
   end;
   TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
@@ -249,6 +251,10 @@ begin
   Vulkan.CmdDraw(_Handle, VertexCount, InstanceCount, FirstVertex, FirstInstance);
 end;
 
+procedure TLabCommandBuffer.CopyBuffer(const Src, Dst: TVkBuffer; const Regions: array of TVkBufferCopy);
+begin
+  Vulkan.CmdCopyBuffer(_Handle, Src, Dst, Length(Regions), @Regions[0]);
+end;
 //TLabCommandBuffer END
 
 function LabClearValue(const r, g, b, a: TVkFloat): TVkClearValue;

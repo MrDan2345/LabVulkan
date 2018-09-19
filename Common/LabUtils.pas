@@ -4,9 +4,11 @@ interface
 {$modeswitch advancedrecords}
 
 uses
+  Classes,
   SysUtils,
   Vulkan,
-  LabTypes;
+  LabTypes,
+  LabMath;
 
 type
   generic TLabList<T> = class (TLabClass)
@@ -97,6 +99,72 @@ type
     procedure Sort(const CmpFunc: TCmpFuncObj; RangeStart, RangeEnd: Integer); overload;
     procedure Sort(const CmpFunc: TCmpFunc); overload;
     procedure Sort(const CmpFunc: TCmpFuncObj); overload;
+  end;
+
+  TLabStreamHelper = class
+  private
+    var _Stream: TStream;
+    function GetSize: TVkInt64; inline;
+    function GetPosition: TVkInt64; inline;
+  public
+    property Stream: TStream read _Stream;
+    property Size: TVkInt64 read GetSize;
+    property Position: TVkInt64 read GetPosition;
+    function ReadBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64; inline;
+    function ReadBool: Boolean; inline;
+    function ReadUInt8: TVkUInt8; inline;
+    function ReadUInt16: TVkUInt16; inline;
+    function ReadUInt32: TVkUInt32; inline;
+    function ReadInt8: TVkInt8; inline;
+    function ReadInt16: TVkInt16; inline;
+    function ReadInt32: TVkInt32; inline;
+    function ReadInt64: TVkInt64; inline;
+    function ReadFloat: TVkFloat; inline;
+    function ReadDouble: TVkDouble; inline;
+    function ReadColor: TLabColor; inline;
+    function ReadStringA: AnsiString; inline;
+    function ReadStringANT: AnsiString; inline;
+    function ReadVec2: TLabVec2; inline;
+    function ReadVec3: TLabVec3; inline;
+    function ReadVec4: TLabVec4; inline;
+    function ReadMat4x4: TLabMat; inline;
+    function ReadMat4x3: TLabMat; inline;
+    function ReadMat3x3: TLabMat; inline;
+    function WriteBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64; inline;
+    procedure WriteBool(const Value: Boolean); inline;
+    procedure WriteUInt8(const Value: TVkUInt8); inline;
+    procedure WriteUInt16(const Value: TVkUInt16); inline;
+    procedure WriteUInt32(const Value: TVkUInt32); inline;
+    procedure WriteInt8(const Value: TVkInt8); inline;
+    procedure WriteInt16(const Value: TVkInt16); inline;
+    procedure WriteInt32(const Value: TVkInt32); inline;
+    procedure WriteInt64(const Value: TVkInt64); inline;
+    procedure WriteFloat(const Value: TVkFloat); inline;
+    procedure WriteDouble(const Value: TVkDouble); inline;
+    procedure WriteColor(const Value: TLabColor); inline;
+    procedure WriteStringARaw(const Value: AnsiString); inline;
+    procedure WriteStringA(const Value: AnsiString); inline;
+    procedure WriteStringANT(const Value: AnsiString); inline;
+    procedure WriteVec2(const Value: TLabVec2); inline;
+    procedure WriteVec3(const Value: TLabVec3); inline;
+    procedure WriteVec4(const Value: TLabVec4); inline;
+    procedure Skip(const Count: TVkInt64); inline;
+    constructor Create(const AStream: TStream);
+    destructor Destroy; override;
+  end;
+
+  TLabConstMemoryStream = class (TStream)
+  private
+    var _Memory: Pointer;
+    var _Size: Int64;
+    var _Position: Int64;
+  protected
+    function GetSize: Int64; override;
+    function GetPosition: Int64; override;
+  public
+    function Read(var Buffer; Count: LongInt): LongInt; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    constructor Create(const Buffer: Pointer; const BufferSize: LongWord);
   end;
 
   TLabListString = specialize TLabList<AnsiString>;
@@ -631,6 +699,298 @@ begin
   Sort(CmpFunc, 0, _ItemCount - 1);
 end;
 //TLabRefList END
+
+//TLabStreamHelper BEGIN
+function TLabStreamHelper.GetSize: TVkInt64;
+begin
+  Result := _Stream.Size;
+end;
+
+function TLabStreamHelper.GetPosition: TVkInt64;
+begin
+  Result := _Stream.Position;
+end;
+
+function TLabStreamHelper.ReadBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64;
+begin
+  Result := Stream.Read(Buffer^, Count);
+end;
+
+function TLabStreamHelper.ReadBool: Boolean;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadUInt8: TVkUInt8;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadUInt16: TVkUInt16;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadUInt32: TVkUInt32;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadInt8: TVkInt8;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadInt16: TVkInt16;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadInt32: TVkInt32;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadInt64: TVkInt64;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadFloat: TVkFloat;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadDouble: TVkDouble;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadColor: TLabColor;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadStringA: AnsiString;
+  var l: TVkUInt32;
+begin
+  l := ReadUInt32;
+  SetLength(Result, l);
+  ReadBuffer(@Result[1], l);
+end;
+
+function TLabStreamHelper.ReadStringANT: AnsiString;
+  var b: TVkUInt8;
+begin
+  Result := '';
+  b := ReadUInt8;
+  while b <> 0 do
+  begin
+    Result += AnsiChar(b);
+    b := ReadUInt8;
+  end;
+end;
+
+function TLabStreamHelper.ReadVec2: TLabVec2;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadVec3: TLabVec3;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadVec4: TLabVec4;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+function TLabStreamHelper.ReadMat4x4: TLabMat;
+begin
+  Stream.Read(Result, SizeOf(Result));
+end;
+
+{$Warnings off}
+function TLabStreamHelper.ReadMat4x3: TLabMat;
+  var m4x3: array[0..3, 0..2] of TVkFloat;
+begin
+  ReadBuffer(@m4x3, SizeOf(m4x3));
+  Result.SetValue(
+    m4x3[0, 0], m4x3[1, 0], m4x3[2, 0], m4x3[3, 0],
+    m4x3[0, 1], m4x3[1, 1], m4x3[2, 1], m4x3[3, 1],
+    m4x3[0, 2], m4x3[1, 2], m4x3[2, 2], m4x3[3, 2],
+    0, 0, 0, 1
+  );
+end;
+{$Warnings on}
+
+{$Warnings off}
+function TLabStreamHelper.ReadMat3x3: TLabMat;
+  var m3x3: array[0..2, 0..2] of TVkFloat;
+begin
+  ReadBuffer(@m3x3, SizeOf(m3x3));
+  Result.SetValue(
+    m3x3[0, 0], m3x3[1, 0], m3x3[2, 0], 0,
+    m3x3[0, 1], m3x3[1, 1], m3x3[2, 1], 0,
+    m3x3[0, 2], m3x3[1, 2], m3x3[2, 2], 0,
+    0, 0, 0, 1
+  );
+end;
+{$Warnings on}
+
+function TLabStreamHelper.WriteBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64;
+begin
+  Stream.WriteBuffer(Buffer^, Count);
+end;
+
+procedure TLabStreamHelper.WriteBool(const Value: Boolean);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteUInt8(const Value: TVkUInt8);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteUInt16(const Value: TVkUInt16);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteUInt32(const Value: TVkUInt32);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteInt8(const Value: TVkInt8);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteInt16(const Value: TVkInt16);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteInt32(const Value: TVkInt32);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteInt64(const Value: TVkInt64);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteFloat(const Value: TVkFloat);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteDouble(const Value: TVkDouble);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteColor(const Value: TLabColor);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteStringARaw(const Value: AnsiString);
+begin
+  WriteBuffer(@Value[1], Length(Value));
+end;
+
+procedure TLabStreamHelper.WriteStringA(const Value: AnsiString);
+begin
+  WriteUInt32(Length(Value));
+  WriteBuffer(@Value[1], Length(Value));
+end;
+
+procedure TLabStreamHelper.WriteStringANT(const Value: AnsiString);
+begin
+  WriteBuffer(@Value[1], Length(Value));
+  WriteUInt8(0);
+end;
+
+procedure TLabStreamHelper.WriteVec2(const Value: TLabVec2);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteVec3(const Value: TLabVec3);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.WriteVec4(const Value: TLabVec4);
+begin
+  Stream.Write(Value, SizeOf(Value));
+end;
+
+procedure TLabStreamHelper.Skip(const Count: TVkInt64);
+begin
+  Stream.Seek(Count, soFromCurrent);
+end;
+
+constructor TLabStreamHelper.Create(const AStream: TStream);
+begin
+  _Stream := AStream;
+end;
+
+destructor TLabStreamHelper.Destroy;
+begin
+  inherited Destroy;
+end;
+//TLabStreamHelper END
+
+//TLabConstMemoryStream BEGIN
+function TLabConstMemoryStream.GetSize: Int64;
+begin
+  Result := _Size;
+end;
+
+function TLabConstMemoryStream.GetPosition: Int64;
+begin
+  Result := _Position;
+end;
+
+function TLabConstMemoryStream.Read(var Buffer; Count: LongInt): LongInt;
+begin
+  Result := 0;
+  if (_Size > 0) and (_Position < _Size) and (_Position >= 0) then
+  begin
+    Result := Count;
+    if (Result > (_Size - _Position)) then
+    begin
+      Result := (_Size - _Position);
+    end;
+    Move((_Memory + _Position)^, Buffer, Result);
+    _Position += Result;
+  end;
+end;
+
+function TLabConstMemoryStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  case Word(Origin) of
+    soFromBeginning: _Position := Offset;
+    soFromEnd: _Position := _Size + Offset;
+    soFromCurrent: _Position := _Position + Offset;
+  end;
+  Result := _Position;
+end;
+
+constructor TLabConstMemoryStream.Create(const Buffer: Pointer; const BufferSize: LongWord);
+begin
+  inherited Create;
+  _Memory := Buffer;
+  _Size := BufferSize;
+  _Position := 0;
+end;
+//TLabConstMemoryStream END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin

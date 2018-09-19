@@ -71,6 +71,7 @@ type
       const ImageIndices: array of TVkUInt32;
       const WaitSemaphores: array of TVkSemaphore
     );
+    class procedure QueueWaitIdle(const Queue: TVkQueue);
     property PhysicalDevices: TLabPhysicalDeviceList read _PhysicalDevices;
     constructor Create;
     destructor Destroy; override;
@@ -258,6 +259,11 @@ begin
   present_info.pWaitSemaphores := @WaitSemaphores[0];
   present_info.pResults := nil;
   Vulkan.QueuePresentKHR(Queue, @present_info);
+end;
+
+class procedure TLabVulkan.QueueWaitIdle(const Queue: TVkQueue);
+begin
+  Vulkan.QueueWaitIdle(Queue);
 end;
 
 constructor TLabVulkan.Create;

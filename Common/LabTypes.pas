@@ -11,6 +11,11 @@ type
   TLabProc = procedure;
   TLabProcObj = procedure of Object;
 
+  TLabColor = record
+    r, g, b, a: Byte;
+  end;
+  PLabColor = ^TLabColor;
+
   generic TLabSharedRef<T> = record
   public
     type TPtr = T;
