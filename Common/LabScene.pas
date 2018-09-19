@@ -682,6 +682,10 @@ end;
 
 destructor TLabSceneGeometry.TSubset.Destroy;
 begin
+  if Assigned(VertexBufferStaging) then
+  begin
+    VertexBufferStaging.Free;
+  end;
   VertexBuffer.Free;
   inherited Destroy;
 end;
@@ -793,6 +797,7 @@ end;
 destructor TLabScene.Destroy;
 begin
   while _Geometries.Count > 0 do _Geometries.Pop.Free;
+  _Geometries.Free;
   _Root.Free;
   inherited Destroy;
 end;

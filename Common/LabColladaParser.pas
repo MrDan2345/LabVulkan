@@ -1093,6 +1093,7 @@ end;
 
 destructor TLabColladaMesh.Destroy;
 begin
+  if Assigned(_Vertices) then _Vertices.Free;
   while _TrianglesList.Count > 0 do _TrianglesList.Pop.Free;
   _TrianglesList.Free;
   while _Sources.Count > 0 do _Sources.Pop.Free;
@@ -1439,6 +1440,10 @@ end;
 
 destructor TLabColladaScene.Destroy;
 begin
+  if Assigned(_VisualScene) then
+  begin
+    _VisualScene.Free;
+  end;
   inherited Destroy;
 end;
 
