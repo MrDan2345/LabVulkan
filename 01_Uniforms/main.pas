@@ -9,6 +9,7 @@ uses
   shader_data,
   cube_data,
   Vulkan,
+  LabTypes,
   LabMath,
   LabWindow,
   LabSwapChain,
@@ -251,7 +252,7 @@ begin
     VertexBufferStaging.Ptr.Unmap;
   end;
   DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
+    Device, [LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
   );
   DescriptorPool := TLabDescriptorPool.Create(
     Device,

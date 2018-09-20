@@ -9,6 +9,7 @@ uses
   shader_data,
   cube_data,
   Vulkan,
+  LabTypes,
   LabMath,
   LabWindow,
   LabSwapChain,
@@ -226,7 +227,7 @@ begin
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
   DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
+    Device, [LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
   );
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));

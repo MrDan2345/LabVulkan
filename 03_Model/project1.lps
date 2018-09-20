@@ -15,9 +15,10 @@
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="299"/>
-        <CursorPos X="52" Y="211"/>
+        <TopLine Value="241"/>
+        <CursorPos X="38" Y="256"/>
         <UsageCount Value="13"/>
         <Loaded Value="True"/>
       </Unit1>
@@ -111,10 +112,9 @@
       </Unit12>
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="4"/>
         <TopLine Value="693"/>
-        <CursorPos X="3" Y="713"/>
+        <CursorPos X="66" Y="711"/>
         <UsageCount Value="11"/>
         <Loaded Value="True"/>
       </Unit13>
