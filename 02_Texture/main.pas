@@ -8,6 +8,7 @@ interface
 uses
   cube_data,
   Vulkan,
+  LabTypes,
   LabMath,
   LabWindow,
   LabSwapChain,
@@ -57,6 +58,9 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Texture: TLabImageShared;
+    var TextureStaging: TLabBufferShared;
+    var TextureView: TLabImageViewShared;
+    var TextureSampler: TLabSamplerShared;
     var Transforms: record
       World: TLabMat;
       View: TLabMat;
@@ -171,11 +175,7 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
 begin
-  fov := LabDegToRad * 45;
-  if (Window.Width > Window.Height) then
-  begin
-    fov *= Window.Height / Window.Width;
-  end;
+  fov := LabDegToRad * 25;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
@@ -195,7 +195,48 @@ end;
 procedure TLabApp.TransferBuffers;
 begin
   CmdBuffer.Ptr.RecordBegin;
-  CmdBuffer.Ptr.CopyBuffer(VertexBufferStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
+  CmdBuffer.Ptr.CopyBuffer(
+    VertexBufferStaging.Ptr.VkHandle,
+    VertexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(VertexBuffer.Ptr.Size)]
+  );
+  CmdBuffer.Ptr.PipelineBarrier(
+    TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
+    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
+    0,
+    [], [],
+    [
+      LabImageMemoryBarrier(
+        Texture.Ptr.VkHandle,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        0, TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT)
+      )
+    ]
+  );
+  CmdBuffer.Ptr.CopyBufferToImage(
+    TextureStaging.Ptr.VkHandle,
+    Texture.Ptr.VkHandle,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    [
+      LabBufferImageCopy(
+        LabOffset3D(0, 0, 0),
+        LabExtent3D(Texture.Ptr.Width, Texture.Ptr.Height, Texture.Ptr.Depth)
+      )
+    ]
+  );
+  CmdBuffer.Ptr.PipelineBarrier(
+    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
+    TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
+    0,
+    [], [],
+    [
+      LabImageMemoryBarrier(
+        Texture.Ptr.VkHandle,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT)
+      )
+    ]
+  );
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -206,11 +247,14 @@ begin
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
   VertexBufferStaging := nil;
+  TextureStaging := nil;
 end;
 
 procedure TLabApp.Initialize;
   var map: PVkVoid;
   var img: TLabImageData;
+  var uniform_desc_info: TVkDescriptorBufferInfo;
+  var image_desc_info: TVkDescriptorImageInfo;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Caption := 'Vulkan Texture';
@@ -235,8 +279,9 @@ begin
     sizeof(g_vb_solid_face_colors_Data),
     sizeof(g_vb_solid_face_colors_Data[0]),
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).posX) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
     ],
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
@@ -252,18 +297,63 @@ begin
     Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
     VertexBufferStaging.Ptr.Unmap;
   end;
+  img := TLabImageDataPNG.Create;
+  img.Load('../Images/box.png');
+  Texture := TLabImage.Create(
+    Device,
+    VK_FORMAT_R8G8B8A8_UNORM,
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+    [], img.Width, img.Height, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+    VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  TextureStaging := TLabBuffer.Create(
+    Device, img.DataSize,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if (TextureStaging.Ptr.Map(map)) then
+  begin
+    Move(img.Data^, map^, img.DataSize);
+    TextureStaging.Ptr.Unmap;
+  end;
+  img.Free;
+  TextureView := TLabImageView.Create(
+    Device, Texture.Ptr.VkHandle, Texture.Ptr.Format
+  );
+  TextureSampler := TLabSampler.Create(Device);
   DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device, [LabDescriptorBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
+    Device,
+    [
+      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+    ]
   );
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
-    [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
+    [
+      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
+    ],
     1
   );
   DescriptorSets := TLabDescriptorSets.Create(
     Device, DescriptorPool,
     [DescriptorSetLayout.Ptr.VkHandle]
   );
+  FillChar(uniform_desc_info, SizeOf(uniform_desc_info), 0);
+  begin
+    uniform_desc_info.buffer := UniformBuffer.Ptr.VkHandle;
+    uniform_desc_info.offset := 0;
+    uniform_desc_info.range := UniformBuffer.Ptr.Size;
+  end;
+  FillChar(image_desc_info, SizeOf(image_desc_info), 0);
+  begin
+    image_desc_info.imageLayout := VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_desc_info.imageView := TextureView.Ptr.VkHandle;
+    image_desc_info.sampler := TextureSampler.Ptr.VkHandle;
+  end;
   DescriptorSets.Ptr.UpdateSets(
     [
       LabWriteDescriptorSet(
@@ -273,7 +363,15 @@ begin
         0,
         1,
         nil,
-        UniformBuffer.Ptr.BufferInfo
+        @uniform_desc_info
+      ),
+      LabWriteDescriptorSet(
+        DescriptorSets.Ptr.VkHandle[0],
+        1,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        0,
+        1,
+        @image_desc_info
       )
     ],
     []
@@ -291,7 +389,8 @@ begin
       [VertexBuffer.Ptr.MakeBindingDesc(0)],
       [
         VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
-        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0)
+        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0),
+        VertexBuffer.Ptr.MakeAttributeDesc(2, 2, 0)
       ]
     ),
     LabPipelineRasterizationState(),
@@ -299,16 +398,6 @@ begin
     LabPipelineMultisampleState(),
     LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
   );
-  //Texture := TLabImage.Create(
-  //  Device,
-  //  VK_FORMAT_R8G8B8A8_UNORM,
-  //  TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT),
-  //  [], img.Width, img.Height
-  //);
-  //img := TLabImageDataPNG.Create;
-  //img.Load('../Images/ship.png');
-  //Texture.Ptr.;
-  //img.Free;
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
@@ -318,6 +407,8 @@ procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
+  TextureSampler := nil;
+  TextureView := nil;
   Texture := nil;
   Fence := nil;
   Semaphore := nil;

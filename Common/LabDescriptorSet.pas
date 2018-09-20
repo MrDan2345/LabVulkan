@@ -55,11 +55,11 @@ type
   TLabDescriptorSetsShared = specialize TLabSharedRef<TLabDescriptorSets>;
 
 function LabDescriptorBinding(
+  const Binding: TVkUInt32;
   const DescriptorType: TVkDescriptorType;
   const DescriptorCount: TVkUInt32 = 1;
   const StageFlags: TVkShaderStageFlags = TVkFlags(VK_SHADER_STAGE_ALL);
-  const PImmutableSamplers: PVkSampler = nil;
-  const Binding: TVkUInt32 = $ffffffff
+  const PImmutableSamplers: PVkSampler = nil
 ): TVkDescriptorSetLayoutBinding;
 
 function LabWriteDescriptorSet(
@@ -158,11 +158,11 @@ begin
 end;
 
 function LabDescriptorBinding(
+  const Binding: TVkUInt32;
   const DescriptorType: TVkDescriptorType;
   const DescriptorCount: TVkUInt32;
   const StageFlags: TVkShaderStageFlags;
-  const PImmutableSamplers: PVkSampler;
-  const Binding: TVkUInt32
+  const PImmutableSamplers: PVkSampler
 ): TVkDescriptorSetLayoutBinding;
 begin
   Result.binding := Binding;

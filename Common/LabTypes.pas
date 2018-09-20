@@ -86,6 +86,17 @@ type
   TLabStrArrA = array of AnsiString;
   TLabByteArr = array of TVkUInt8;
 
+function LabOffset2D(const x, y: TVkInt32): TVkOffset2D; inline;
+function LabOffset3D(const x, y, z: TVkInt32): TVkOffset3D; inline;
+function LabExtent2D(const Width, Height: TVkUInt32): TVkExtent2D; inline;
+function LabExtent3D(const Width, Height, Depth: TVkUInt32): TVkExtent3D; inline;
+function LabRect2D(
+  const X: TVkInt32;
+  const Y: TVkInt32;
+  const Width: TVkUInt32;
+  const Height: TVkUInt32
+): TVkRect2D; inline;
+
 implementation
 
 uses LabUtils;
@@ -239,5 +250,42 @@ begin
    if NewInstance <> nil then TLabClass(Result)._RefCount := 1;
 end;
 //TLabClass END
+
+function LabOffset2D(const x, y: TVkInt32): TVkOffset2D;
+begin
+  Result.x := x;
+  Result.y := y;
+end;
+
+function LabOffset3D(const x, y, z: TVkInt32): TVkOffset3D;
+begin
+  Result.x := x;
+  Result.y := y;
+  Result.z := z;
+end;
+
+function LabExtent2D(const Width, Height: TVkUInt32): TVkExtent2D;
+begin
+  Result.width := Width;
+  Result.height := Height;
+end;
+
+function LabExtent3D(const Width, Height, Depth: TVkUInt32): TVkExtent3D;
+begin
+  Result.width := Width;
+  Result.height := Height;
+  Result.depth := Depth;
+end;
+
+function LabRect2D(
+  const X: TVkInt32; const Y: TVkInt32;
+  const Width: TVkUInt32; const Height: TVkUInt32
+): TVkRect2D;
+begin
+  Result.offset.x := X;
+  Result.offset.y := Y;
+  Result.extent.width := Width;
+  Result.extent.height := Height;
+end;
 
 end.

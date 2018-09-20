@@ -189,6 +189,7 @@ function LabDecodeURL(const URL: String): String;
 function LabStrExplode(const Str: AnsiString; const Separator: AnsiString): TLabStrArrA;
 function LabStrReplace(const Str, PatternOld, PatternNew: AnsiString): AnsiString;
 function LabCRC32(const CRC: TVkUInt32; const Value: Pointer; const Count: TVkInt32): TVkUInt32;
+function LabPtrToOrd(const Ptr: Pointer): PtrUInt; inline;
 
 implementation
 
@@ -1287,6 +1288,13 @@ begin
   Result := ((Result shr 8) and $00ffffff) xor CRC32Table[(Result xor pb^[i]) and $ff];
   Result := Result xor $ffffffff;
 end;
+
+{$hints off}
+function LabPtrToOrd(const Ptr: Pointer): PtrUInt;
+begin
+  Result := PtrUInt(Ptr);
+end;
+{$hints on}
 
 function LabVkErrorString(const State: TVkResult): String;
 begin

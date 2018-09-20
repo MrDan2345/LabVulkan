@@ -49,6 +49,7 @@ type
       const AImageType: TVkImageType = VK_IMAGE_TYPE_2D;
       const ASharingMode: TVkSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+      const AInitialLayout: TVkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       const AFlags: TVkImageCreateFlags = 0
     );
     destructor Destroy; override;
@@ -65,8 +66,8 @@ type
       const ADevice: TLabDeviceShared;
       const AImage: TVkImage;
       const AFormat: TVkFormat;
-      const AAspectMask: TVkImageAspectFlags;
-      const AViewType: TVkImageViewType;
+      const AAspectMask: TVkImageAspectFlags = TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
+      const AViewType: TVkImageViewType = VK_IMAGE_VIEW_TYPE_2D;
       const ABaseMipLevel: TVkInt32 = 0;
       const AMipLevelCount: TVkInt32 = 1;
       const ABaseLayer: TVkInt32 = 0;
@@ -92,6 +93,36 @@ type
   end;
   TLabDepthBufferShared = specialize TLabSharedRef<TLabDepthBuffer>;
 
+  TLabSampler = class (TLabClass)
+  private
+    var _Device: TLabDeviceShared;
+    var _Handle: TVkSampler;
+  public
+    property Device: TLabDeviceShared read _Device;
+    property VkHandle: TVkSampler read _Handle;
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const AMinFilter: TVkFilter = VK_FILTER_LINEAR;
+      const AMagFilter: TVkFilter = VK_FILTER_LINEAR;
+      const AAddressModeU: TVkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+      const AAddressModeV: TVkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+      const AAddressModeW: TVkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+      const AAnisotropyEnable: TVkBool32 = VK_FALSE;
+      const AMaxAnisotropy: TVkFloat = 1;
+      const AMipMapMode: TVkSamplerMipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+      const AMipLodBias: TVkFloat = 0;
+      const AMinLod: TVkFloat = 0;
+      const AMaxLod: TVkFloat = 0;
+      const ABorderColor: TVkBorderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+      const ACompareEnable: TVkBool32 = VK_FALSE;
+      const ACompareOp: TVkCompareOp = VK_COMPARE_OP_ALWAYS;
+      const AUnnormalizedCoords: TVkBool32 = VK_FALSE;
+      const AFlags: TVkSamplerCreateFlags = 0
+    );
+    destructor Destroy; override;
+  end;
+  TLabSamplerShared = specialize TLabSharedRef<TLabSampler>;
+
 implementation
 
 constructor TLabImage.Create(const ADevice: TLabDeviceShared;
@@ -102,6 +133,7 @@ constructor TLabImage.Create(const ADevice: TLabDeviceShared;
   const ATiling: TVkImageTiling; const AImageType: TVkImageType;
   const ASharingMode: TVkSharingMode;
   const AMemoryFlags: TVkFlags;
+  const AInitialLayout: TVkImageLayout;
   const AFlags: TVkImageCreateFlags
 );
   var pass: Boolean;
@@ -139,7 +171,7 @@ begin
   image_info.mipLevels := _MipLevels;
   image_info.arrayLayers := _Layers;
   image_info.samples := _Samples;
-  image_info.initialLayout := VK_IMAGE_LAYOUT_UNDEFINED;
+  image_info.initialLayout := AInitialLayout;
   image_info.queueFamilyIndexCount := Length(_QueueFamilyIndices);
   if Length(_QueueFamilyIndices) > 0 then
   begin
@@ -279,6 +311,59 @@ begin
   _View.Free;
   inherited Destroy;
   LabLog('TLabDepthBuffer.Destroy');
+end;
+
+constructor TLabSampler.Create(
+  const ADevice: TLabDeviceShared;
+  const AMinFilter: TVkFilter;
+  const AMagFilter: TVkFilter;
+  const AAddressModeU: TVkSamplerAddressMode;
+  const AAddressModeV: TVkSamplerAddressMode;
+  const AAddressModeW: TVkSamplerAddressMode;
+  const AAnisotropyEnable: TVkBool32;
+  const AMaxAnisotropy: TVkFloat;
+  const AMipMapMode: TVkSamplerMipmapMode;
+  const AMipLodBias: TVkFloat;
+  const AMinLod: TVkFloat;
+  const AMaxLod: TVkFloat;
+  const ABorderColor: TVkBorderColor;
+  const ACompareEnable: TVkBool32;
+  const ACompareOp: TVkCompareOp;
+  const AUnnormalizedCoords: TVkBool32;
+  const AFlags: TVkSamplerCreateFlags
+);
+  var samp_info: TVkSamplerCreateInfo;
+begin
+  _Device := ADevice;
+  FillChar(samp_info, SizeOf(samp_info), 0);
+  samp_info.sType := VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samp_info.minFilter := AMinFilter;
+  samp_info.magFilter := AMagFilter;
+  samp_info.addressModeU := AAddressModeU;
+  samp_info.addressModeV := AAddressModeV;
+  samp_info.addressModeW := AAddressModeW;
+  samp_info.anisotropyEnable := AAnisotropyEnable;
+  samp_info.maxAnisotropy := AMaxAnisotropy;
+  samp_info.mipmapMode := AMipMapMode;
+  samp_info.mipLodBias := AMipLodBias;
+  samp_info.minLod := AMinLod;
+  samp_info.maxLod := AMaxLod;
+  samp_info.borderColor := ABorderColor;
+  samp_info.compareEnable := ACompareEnable;
+  samp_info.compareOp := ACompareOp;
+  samp_info.unnormalizedCoordinates := AUnnormalizedCoords;
+  samp_info.flags := AFlags;
+  LabAssertVkError(Vulkan.CreateSampler(_Device.Ptr.VkHandle, @samp_info, nil, @_Handle));
+end;
+
+destructor TLabSampler.Destroy;
+begin
+  if LabVkValidHandle(_Handle) then
+  begin
+    Vulkan.DestroySampler(_Device.Ptr.VkHandle, _Handle, nil);
+    _Handle := VK_NULL_HANDLE;
+  end;
+  inherited Destroy;
 end;
 
 end.

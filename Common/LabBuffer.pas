@@ -129,6 +129,18 @@ function LabBufferCopy(
   const DstOffset: TVkDeviceSize = 0
 ): TVkBufferCopy;
 
+function LabBufferImageCopy(
+  const ImageOffset: TVkOffset3D;
+  const ImageExtent: TVkExtent3D;
+  const ImageAspectMask: TVkImageAspectFlags = TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
+  const ImageMipLevel: TVkUInt32 = 0;
+  const ImageBaseArrayLayer: TVkUInt32 = 0;
+  const ImageArrayLayerCount: TVkUInt32 = 1;
+  const BufferOffset: TVkDeviceSize = 0;
+  const BufferRowLength: TVkUInt32 = 0;
+  const BufferImageHeight: TVkUInt32 = 0
+): TVkBufferImageCopy;
+
 implementation
 
 function TLabBuffer.GetBufferInfo: PVkDescriptorBufferInfo;
@@ -341,6 +353,30 @@ begin
   Result.srcOffset := SrcOffset;
   Result.dstOffset := DstOffset;
   Result.size := Size;
+end;
+
+function LabBufferImageCopy(
+  const ImageOffset: TVkOffset3D;
+  const ImageExtent: TVkExtent3D;
+  const ImageAspectMask: TVkImageAspectFlags;
+  const ImageMipLevel: TVkUInt32;
+  const ImageBaseArrayLayer: TVkUInt32;
+  const ImageArrayLayerCount: TVkUInt32;
+  const BufferOffset: TVkDeviceSize;
+  const BufferRowLength: TVkUInt32;
+  const BufferImageHeight: TVkUInt32
+): TVkBufferImageCopy;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.bufferOffset := BufferOffset;
+  Result.bufferRowLength := BufferRowLength;
+  Result.bufferImageHeight := BufferImageHeight;
+  Result.imageSubresource.aspectMask := ImageAspectMask;
+  Result.imageSubresource.mipLevel := ImageMipLevel;
+  Result.imageSubresource.baseArrayLayer := ImageBaseArrayLayer;
+  Result.imageSubresource.layerCount := ImageArrayLayerCount;
+  Result.imageOffset := ImageOffset;
+  Result.imageExtent := ImageExtent;
 end;
 
 end.

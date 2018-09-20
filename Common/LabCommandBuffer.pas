@@ -65,7 +65,24 @@ type
       const FirstVertex: TVkUInt32 = 0;
       const FirstInstance: TVkUInt32 = 0
     );
-    procedure CopyBuffer(const Src, Dst: TVkBuffer; const Regions: array of TVkBufferCopy);
+    procedure CopyBuffer(
+      const Src, Dst: TVkBuffer;
+      const Regions: array of TVkBufferCopy
+    );
+    procedure CopyBufferToImage(
+      const Src: TVkBuffer;
+      const Dst: TVkImage;
+      const ImageLayout: TVkImageLayout;
+      const Regions: array of TVkBufferImageCopy
+    );
+    procedure PipelineBarrier(
+      const SrcStageMask: TVkPipelineStageFlags;
+      const DstStageMask: TVkPipelineStageFlags;
+      const DependencyFlags: TVkDependencyFlags;
+      const MemoryBarriers: array of TVkMemoryBarrier;
+      const BufferMemoryBarriers: array of TVkBufferMemoryBarrier;
+      const ImageMemoryBarriers: array of TVkImageMemoryBarrier
+    );
   end;
   TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
@@ -73,6 +90,7 @@ function LabClearValue(const r, g, b, a: TVkFloat): TVkClearValue; overload;
 function LabClearValue(const r, g, b, a: TVkUInt32): TVkClearValue; overload;
 function LabClearValue(const r, g, b, a: TVkInt32): TVkClearValue; overload;
 function LabClearValue(const Depth: TVkFloat; const Stencil: TVkUInt32): TVkClearValue; overload;
+
 function LabViewport(
   const X: TVkFloat;
   const Y: TVkFloat;
@@ -81,12 +99,21 @@ function LabViewport(
   const MinDepth: TVkFloat = 0;
   const MaxDepth: TVkFloat = 1
 ): TVkViewport;
-function LabRect2D(
-  const X: TVkInt32;
-  const Y: TVkInt32;
-  const Width: TVkUInt32;
-  const Height: TVkUInt32
-): TVkRect2D;
+
+function LabImageMemoryBarrier(
+  const Image: TVkImage;
+  const OldLayout: TVkImageLayout;
+  const NewLayout: TVkImageLayout;
+  const SrcAccessMask: TVkAccessFlags = 0;
+  const DstAccessMask: TVkAccessFlags = 0;
+  const SrcQueueFamilyIndex: TVkUInt32 = VK_QUEUE_FAMILY_IGNORED;
+  const DstQueueFamilyIndex: TVkUInt32 = VK_QUEUE_FAMILY_IGNORED;
+  const ImageAspectMask: TVkImageAspectFlags = TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT);
+  const ImageBaseMipLevel: TVkUInt32 = 0;
+  const ImageMipLevelCount: TVkUInt32 = 1;
+  const ImageBaseArrayLayer: TVkUInt32 = 0;
+  const ImageArrayLayerCount: TVkUInt32 = 1
+): TVkImageMemoryBarrier;
 
 implementation
 
@@ -255,6 +282,34 @@ procedure TLabCommandBuffer.CopyBuffer(const Src, Dst: TVkBuffer; const Regions:
 begin
   Vulkan.CmdCopyBuffer(_Handle, Src, Dst, Length(Regions), @Regions[0]);
 end;
+
+procedure TLabCommandBuffer.CopyBufferToImage(
+  const Src: TVkBuffer;
+  const Dst: TVkImage;
+  const ImageLayout: TVkImageLayout;
+  const Regions: array of TVkBufferImageCopy
+);
+begin
+  Vulkan.CmdCopyBufferToImage(_Handle, Src, Dst, ImageLayout, Length(Regions), @Regions[0]);
+end;
+
+procedure TLabCommandBuffer.PipelineBarrier(
+  const SrcStageMask: TVkPipelineStageFlags;
+  const DstStageMask: TVkPipelineStageFlags;
+  const DependencyFlags: TVkDependencyFlags;
+  const MemoryBarriers: array of TVkMemoryBarrier;
+  const BufferMemoryBarriers: array of TVkBufferMemoryBarrier;
+  const ImageMemoryBarriers: array of TVkImageMemoryBarrier
+);
+begin
+  Vulkan.CmdPipelineBarrier(
+    _Handle,
+    SrcStageMask, DstStageMask, DependencyFlags,
+    Length(MemoryBarriers), @MemoryBarriers[0],
+    Length(BufferMemoryBarriers), @BufferMemoryBarriers[0],
+    Length(ImageMemoryBarriers), @ImageMemoryBarriers[0]
+  );
+end;
 //TLabCommandBuffer END
 
 function LabClearValue(const r, g, b, a: TVkFloat): TVkClearValue;
@@ -301,15 +356,35 @@ begin
   Result.maxDepth := MaxDepth;
 end;
 
-function LabRect2D(
-  const X: TVkInt32; const Y: TVkInt32;
-  const Width: TVkUInt32; const Height: TVkUInt32
-): TVkRect2D;
+function LabImageMemoryBarrier(
+  const Image: TVkImage;
+  const OldLayout: TVkImageLayout;
+  const NewLayout: TVkImageLayout;
+  const SrcAccessMask: TVkAccessFlags;
+  const DstAccessMask: TVkAccessFlags;
+  const SrcQueueFamilyIndex: TVkUInt32;
+  const DstQueueFamilyIndex: TVkUInt32;
+  const ImageAspectMask: TVkImageAspectFlags;
+  const ImageBaseMipLevel: TVkUInt32;
+  const ImageMipLevelCount: TVkUInt32;
+  const ImageBaseArrayLayer: TVkUInt32;
+  const ImageArrayLayerCount: TVkUInt32
+): TVkImageMemoryBarrier;
 begin
-  Result.offset.x := X;
-  Result.offset.y := Y;
-  Result.extent.width := Width;
-  Result.extent.height := Height;
+  FillChar(Result, SizeOf(Result), 0);
+  Result.sType := VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  Result.image := Image;
+  Result.srcQueueFamilyIndex := SrcQueueFamilyIndex;
+  Result.dstQueueFamilyIndex := DstQueueFamilyIndex;
+  Result.srcAccessMask := SrcAccessMask;
+  Result.dstAccessMask := DstAccessMask;
+  Result.oldLayout := OldLayout;
+  Result.newLayout := NewLayout;
+  Result.subresourceRange.aspectMask := ImageAspectMask;
+  Result.subresourceRange.baseMipLevel := ImageBaseMipLevel;
+  Result.subresourceRange.levelCount := ImageMipLevelCount;
+  Result.subresourceRange.baseArrayLayer := ImageBaseArrayLayer;
+  Result.subresourceRange.layerCount := ImageArrayLayerCount;
 end;
 
 end.
