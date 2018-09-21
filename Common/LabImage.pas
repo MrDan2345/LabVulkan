@@ -276,7 +276,7 @@ begin
   if (depth_format = VK_FORMAT_UNDEFINED) then depth_format := VK_FORMAT_D16_UNORM;
 {$endif}
   Vulkan.GetPhysicalDeviceFormatProperties(ADevice.Ptr.PhysicalDevice.Ptr.VkHandle, depth_format, @props);
-  if props.linearTilingFeatures and TVkFlags(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) > 0 then
+  if (props.linearTilingFeatures and TVkFlags(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) > 0 then
   begin
     tiling := VK_IMAGE_TILING_LINEAR;
   end

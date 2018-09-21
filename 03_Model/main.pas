@@ -183,18 +183,17 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
 begin
-  fov := LabDegToRad * 45;
+  fov := LabDegToRad * 70;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, -1, 0));
+    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
     World := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-    // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 0.5, 0,
-      0, 0, 0.5, 1
+      0, -1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
     );
     WVP := World * View * Projection * Clip;
   end;
@@ -379,7 +378,7 @@ begin
             VK_FALSE, VK_FALSE,
             VK_POLYGON_MODE_FILL,
             TVkFlags(VK_CULL_MODE_BACK_BIT),
-            VK_FRONT_FACE_COUNTER_CLOCKWISE
+            VK_FRONT_FACE_CLOCKWISE
           ),
           LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
           LabPipelineMultisampleState(),

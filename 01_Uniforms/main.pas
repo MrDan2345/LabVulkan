@@ -6,7 +6,6 @@ unit main;
 interface
 
 uses
-  shader_data,
   cube_data,
   Vulkan,
   LabTypes,
@@ -179,14 +178,14 @@ begin
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
+    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
     World := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 0.5, 0,
-      0, 0, 0.5, 1
+      0, -1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
     );
     WVP := World * View * Projection * Clip;
   end;
@@ -225,8 +224,6 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
-  //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
-  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   VertexBuffer := TLabVertexBuffer.Create(
@@ -293,7 +290,10 @@ begin
         VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0)
       ]
     ),
-    LabPipelineRasterizationState(),
+    LabPipelineRasterizationState(
+      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL,
+      TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
+    ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
     LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
