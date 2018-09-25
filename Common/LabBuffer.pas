@@ -20,6 +20,7 @@ type
     function GetBufferInfo: PVkDescriptorBufferInfo; inline;
   public
     property VkHandle: TVkBuffer read _Handle;
+    property Memory: TVkDeviceMemory read _Memory;
     property Size: TVkDeviceSize read _Size;
     property IsMapped: Boolean read _Mapped;
     property BufferInfo: PVkDescriptorBufferInfo read GetBufferInfo;
@@ -40,6 +41,7 @@ type
       const Flags: TVkMemoryMapFlags = 0
     ): Boolean;
     function Unmap: Boolean;
+    procedure FlushMappedMemoryRanges(const Ranges: array of TVkMappedMemoryRange);
   end;
   TLabBufferShared = specialize TLabSharedRef<TLabBuffer>;
 
@@ -108,26 +110,26 @@ type
 function LabVertexBufferAttributeFormat(
   const Format: TVkFormat;
   const Offset: TVkUInt32
-): TLabVertexBufferAttributeFormat;
+): TLabVertexBufferAttributeFormat; inline;
 
 function LabVertexAttributeDescription(
   const Location: TVkUInt32;
   const Binding: TVkUInt32;
   const Format: TVkFormat;
   const Offset: TVkUInt32
-): TVkVertexInputAttributeDescription;
+): TVkVertexInputAttributeDescription; inline;
 
 function LabVertexInputBindingDescription(
   const Binding: TVkUInt32;
   const Stride: TVkUInt32;
   const InputRate: TVkVertexInputRate = VK_VERTEX_INPUT_RATE_VERTEX
-): TVkVertexInputBindingDescription;
+): TVkVertexInputBindingDescription; inline;
 
 function LabBufferCopy(
   const Size: TVkDeviceSize;
   const SrcOffset: TVkDeviceSize = 0;
   const DstOffset: TVkDeviceSize = 0
-): TVkBufferCopy;
+): TVkBufferCopy; inline;
 
 function LabBufferImageCopy(
   const ImageOffset: TVkOffset3D;
@@ -139,7 +141,13 @@ function LabBufferImageCopy(
   const BufferOffset: TVkDeviceSize = 0;
   const BufferRowLength: TVkUInt32 = 0;
   const BufferImageHeight: TVkUInt32 = 0
-): TVkBufferImageCopy;
+): TVkBufferImageCopy; inline;
+
+function LabMappedMemoryRange(
+  const Memory: TVkDeviceMemory;
+  const Offset: TVkDeviceSize;
+  const Size: TVkDeviceSize
+): TVkMappedMemoryRange; inline;
 
 implementation
 
@@ -216,6 +224,11 @@ begin
   Vulkan.UnmapMemory(_Device.Ptr.VkHandle, _Memory);
   _Mapped := False;
   Result := True;
+end;
+
+procedure TLabBuffer.FlushMappedMemoryRanges(const Ranges: array of TVkMappedMemoryRange);
+begin
+  Vulkan.FlushMappedMemoryRanges(_Device.Ptr.VkHandle, Length(Ranges), @Ranges[0]);
 end;
 
 function TLabVertexBuffer.GetAttribute(const Index: TVkInt32
@@ -377,6 +390,19 @@ begin
   Result.imageSubresource.layerCount := ImageArrayLayerCount;
   Result.imageOffset := ImageOffset;
   Result.imageExtent := ImageExtent;
+end;
+
+function LabMappedMemoryRange(
+  const Memory: TVkDeviceMemory;
+  const Offset: TVkDeviceSize;
+  const Size: TVkDeviceSize
+): TVkMappedMemoryRange;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.sType := VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+  Result.memory := Memory;
+  Result.offset := Offset;
+  Result.size := Size;
 end;
 
 end.

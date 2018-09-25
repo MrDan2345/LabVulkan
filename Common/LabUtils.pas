@@ -4,6 +4,7 @@ interface
 {$modeswitch advancedrecords}
 
 uses
+  cmem,
   Classes,
   SysUtils,
   Vulkan,
@@ -167,6 +168,30 @@ type
     constructor Create(const Buffer: Pointer; const BufferSize: LongWord);
   end;
 
+  generic TLabAlignedArray<T> = class (TLabClass)
+  public
+    type TItem = T;
+    type PItem = ^TItem;
+  private
+    var _Data: PVkVoid;
+    var _Alignment: TVkUInt32;
+    var _Count: TVkUInt32;
+    function GetBlockSize: TVkUInt32; inline;
+    procedure SetCount(const Value: TVkUInt32); inline;
+    function GetItem(const Index: TVkInt32): PItem; inline;
+    function GetItemOffset(const Index: TVkInt32): TVkUInt32; inline;
+    function GetDataSize: TVkUInt32; inline;
+  public
+    property Count: TVkUInt32 read _Count write SetCount;
+    property Data: PVkVoid read _Data;
+    property DataSize: TVkUInt32 read GetDataSize;
+    property Items[const Index: TVkInt32]: PItem read GetItem; default;
+    property ItemOffset[const Index: TVkInt32]: TVkUInt32 read GetItemOffset;
+    constructor Create;
+    constructor Create(const Alignment: TVkUInt32);
+    destructor Destroy; override;
+  end;
+
   TLabListString = specialize TLabList<AnsiString>;
   TLabListStringShared = specialize TLabSharedRef<TLabListString>;
   TLabListPointer = specialize TLabList<Pointer>;
@@ -190,6 +215,9 @@ function LabStrExplode(const Str: AnsiString; const Separator: AnsiString): TLab
 function LabStrReplace(const Str, PatternOld, PatternNew: AnsiString): AnsiString;
 function LabCRC32(const CRC: TVkUInt32; const Value: Pointer; const Count: TVkInt32): TVkUInt32;
 function LabPtrToOrd(const Ptr: Pointer): PtrUInt; inline;
+function LabOrdToPtr(const Ptr: PtrUInt): Pointer; inline;
+function LabAlloc(const Size: TVkUInt32; const Align: TVkUInt32): PVkVoid; inline;
+procedure LabFree(var Mem: PVkVoid); inline;
 
 implementation
 
@@ -717,6 +745,7 @@ begin
   Result := Stream.Read(Buffer^, Count);
 end;
 
+{$Hints off}
 function TLabStreamHelper.ReadBool: Boolean;
 begin
   Stream.Read(Result, SizeOf(Result));
@@ -839,10 +868,11 @@ begin
   );
 end;
 {$Warnings on}
+{$Hints on}
 
 function TLabStreamHelper.WriteBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64;
 begin
-  Stream.WriteBuffer(Buffer^, Count);
+  Result := Stream.Write(Buffer^, Count);
 end;
 
 procedure TLabStreamHelper.WriteBool(const Value: Boolean);
@@ -992,6 +1022,58 @@ begin
   _Position := 0;
 end;
 //TLabConstMemoryStream END
+
+//TLabAlignedArray BEGIN
+function TLabAlignedArray.GetBlockSize: TVkUInt32;
+begin
+  Result := (SizeOf(TItem) + _Alignment - 1) and (not(_Alignment - 1));
+end;
+
+procedure TLabAlignedArray.SetCount(const Value: TVkUInt32);
+begin
+  if Value = _Count then Exit;
+  if Assigned(_Data) then LabFree(_Data);
+  _Count := Value;
+  _Data := LabAlloc(GetDataSize, _Alignment);
+end;
+
+function TLabAlignedArray.GetItem(const Index: TVkInt32): PItem;
+  type TItemArr = array[0..High(Word)] of TItem;
+  type PItemArr = ^TItemArr;
+begin
+  Result := PItem(_Data + (Index * GetBlockSize));
+end;
+
+function TLabAlignedArray.GetItemOffset(const Index: TVkInt32): TVkUInt32;
+begin
+  Result := TVkUInt32(Index) * GetBlockSize;
+end;
+
+function TLabAlignedArray.GetDataSize: TVkUInt32;
+begin
+  Result := GetBlockSize * _Count;
+end;
+
+constructor TLabAlignedArray.Create;
+begin
+  inherited Create;
+  Create(SizeOf(TItem));
+end;
+
+constructor TLabAlignedArray.Create(const Alignment: TVkUInt32);
+begin
+  inherited Create;
+  _Alignment := Alignment;
+  _Count := 0;
+  _Data := nil;
+end;
+
+destructor TLabAlignedArray.Destroy;
+begin
+  if Assigned(_Data) then LabFree(_Data);
+  inherited Destroy;
+end;
+//TLabAlignedArray END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin
@@ -1294,7 +1376,33 @@ function LabPtrToOrd(const Ptr: Pointer): PtrUInt;
 begin
   Result := PtrUInt(Ptr);
 end;
+
+function LabOrdToPtr(const Ptr: PtrUInt): Pointer;
+begin
+  Result := Pointer(Ptr);
+end;
 {$hints on}
+
+function LabAlloc(const Size: TVkUInt32; const Align: TVkUInt32): PVkVoid;
+  type TPtrArr = array[-1..0] of PVkVoid;
+  type PPtrArr = ^TPtrArr;
+  var offset: TVkUInt32;
+  var ptr: PVkVoid;
+begin
+  offset := Align - 1 + SizeOf(PVkVoid);
+  ptr := cmem.Malloc(Size + offset);
+  if not Assigned(ptr) then Exit(nil);
+  Result := LabOrdToPtr((LabPtrToOrd(ptr) + offset) and (not(Align - 1)));
+  PPtrArr(@Result)^[-1] := ptr;
+end;
+
+procedure LabFree(var Mem: PVkVoid);
+  type TPtrArr = array[-1..0] of PVkVoid;
+  type PPtrArr = ^TPtrArr;
+begin
+  cmem.Free(PPtrArr(@Mem)^[-1]);
+  Mem := nil;
+end;
 
 function LabVkErrorString(const State: TVkResult): String;
 begin

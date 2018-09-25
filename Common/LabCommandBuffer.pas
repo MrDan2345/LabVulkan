@@ -233,7 +233,16 @@ procedure TLabCommandBuffer.BindDescriptorSets(
   const DescriptorSets: TLabDescriptorSets;
   const DynamicOffsets: array of TVkUInt32
 );
+  var dynamic_offsets: PVkUInt32;
 begin
+  if (Length(DynamicOffsets) > 0) then
+  begin
+    dynamic_offsets := @DynamicOffsets[0];
+  end
+  else
+  begin
+    dynamic_offsets := nil;
+  end;
   Vulkan.CmdBindDescriptorSets(
     _Handle,
     PipelineBindPoint,
@@ -242,7 +251,7 @@ begin
     SetCount,
     DescriptorSets.VkHandlePtr[0],
     Length(DynamicOffsets),
-    @DynamicOffsets[0]
+    dynamic_offsets
   );
 end;
 
