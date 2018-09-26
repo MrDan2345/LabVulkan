@@ -5,7 +5,8 @@ interface
 uses
   Vulkan,
   LabTypes,
-  LabUtils;
+  LabUtils,
+  LabMath;
 
 type
   TLabPhysicalDevice = class (TLabClass)
@@ -31,6 +32,7 @@ type
     property QueueFamilyCount: Integer read GetQueueFamilyCount;
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
+    function GetSupportedSampleCount(const PreferredCount: array of TVkSampleCountFlagBits): TVkSampleCountFlagBits;
   end;
   TLabPhysicalDeviceShared = specialize TLabSharedRef<TLabPhysicalDevice>;
   TLabPhysicalDeviceList = specialize TLabRefList<TLabPhysicalDeviceShared>;
@@ -142,6 +144,19 @@ begin
   end;
   Result := VK_FORMAT_UNDEFINED;
 end;
+
+function TLabPhysicalDevice.GetSupportedSampleCount(const PreferredCount: array of TVkSampleCountFlagBits): TVkSampleCountFlagBits;
+  var counts: TVkSampleCountFlags;
+  var i: TVkInt32;
+begin
+  counts := LabMin(_Properties.limits.framebufferColorSampleCounts, _Properties.limits.framebufferDepthSampleCounts);
+  for i := 0 to High(PreferredCount) do
+  begin
+    if (TVkFlags(counts) and TVkFlags(PreferredCount[i])) > 0 then Exit(PreferredCount[i]);
+  end;
+  Result := VK_SAMPLE_COUNT_1_BIT;
+end;
+
 //TLabPhysicalDevice END
 
 end.

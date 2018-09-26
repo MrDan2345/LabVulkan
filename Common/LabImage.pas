@@ -87,7 +87,9 @@ type
       const ADevice: TLabDeviceShared;
       const AWidth: TVkInt32;
       const AHeight: TVkInt32;
-      const AFormat: TVkFormat = VK_FORMAT_UNDEFINED
+      const AFormat: TVkFormat = VK_FORMAT_UNDEFINED;
+      const AUsage: TVkImageUsageFlags = TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+      const ASamples: TVkSampleCountFlagBits = VK_SAMPLE_COUNT_1_BIT
     );
     destructor Destroy; override;
   end;
@@ -258,7 +260,9 @@ constructor TLabDepthBuffer.Create(
   const ADevice: TLabDeviceShared;
   const AWidth: TVkInt32;
   const AHeight: TVkInt32;
-  const AFormat: TVkFormat
+  const AFormat: TVkFormat;
+  const AUsage: TVkImageUsageFlags;
+  const ASamples: TVkSampleCountFlagBits
 );
   var depth_format: TVkFormat;
   var tiling: TVkImageTiling;
@@ -289,7 +293,7 @@ begin
     depth_format,
     TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT),
     [],
-    AWidth, AHeight, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+    AWidth, AHeight, 1, 1, 1, ASamples,
     tiling, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );

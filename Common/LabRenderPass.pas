@@ -30,7 +30,8 @@ type
     constructor Create(
       const ADevice: TLabDeviceShared;
       const AAttachments: array of TVkAttachmentDescription;
-      const ASubpasses: array of TLabSubpassDescriptionData
+      const ASubpasses: array of TLabSubpassDescriptionData;
+      const ADependencies: array of TVkSubpassDependency
     );
     destructor Destroy; override;
   end;
@@ -60,13 +61,23 @@ function LabSubpassDescriptionData(
 
 function LabSubpassDescription(const Data: TLabSubpassDescriptionData): TVkSubpassDescription;
 function LabAttachmentReference(const Attachment:TVkUInt32; const Layout:TVkImageLayout): TVkAttachmentReference;
+function LabSubpassDependency(
+  const SrcSubpass: TVkUInt32 = VK_SUBPASS_EXTERNAL;
+  const DstSubpass: TVkUInt32 = VK_SUBPASS_EXTERNAL;
+  const SrcStageMask: TVkPipelineStageFlags = TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+  const DstStageMask: TVkPipelineStageFlags = TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+  const SrcAccessMask: TVkAccessFlags = 0;
+  const DstAccessMask: TVkAccessFlags = 0;
+  const DependencyFlags: TVkDependencyFlags = TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+): TVkSubpassDependency;
 
 implementation
 
 constructor TLabRenderPass.Create(
   const ADevice: TLabDeviceShared;
   const AAttachments: array of TVkAttachmentDescription;
-  const ASubpasses: array of TLabSubpassDescriptionData
+  const ASubpasses: array of TLabSubpassDescriptionData;
+  const ADependencies: array of TVkSubpassDependency
 );
   var subpass_descriptions: array of TVkSubpassDescription;
   var rp_info: TVkRenderPassCreateInfo;
@@ -76,18 +87,37 @@ begin
   inherited Create;
   _Device := ADevice;
   SetLength(subpass_descriptions, Length(ASubpasses));
-  for i := 0 to High(ASubpasses) do subpass_descriptions[i] := LabSubpassDescription(ASubpasses[i]);
+  for i := 0 to High(ASubpasses) do
+  begin
+    subpass_descriptions[i] := LabSubpassDescription(ASubpasses[i]);
+  end;
   FillChar(rp_info, SizeOf(rp_info), 0);
   rp_info.sType := VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   rp_info.pNext := nil;
   rp_info.attachmentCount := Length(AAttachments);
-  rp_info.pAttachments := @AAttachments[0];
+  if Length(AAttachments) > 0 then
+  begin
+    rp_info.pAttachments := @AAttachments[0];
+  end;
   rp_info.subpassCount := Length(subpass_descriptions);
-  rp_info.pSubpasses := @subpass_descriptions[0];
-  rp_info.dependencyCount := 0;
-  rp_info.pDependencies := nil;
+  if Length(subpass_descriptions) > 0 then
+  begin
+    rp_info.pSubpasses := @subpass_descriptions[0];
+  end;
+  rp_info.dependencyCount := Length(ADependencies);
+  if Length(ADependencies) > 0 then
+  begin
+    rp_info.pDependencies := @ADependencies[0];
+  end;
   LabAssertVkError(Vulkan.CreateRenderPass(_Device.Ptr.VkHandle, @rp_info, nil, @_Handle));
-  _Hash := LabCRC32(0, @AAttachments[0], Length(AAttachments) * SizeOf(TVkAttachmentDescription));
+  if Length(AAttachments) > 0 then
+  begin
+    _Hash := LabCRC32(0, @AAttachments[0], Length(AAttachments) * SizeOf(TVkAttachmentDescription));
+  end
+  else
+  begin
+    _Hash := 0;
+  end;
   for i := 0 to High(ASubpasses) do
   begin
     _Hash := LabCRC32(_Hash, @ASubpasses[i].Flags, SizeOf(ASubpasses[i].Flags));
@@ -121,6 +151,10 @@ begin
         Length(ASubpasses[i].ResolveAttachments) * SizeOf(TVkAttachmentReference)
       );
     end;
+  end;
+  if Length(ADependencies) > 0 then
+  begin
+    _Hash := LabCRC32(_Hash, @ADependencies[0], Length(ADependencies) * SizeOf(TVkSubpassDependency));
   end;
 end;
 
@@ -223,18 +257,39 @@ begin
   Result.preserveAttachmentCount := Length(Data.PreserveAttachments);
   if Length(Data.PreserveAttachments) > 0 then
   begin
-    Result.pResolveAttachments := @Data.PreserveAttachments[0];
+    Result.pPreserveAttachments := @Data.PreserveAttachments[0];
   end
   else
   begin
-    Result.pResolveAttachments := nil;
+    Result.pPreserveAttachments := nil;
   end;
 end;
 
 function LabAttachmentReference(const Attachment: TVkUInt32; const Layout: TVkImageLayout): TVkAttachmentReference;
 begin
+  FillChar(Result, SizeOf(Result), 0);
   Result.attachment := Attachment;
   Result.layout := Layout;
+end;
+
+function LabSubpassDependency(
+  const SrcSubpass: TVkUInt32;
+  const DstSubpass: TVkUInt32;
+  const SrcStageMask: TVkPipelineStageFlags;
+  const DstStageMask: TVkPipelineStageFlags;
+  const SrcAccessMask: TVkAccessFlags;
+  const DstAccessMask: TVkAccessFlags;
+  const DependencyFlags: TVkDependencyFlags
+): TVkSubpassDependency;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.srcSubpass := SrcSubpass;
+  Result.dstSubpass := DstSubpass;
+  Result.srcStageMask := SrcStageMask;
+  Result.dstStageMask := DstStageMask;
+  Result.srcAccessMask := SrcAccessMask;
+  Result.dstAccessMask := DstAccessMask;
+  Result.dependencyFlags := DependencyFlags;
 end;
 
 end.

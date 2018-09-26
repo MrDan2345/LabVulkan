@@ -146,7 +146,8 @@ begin
         LabAttachmentReference(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
         []
       )
-    ]
+    ],
+    []
   );
   SetLength(FrameBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
@@ -172,21 +173,17 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
 begin
   fov := LabDegToRad * 45;
-  if (Window.Width > Window.Height) then
-  begin
-    fov *= Window.Height / Window.Width;
-  end;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
+    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
     Model := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 0.5, 0,
-      0, 0, 0.5, 1
+      0, -1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
     );
     MVP := Model * View * Projection * Clip;
   end;
@@ -294,7 +291,10 @@ begin
         VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0)
       ]
     ),
-    LabPipelineRasterizationState(),
+    LabPipelineRasterizationState(
+      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL,
+      TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
+    ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
     LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])

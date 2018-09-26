@@ -149,7 +149,8 @@ begin
         LabAttachmentReference(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
         []
       )
-    ]
+    ],
+    []
   );
   SetLength(FrameBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
