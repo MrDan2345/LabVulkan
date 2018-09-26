@@ -69,11 +69,26 @@ type
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
+    procedure ProcessScene;
     procedure UpdateTransforms;
     procedure TransferBuffers;
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
+  end;
+
+  TGeometrySubsetData = class (TLabClass)
+  private
+    var _Subset: TLabSceneGeometry.TSubset;
+  public
+    VertexBufferStaging: TLabBuffer;
+    VertexBuffer: TLabVertexBuffer;
+    IndexBufferStaging: TLabBuffer;
+    IndexBuffer: TLabIndexBuffer;
+    VertexShader: TLabSceneVertexShaderShared;
+    PixelShader: TLabScenePixelShaderShared;
+    constructor Create(const Subset: TLabSceneGeometry.TSubset);
+    destructor Destroy; override;
   end;
 
 const
@@ -92,6 +107,59 @@ var
   App: TLabApp;
 
 implementation
+
+constructor TGeometrySubsetData.Create(const Subset: TLabSceneGeometry.TSubset);
+  var map: Pointer;
+begin
+  _Subset := Subset;
+  VertexBuffer := TLabVertexBuffer.Create(
+    App.Device,
+    Subset.VertexStride * Subset.VertexCount, Subset.VertexStride, Subset.VertexAttributes,
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexBufferStaging := TLabBuffer.Create(
+    App.Device, VertexBuffer.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if VertexBufferStaging.Map(map) then
+  begin
+    Move(Subset.VertexData^, map^, VertexBuffer.Size);
+    VertexBufferStaging.Unmap;
+  end;
+  Subset.FreeVertexData;
+  IndexBuffer := TLabIndexBuffer.Create(
+    App.Device,
+    Subset.IndexCount, Subset.IndexType,
+    TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  IndexBufferStaging := TLabBuffer.Create(
+    App.Device, IndexBuffer.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if IndexBufferStaging.Map(map) then
+  begin
+    Move(Subset.IndexData^, map^, IndexBuffer.Size);
+    IndexBufferStaging.Unmap;
+  end;
+  Subset.FreeIndexData;
+  VertexShader := TLabSceneShaderFactory.MakeVertexShader(Subset.Geometry.Scene, Subset.VertexDescriptor);
+  PixelShader := TLabSceneShaderFactory.MakePixelShader(Subset.Geometry.Scene, Subset.VertexDescriptor);
+end;
+
+destructor TGeometrySubsetData.Destroy;
+begin
+  FreeAndNil(VertexBufferStaging);
+  FreeAndNil(VertexBuffer);
+  FreeAndNil(IndexBufferStaging);
+  FreeAndNil(IndexBuffer);
+  inherited Destroy;
+end;
 
 class constructor TShaderManager.CreateClass;
 begin
@@ -180,6 +248,27 @@ begin
   SwapChain := nil;
 end;
 
+procedure TLabApp.ProcessScene;
+  var r_n: TLabSceneNode;
+  var r_a: TLabSceneNodeAttachmentGeometry;
+  var r_g: TLabSceneGeometry.TSubset;
+  var i_n, i_a, i_g: Integer;
+begin
+  for i_n := 0 to Scene.Root.Children.Count - 1 do
+  begin
+    r_n := Scene.Root.Children[i_n];
+    for i_a := 0 to r_n.Attachments.Count - 1 do
+    begin
+      r_a := r_n.Attachments[i_a];
+      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
+      begin
+        r_g := r_a.Geometry.Subsets[i_g];
+        r_g.UserData := TGeometrySubsetData.Create(r_g);
+      end;
+    end;
+  end;
+end;
+
 procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
@@ -201,39 +290,51 @@ begin
 end;
 
 procedure TLabApp.TransferBuffers;
-  var i, j, s: Integer;
-  var vb: TLabVertexBuffer;
-  var vbs: TLabBuffer;
-  var ib: TLabIndexBuffer;
-  var ibs: TLabBuffer;
+  var i_n, i_a, i_g: Integer;
+  var r_n: TLabSceneNode;
+  var r_a: TLabSceneNodeAttachmentGeometry;
+  var r_g: TLabSceneGeometry.TSubset;
+  var subset_data: TGeometrySubsetData;
 begin
   CmdBuffer.Ptr.RecordBegin;
-  for i := 0 to Scene.Root.Children.Count - 1 do
+  for i_n := 0 to Scene.Root.Children.Count - 1 do
   begin
-    for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
+    r_n := Scene.Root.Children[i_n];
+    for i_a := 0 to r_n.Attachments.Count - 1 do
     begin
-      for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
+      r_a := r_n.Attachments[i_a];
+      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
       begin
-        vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
-        vbs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBufferStaging;
-        CmdBuffer.Ptr.CopyBuffer(vbs.VkHandle, vb.VkHandle, LabBufferCopy(vbs.Size));
-        ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
-        ibs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBufferStaging;
-        CmdBuffer.Ptr.CopyBuffer(ibs.VkHandle, ib.VkHandle, LabBufferCopy(ibs.Size));
+        r_g := r_a.Geometry.Subsets[i_g];
+        subset_data := TGeometrySubsetData(r_g.UserData);
+        CmdBuffer.Ptr.CopyBuffer(
+          subset_data.VertexBufferStaging.VkHandle,
+          subset_data.VertexBuffer.VkHandle,
+          LabBufferCopy(subset_data.VertexBufferStaging.Size)
+        );
+        CmdBuffer.Ptr.CopyBuffer(
+          subset_data.IndexBufferStaging.VkHandle,
+          subset_data.IndexBuffer.VkHandle,
+          LabBufferCopy(subset_data.IndexBufferStaging.Size)
+        );
       end;
     end;
   end;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(SwapChain.Ptr.QueueFamilyGraphics, [CmdBuffer.Ptr.VkHandle], [], [], VK_NULL_HANDLE);
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
-  for i := 0 to Scene.Root.Children.Count - 1 do
+  for i_n := 0 to Scene.Root.Children.Count - 1 do
   begin
-    for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
+    r_n := Scene.Root.Children[i_n];
+    for i_a := 0 to r_n.Attachments.Count - 1 do
     begin
-      for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
+      r_a := r_n.Attachments[i_a];
+      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
       begin
-        FreeAndNil(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBufferStaging);
-        FreeAndNil(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBufferStaging);
+        r_g := r_a.Geometry.Subsets[i_g];
+        subset_data := TGeometrySubsetData(r_g.UserData);
+        FreeAndNil(subset_data.VertexBufferStaging);
+        FreeAndNil(subset_data.IndexBufferStaging);
       end;
     end;
   end;
@@ -290,6 +391,7 @@ begin
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
+  ProcessScene;
   TransferBuffers;
 end;
 
@@ -318,12 +420,12 @@ end;
 procedure TLabApp.Loop;
   var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
-  var i, j, s: Integer;
+  var i_n, i_a, i_g: Integer;
+  var r_n: TLabSceneNode;
+  var r_a: TLabSceneNodeAttachmentGeometry;
+  var r_g: TLabSceneGeometry.TSubset;
+  var subset_data: TGeometrySubsetData;
   var CurPipeline: TLabGraphicsPipeline;
-  var vb: TLabVertexBuffer;
-  var ib: TLabIndexBuffer;
-  var vs: TLabSceneVertexShader;
-  var ps: TLabScenePixelShader;
   var r: TVkResult;
 begin
   TLabVulkan.IsActive := Window.IsActive;
@@ -362,26 +464,30 @@ begin
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
   );
   CurPipeline := nil;
-  for i := 0 to Scene.Root.Children.Count - 1 do
+  for i_n := 0 to Scene.Root.Children.Count - 1 do
   begin
-    for j := 0 to Scene.Root.Children[i].Attachments.Count - 1 do
+    r_n := Scene.Root.Children[i_n];
+    for i_a := 0 to r_n.Attachments.Count - 1 do
     begin
-      for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
+      r_a := r_n.Attachments[i_a];
+      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
       begin
-        vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
-        ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
-        vs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexShader.Ptr;
-        ps := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].PixelShader.Ptr;
+        r_g := r_a.Geometry.Subsets[i_g];
+        subset_data := TGeometrySubsetData(r_g.UserData);
+        //vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
+        //ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
+        //vs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexShader.Ptr;
+        //ps := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].PixelShader.Ptr;
         Pipeline := TLabGraphicsPipeline.FindOrCreate(
           Device, PipelineCache, PipelineLayout.Ptr,
           [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-          [vs.Shader, ps.Shader],
+          [subset_data.VertexShader.Ptr.Shader, subset_data.PixelShader.Ptr.Shader],
           RenderPass.Ptr, 0,
           LabPipelineViewportState(),
           LabPipelineInputAssemblyState(),
           LabPipelineVertexInputState(
-            [vb.MakeBindingDesc(0)],
-            vb.MakeAttributeDescArr(0, 0)
+            [subset_data.VertexBuffer.MakeBindingDesc(0)],
+            subset_data.VertexBuffer.MakeAttributeDescArr(0, 0)
           ),
           LabPipelineRasterizationState(
             VK_FALSE, VK_FALSE,
@@ -406,9 +512,9 @@ begin
           CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
           CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
         end;
-        CmdBuffer.Ptr.BindVertexBuffers(0, [vb.VkHandle], [0]);
-        CmdBuffer.Ptr.BindIndexBuffer(ib.VkHandle, 0, ib.IndexType);
-        CmdBuffer.Ptr.DrawIndexed(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexCount);
+        CmdBuffer.Ptr.BindVertexBuffers(0, [subset_data.VertexBuffer.VkHandle], [0]);
+        CmdBuffer.Ptr.BindIndexBuffer(subset_data.IndexBuffer.VkHandle, 0, subset_data.IndexBuffer.IndexType);
+        CmdBuffer.Ptr.DrawIndexed(subset_data.IndexBuffer.IndexCount);
       end;
     end;
   end;

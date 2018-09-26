@@ -93,15 +93,21 @@ type
     type TSubset = class
     private
       var _Geometry: TLabSceneGeometry;
+      var _UserData: TObject;
     public
       VertexCount: TVkInt32;
+      VertexData: Pointer;
+      VertexStride: TVkUInt32;
+      VertexAttributes: array of TLabVertexBufferAttributeFormat;
+      VertexDescriptor: TLabColladaVertexDescriptor;
       IndexCount: TVkInt32;
-      VertexBufferStaging: TLabBuffer;
-      VertexBuffer: TLabVertexBuffer;
-      IndexBufferStaging: TLabBuffer;
-      IndexBuffer: TLabIndexBuffer;
-      VertexShader: TLabSceneVertexShaderShared;
-      PixelShader: TLabScenePixelShaderShared;
+      IndexData: Pointer;
+      IndexStride: TVkUInt8;
+      IndexType: TVkIndexType;
+      property Geometry: TLabSceneGeometry read _Geometry;
+      property UserData: TObject read _UserData write _UserData;
+      procedure FreeVertexData;
+      procedure FreeIndexData;
       constructor Create(const AGeometry: TLabSceneGeometry; const Triangles: TLabColladaTriangles);
       destructor Destroy; override;
     end;
@@ -588,6 +594,24 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabSceneGeometry.TSubset.FreeVertexData;
+begin
+  if Assigned(VertexData) then
+  begin
+    FreeMemory(VertexData);
+    VertexData := nil;
+  end;
+end;
+
+procedure TLabSceneGeometry.TSubset.FreeIndexData;
+begin
+  if Assigned(IndexData) then
+  begin
+    FreeMemory(IndexData);
+    IndexData := nil;
+  end;
+end;
+
 constructor TLabSceneGeometry.TSubset.Create(
   const AGeometry: TLabSceneGeometry;
   const Triangles: TLabColladaTriangles
@@ -645,9 +669,7 @@ constructor TLabSceneGeometry.TSubset.Create(
     end;
     Exit(-1);
   end;
-  var IndexType: TVkIndexType;
-  var StrideVert, StrideInd: TVkInt32;
-  var BufferVert, BufferInd, BufferPtrVert, BufferPtrInd, MapPtr: Pointer;
+  var BufferPtrVert, BufferPtrInd: Pointer;
   procedure AddIndex(const Index: TVkUInt32);
   begin
     if IndexType = VK_INDEX_TYPE_UINT16 then
@@ -658,36 +680,34 @@ constructor TLabSceneGeometry.TSubset.Create(
     begin
       PVkUInt32(BufferPtrInd)^ := Index;
     end;
-    Inc(BufferPtrInd, StrideInd);
+    Inc(BufferPtrInd, IndexStride);
     Inc(IndexCount);
   end;
-  var Attributes: array of TLabVertexBufferAttributeFormat;
   var AttribIndices: array of TVkInt32;
   var Source: TLabColladaSource;
   var i, j, Offset, ind: TVkInt32;
   var crc: TVkUInt32;
-  var Desc: TLabColladaVertexDescriptor;
 begin
   _Geometry := AGeometry;
-  VertexCount := 0;//Triangles.Count * 3;
+  VertexCount := 0;
   IndexCount := 0;
   Triangles.UserData := Self;
-  StrideVert := Triangles.VertexSize;
+  VertexStride := Triangles.VertexSize;
   if Triangles.Count * 3 > High(TVkUInt16) then
   begin
-    StrideInd := 4;
+    IndexStride := 4;
     IndexType := VK_INDEX_TYPE_UINT32;
   end
   else
   begin
-    StrideInd := 2;
+    IndexStride := 2;
     IndexType := VK_INDEX_TYPE_UINT16;
   end;
-  BufferVert := GetMemory(StrideVert * Triangles.Count * 3);
-  BufferInd := GetMemory(StrideInd * Triangles.Count * 3);
-  VertexRemap := PVertexRemapArr(GetMemory(StrideVert * Triangles.Count * 3));
-  BufferPtrVert := BufferVert;
-  BufferPtrInd := BufferInd;
+  VertexData := GetMemory(VertexStride * Triangles.Count * 3);
+  IndexData := GetMemory(IndexStride * Triangles.Count * 3);
+  VertexRemap := PVertexRemapArr(GetMemory(VertexStride * Triangles.Count * 3));
+  BufferPtrVert := VertexData;
+  BufferPtrInd := IndexData;
   SetLength(AttribIndices, Triangles.Inputs.Count);
   for i := 0 to Triangles.Count * 3 - 1 do
   begin
@@ -716,69 +736,24 @@ begin
     end;
   end;
   Freememory(VertexRemap);
-  SetLength(Attributes, Triangles.VertexLayout.Count);
+  SetLength(VertexAttributes, Triangles.VertexLayout.Count);
   Offset := 0;
   for i := 0 to Triangles.VertexLayout.Count - 1 do
   begin
     Source := Triangles.VertexLayout[i].Source as TLabColladaSource;
-    Attributes[i] := LabVertexBufferAttributeFormat(
+    VertexAttributes[i] := LabVertexBufferAttributeFormat(
       GetFormat(Source), Offset
     );
     Offset += Source.DataArray.ItemSize * Source.Accessor.Stride;
   end;
-  VertexBuffer := TLabVertexBuffer.Create(
-    _Geometry.Scene.Device,
-    StrideVert * VertexCount, StrideVert, Attributes,
-    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  VertexBufferStaging := TLabBuffer.Create(
-    _Geometry.Scene.Device, VertexBuffer.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  MapPtr := nil;
-  if VertexBufferStaging.Map(MapPtr) then
-  begin
-    Move(BufferVert^, MapPtr^, VertexBuffer.Size);
-    VertexBufferStaging.Unmap;
-  end;
-  Freememory(BufferVert);
-  IndexBuffer := TLabIndexBuffer.Create(
-    _Geometry.Scene.Device,
-    IndexCount, IndexType,
-    TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  IndexBufferStaging := TLabBuffer.Create(
-    _Geometry.Scene.Device, IndexBuffer.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  MapPtr := nil;
-  if IndexBufferStaging.Map(MapPtr) then
-  begin
-    Move(BufferInd^, MapPtr^, IndexBuffer.Size);
-    IndexBufferStaging.Unmap;
-  end;
-  Freememory(BufferInd);
-  Desc := Triangles.VertexDescriptor;
-  VertexShader := TLabSceneShaderFactory.MakeVertexShader(_Geometry.Scene, Desc);
-  PixelShader := TLabSceneShaderFactory.MakePixelShader(_Geometry.Scene, Desc);
+  VertexDescriptor := Triangles.VertexDescriptor;
 end;
 
 destructor TLabSceneGeometry.TSubset.Destroy;
 begin
-  if Assigned(VertexBufferStaging) then
-  begin
-    VertexBufferStaging.Free;
-  end;
-  VertexBuffer.Free;
-  if Assigned(IndexBufferStaging) then
-  begin
-    IndexBufferStaging.Free;
-  end;
-  IndexBuffer.Free;
+  FreeAndNil(_UserData);
+  FreeVertexData;
+  FreeIndexData;
   inherited Destroy;
 end;
 
