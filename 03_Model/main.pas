@@ -204,6 +204,8 @@ procedure TLabApp.TransferBuffers;
   var i, j, s: Integer;
   var vb: TLabVertexBuffer;
   var vbs: TLabBuffer;
+  var ib: TLabIndexBuffer;
+  var ibs: TLabBuffer;
 begin
   CmdBuffer.Ptr.RecordBegin;
   for i := 0 to Scene.Root.Children.Count - 1 do
@@ -215,6 +217,9 @@ begin
         vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
         vbs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBufferStaging;
         CmdBuffer.Ptr.CopyBuffer(vbs.VkHandle, vb.VkHandle, LabBufferCopy(vbs.Size));
+        ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
+        ibs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBufferStaging;
+        CmdBuffer.Ptr.CopyBuffer(ibs.VkHandle, ib.VkHandle, LabBufferCopy(ibs.Size));
       end;
     end;
   end;
@@ -228,6 +233,7 @@ begin
       for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
       begin
         FreeAndNil(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBufferStaging);
+        FreeAndNil(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBufferStaging);
       end;
     end;
   end;
@@ -257,7 +263,7 @@ begin
   );
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/skull.dae');
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
@@ -315,6 +321,7 @@ procedure TLabApp.Loop;
   var i, j, s: Integer;
   var CurPipeline: TLabGraphicsPipeline;
   var vb: TLabVertexBuffer;
+  var ib: TLabIndexBuffer;
   var vs: TLabSceneVertexShader;
   var ps: TLabScenePixelShader;
   var r: TVkResult;
@@ -362,6 +369,7 @@ begin
       for s := 0 to Scene.Root.Children[i].Attachments[j].Geometry.Subsets.Count - 1 do
       begin
         vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
+        ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
         vs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexShader.Ptr;
         ps := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].PixelShader.Ptr;
         Pipeline := TLabGraphicsPipeline.FindOrCreate(
@@ -398,12 +406,9 @@ begin
           CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
           CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
         end;
-        CmdBuffer.Ptr.BindVertexBuffers(
-          0,
-          [Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer.VkHandle],
-          [0]
-        );
-        CmdBuffer.Ptr.Draw(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexCount);
+        CmdBuffer.Ptr.BindVertexBuffers(0, [vb.VkHandle], [0]);
+        CmdBuffer.Ptr.BindIndexBuffer(ib.VkHandle, 0, ib.IndexType);
+        CmdBuffer.Ptr.DrawIndexed(Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexCount);
       end;
     end;
   end;

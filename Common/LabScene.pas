@@ -94,9 +94,12 @@ type
     private
       var _Geometry: TLabSceneGeometry;
     public
+      VertexCount: TVkInt32;
+      IndexCount: TVkInt32;
       VertexBufferStaging: TLabBuffer;
       VertexBuffer: TLabVertexBuffer;
-      VertexCount: TVkInt32;
+      IndexBufferStaging: TLabBuffer;
+      IndexBuffer: TLabIndexBuffer;
       VertexShader: TLabSceneVertexShaderShared;
       PixelShader: TLabScenePixelShaderShared;
       constructor Create(const AGeometry: TLabSceneGeometry; const Triangles: TLabColladaTriangles);
@@ -625,29 +628,94 @@ constructor TLabSceneGeometry.TSubset.Create(
       else Result := VK_FORMAT_UNDEFINED;
     end;
   end;
-  var VStride: TVkInt32;
-  var Buffer: array of TVkUInt8;
-  var BufferPtr, MapPtr: Pointer;
+  type TVertexRemap = record
+    VertexIndex: TVkUInt32;
+    crc: TVkUInt32;
+  end;
+  type TVertexRemapArr = array[0..High(Word)] of TVertexRemap;
+  type PVertexRemapArr = ^TVertexRemapArr;
+  var VertexRemap: PVertexRemapArr;
+  function FindRemap(const crc: TVkUInt32): TVkInt32;
+    var i: TVkInt32;
+  begin
+    for i := 0 to VertexCount - 1 do
+    if VertexRemap^[i].crc = crc then
+    begin
+      Exit(VertexRemap^[i].VertexIndex);
+    end;
+    Exit(-1);
+  end;
+  var IndexType: TVkIndexType;
+  var StrideVert, StrideInd: TVkInt32;
+  var BufferVert, BufferInd, BufferPtrVert, BufferPtrInd, MapPtr: Pointer;
+  procedure AddIndex(const Index: TVkUInt32);
+  begin
+    if IndexType = VK_INDEX_TYPE_UINT16 then
+    begin
+      PVkUInt16(BufferPtrInd)^ := TVkUInt16(Index);
+    end
+    else
+    begin
+      PVkUInt32(BufferPtrInd)^ := Index;
+    end;
+    Inc(BufferPtrInd, StrideInd);
+    Inc(IndexCount);
+  end;
   var Attributes: array of TLabVertexBufferAttributeFormat;
+  var AttribIndices: array of TVkInt32;
   var Source: TLabColladaSource;
-  var i, j, Offset: TVkInt32;
+  var i, j, Offset, ind: TVkInt32;
+  var crc: TVkUInt32;
   var Desc: TLabColladaVertexDescriptor;
 begin
   _Geometry := AGeometry;
-  VertexCount := Triangles.Count * 3;
+  VertexCount := 0;//Triangles.Count * 3;
+  IndexCount := 0;
   Triangles.UserData := Self;
-  VStride := Triangles.VertexSize;
-  SetLength(Buffer, VStride * Triangles.Count * 3);
-  BufferPtr := @Buffer[0];
-  for i := 0 to Triangles.Count * 3 - 1 do
-  for j := 0 to Triangles.Inputs.Count - 1 do
+  StrideVert := Triangles.VertexSize;
+  if Triangles.Count * 3 > High(TVkUInt16) then
   begin
-    Offset := Triangles.Inputs[j].Offset;
-    BufferPtr := Triangles.CopyInputData(
-      BufferPtr, Triangles.Inputs[j],
-      Triangles.Indices^[i * Triangles.Inputs.Count + Offset]
-    );
+    StrideInd := 4;
+    IndexType := VK_INDEX_TYPE_UINT32;
+  end
+  else
+  begin
+    StrideInd := 2;
+    IndexType := VK_INDEX_TYPE_UINT16;
   end;
+  BufferVert := GetMemory(StrideVert * Triangles.Count * 3);
+  BufferInd := GetMemory(StrideInd * Triangles.Count * 3);
+  VertexRemap := PVertexRemapArr(GetMemory(StrideVert * Triangles.Count * 3));
+  BufferPtrVert := BufferVert;
+  BufferPtrInd := BufferInd;
+  SetLength(AttribIndices, Triangles.Inputs.Count);
+  for i := 0 to Triangles.Count * 3 - 1 do
+  begin
+    crc := 0;
+    for j := 0 to Triangles.Inputs.Count - 1 do
+    begin
+      Offset := Triangles.Inputs[j].Offset;
+      AttribIndices[j] := Triangles.Indices^[i * Triangles.Inputs.Count + Offset];
+      crc := LabCRC32(crc, @AttribIndices[j], SizeOf(TVkInt32));
+    end;
+    ind := FindRemap(crc);
+    if ind > -1 then
+    begin
+      AddIndex(ind);
+    end
+    else
+    begin
+      for j := 0 to Triangles.Inputs.Count - 1 do
+      begin
+        BufferPtrVert := Triangles.CopyInputData(BufferPtrVert, Triangles.Inputs[j], AttribIndices[j]);
+      end;
+      VertexRemap^[VertexCount].crc := crc;
+      VertexRemap^[VertexCount].VertexIndex := VertexCount;
+      AddIndex(VertexCount);
+      Inc(VertexCount);
+    end;
+  end;
+  Freememory(VertexRemap);
   SetLength(Attributes, Triangles.VertexLayout.Count);
   Offset := 0;
   for i := 0 to Triangles.VertexLayout.Count - 1 do
@@ -660,7 +728,7 @@ begin
   end;
   VertexBuffer := TLabVertexBuffer.Create(
     _Geometry.Scene.Device,
-    Length(Buffer), VStride, Attributes,
+    StrideVert * VertexCount, StrideVert, Attributes,
     TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
@@ -672,9 +740,28 @@ begin
   MapPtr := nil;
   if VertexBufferStaging.Map(MapPtr) then
   begin
-    Move(Buffer[0], MapPtr^, Length(Buffer));
+    Move(BufferVert^, MapPtr^, VertexBuffer.Size);
     VertexBufferStaging.Unmap;
   end;
+  Freememory(BufferVert);
+  IndexBuffer := TLabIndexBuffer.Create(
+    _Geometry.Scene.Device,
+    IndexCount, IndexType,
+    TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  IndexBufferStaging := TLabBuffer.Create(
+    _Geometry.Scene.Device, IndexBuffer.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  MapPtr := nil;
+  if IndexBufferStaging.Map(MapPtr) then
+  begin
+    Move(BufferInd^, MapPtr^, IndexBuffer.Size);
+    IndexBufferStaging.Unmap;
+  end;
+  Freememory(BufferInd);
   Desc := Triangles.VertexDescriptor;
   VertexShader := TLabSceneShaderFactory.MakeVertexShader(_Geometry.Scene, Desc);
   PixelShader := TLabSceneShaderFactory.MakePixelShader(_Geometry.Scene, Desc);
@@ -687,6 +774,11 @@ begin
     VertexBufferStaging.Free;
   end;
   VertexBuffer.Free;
+  if Assigned(IndexBufferStaging) then
+  begin
+    IndexBufferStaging.Free;
+  end;
+  IndexBuffer.Free;
   inherited Destroy;
 end;
 
