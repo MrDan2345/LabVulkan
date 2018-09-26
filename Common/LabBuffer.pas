@@ -90,6 +90,26 @@ type
   end;
   TLabVertexBufferShared = specialize TLabSharedRef<TLabVertexBuffer>;
 
+  TLabIndexBuffer = class (TLabBuffer)
+  private
+    var _IndexType: TVkIndexType;
+    var _IndexCount: TVkUInt32;
+    var _Stride: TVkUInt8;
+  public
+    property IndexType: TVkIndexType read _IndexType;
+    property IndexCount: TVkUInt32 read _IndexCount;
+    property Stride: TVkUInt8 read _Stride;
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const AIndexCount: TVkUInt32;
+      const AIndexType: TVkIndexType = VK_INDEX_TYPE_UINT16;
+      const AUsageFlags: TVkFlags = TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    );
+    destructor Destroy; override;
+  end;
+  TLabIndexBufferShared = specialize TLabSharedRef<TLabIndexBuffer>;
+
   TLabUniformBuffer = class (TLabBuffer)
   public
     constructor Create(
@@ -313,6 +333,29 @@ begin
     Result[i].format := _Attributes[i].Format;
     Result[i].offset := _Attributes[i].Offset;
   end;
+end;
+
+constructor TLabIndexBuffer.Create(
+  const ADevice: TLabDeviceShared;
+  const AIndexCount: TVkUInt32;
+  const AIndexType: TVkIndexType;
+  const AUsageFlags: TVkFlags;
+  const AMemoryFlags: TVkFlags
+);
+begin
+  LabLog('TLabIndexBuffer.Create');
+  case AIndexType of
+    VK_INDEX_TYPE_UINT16: _Stride := 2;
+    else _Stride := 4;
+  end;
+  _IndexCount := AIndexCount;
+  inherited Create(ADevice, _Stride * _IndexCount, AUsageFlags, [], VK_SHARING_MODE_EXCLUSIVE, AMemoryFlags);
+end;
+
+destructor TLabIndexBuffer.Destroy;
+begin
+  inherited Destroy;
+  LabLog('TLabIndexBuffer.Destroy');
 end;
 
 constructor TLabUniformBuffer.Create(

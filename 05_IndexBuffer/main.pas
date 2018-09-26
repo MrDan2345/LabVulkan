@@ -6,7 +6,6 @@ unit main;
 interface
 
 uses
-  shader_data,
   cube_data,
   Vulkan,
   LabTypes,
@@ -54,6 +53,8 @@ type
     var PixelShader: TLabShaderShared;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexBufferStaging: TLabBufferShared;
+    var IndexBuffer: TLabIndexBufferShared;
+    var IndexBufferStaging: TLabBufferShared;
     var DescriptorPool: TLabDescriptorPoolShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -192,7 +193,16 @@ end;
 procedure TLabApp.TransferBuffers;
 begin
   CmdBuffer.Ptr.RecordBegin;
-  CmdBuffer.Ptr.CopyBuffer(VertexBufferStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
+  CmdBuffer.Ptr.CopyBuffer(
+    VertexBufferStaging.Ptr.VkHandle,
+    VertexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(VertexBuffer.Ptr.Size)]
+  );
+  CmdBuffer.Ptr.CopyBuffer(
+    IndexBufferStaging.Ptr.VkHandle,
+    IndexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(IndexBuffer.Ptr.Size)]
+  );
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -202,6 +212,7 @@ begin
     VK_NULL_HANDLE
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
+  IndexBufferStaging := nil;
   VertexBufferStaging := nil;
 end;
 
@@ -227,14 +238,12 @@ begin
     Device, [LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
   );
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
-  //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
-  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   VertexBuffer := TLabVertexBuffer.Create(
     Device,
-    sizeof(g_vb_solid_face_colors_Data),
-    sizeof(g_vb_solid_face_colors_Data[0]),
+    sizeof(g_vb),
+    sizeof(g_vb[0]),
     [
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
@@ -250,8 +259,24 @@ begin
   map := nil;
   if (VertexBufferStaging.Ptr.Map(map)) then
   begin
-    Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
+    Move(g_vb, map^, SizeOf(g_vb));
     VertexBufferStaging.Ptr.Unmap;
+  end;
+  IndexBuffer := TLabIndexBuffer.Create(
+    Device, Length(g_ib), VK_INDEX_TYPE_UINT16,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  IndexBufferStaging := TLabBuffer.Create(
+    Device, IndexBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if (IndexBufferStaging.Ptr.Map(map)) then
+  begin
+    Move(g_ib, map^, SizeOf(g_ib));
+    IndexBufferStaging.Ptr.Unmap;
   end;
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
@@ -314,6 +339,7 @@ begin
   PipelineCache := nil;
   DescriptorSets := nil;
   DescriptorPool := nil;
+  IndexBuffer := nil;
   VertexBuffer := nil;
   PixelShader := nil;
   VertexShader := nil;
@@ -375,9 +401,10 @@ begin
     0, 1, DescriptorSets.Ptr, []
   );
   CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
+  CmdBuffer.Ptr.BindIndexBuffer(IndexBuffer.Ptr.VkHandle, 0, IndexBuffer.Ptr.IndexType);
   CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
   CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
-  CmdBuffer.Ptr.Draw(12 * 3);
+  CmdBuffer.Ptr.DrawIndexed(12 * 3);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(

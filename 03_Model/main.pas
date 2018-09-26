@@ -257,7 +257,7 @@ begin
   );
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/skull.dae');
+  Scene.Add('../Models/box.dae');
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],

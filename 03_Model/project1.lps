@@ -17,8 +17,8 @@
         <Filename Value="main.pas"/>
         <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="62"/>
-        <CursorPos X="15" Y="76"/>
+        <TopLine Value="312"/>
+        <CursorPos X="3" Y="324"/>
         <UsageCount Value="18"/>
         <Loaded Value="True"/>
       </Unit1>
@@ -113,8 +113,8 @@
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
         <EditorIndex Value="6"/>
-        <TopLine Value="693"/>
-        <CursorPos X="66" Y="711"/>
+        <TopLine Value="86"/>
+        <CursorPos X="19" Y="103"/>
         <UsageCount Value="16"/>
         <Loaded Value="True"/>
       </Unit13>

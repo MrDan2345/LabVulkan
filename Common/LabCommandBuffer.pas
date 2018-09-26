@@ -57,12 +57,24 @@ type
       const Buffers: array of TVkBuffer;
       const Offsets: array of TVkDeviceSize
     );
+    procedure BindIndexBuffer(
+      const Buffer: TVkBuffer;
+      const Offset: TVkDeviceSize = 0;
+      const IndexType: TVkIndexType = VK_INDEX_TYPE_UINT16
+    );
     procedure SetViewport(const Viewports: array of TVkViewport);
     procedure SetScissor(const Scissors: array of TVkRect2D);
     procedure Draw(
       const VertexCount: TVkUInt32;
       const InstanceCount: TVkUInt32 = 1;
       const FirstVertex: TVkUInt32 = 0;
+      const FirstInstance: TVkUInt32 = 0
+    );
+    procedure DrawIndexed(
+      const IndexCount: TVkUInt32;
+      const InstanceCount: TVkUInt32 = 1;
+      const FirstIndex: TVkUInt32 = 0;
+      const VertexCffset: TVkUInt32 = 0;
       const FirstInstance: TVkUInt32 = 0
     );
     procedure CopyBuffer(
@@ -267,6 +279,15 @@ begin
   );
 end;
 
+procedure TLabCommandBuffer.BindIndexBuffer(
+  const Buffer: TVkBuffer;
+  const Offset: TVkDeviceSize;
+  const IndexType: TVkIndexType
+);
+begin
+  Vulkan.CmdBindIndexBuffer(_Handle, Buffer, Offset, IndexType);
+end;
+
 procedure TLabCommandBuffer.SetViewport(const Viewports: array of TVkViewport);
 begin
   Vulkan.CmdSetViewport(_Handle, 0, Length(Viewports), @Viewports[0]);
@@ -285,6 +306,19 @@ procedure TLabCommandBuffer.Draw(
 );
 begin
   Vulkan.CmdDraw(_Handle, VertexCount, InstanceCount, FirstVertex, FirstInstance);
+end;
+
+procedure TLabCommandBuffer.DrawIndexed(
+  const IndexCount: TVkUInt32;
+  const InstanceCount: TVkUInt32;
+  const FirstIndex: TVkUInt32;
+  const VertexCffset: TVkUInt32;
+  const FirstInstance: TVkUInt32
+);
+begin
+  Vulkan.CmdDrawIndexed(
+    _Handle, IndexCount, InstanceCount, FirstIndex, VertexCffset, FirstInstance
+  );
 end;
 
 procedure TLabCommandBuffer.CopyBuffer(const Src, Dst: TVkBuffer; const Regions: array of TVkBufferCopy);
