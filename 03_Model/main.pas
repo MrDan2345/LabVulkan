@@ -33,11 +33,14 @@ uses
   sysutils;
 
 type
-  TShaderManager = class (TLabClass)
-  public
-    class constructor CreateClass;
-    class destructor DestroyClass;
+  TUniformData = packed record
+    World: TLabMat;
+    View: TLabMat;
+    Projection: TLabMat;
+    WVP: TLabMat;
   end;
+  TUniformArray = specialize TLabAlignedArray<TUniformData>;
+  TUniformArrayShared = specialize TLabSharedRef<TUniformArray>;
 
   TLabApp = class (TLabVulkan)
   public
@@ -51,7 +54,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
+    var UniformBuffer: TLabBufferShared;
     var DescriptorSetLayout: TLabDescriptorSetLayoutShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
@@ -60,12 +63,7 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Scene: TLabScene;
-    var Transforms: record
-      World: TLabMat;
-      View: TLabMat;
-      Projection: TLabMat;
-      WVP: TLabMat;
-    end;
+    var Transforms: TUniformArrayShared;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -75,6 +73,16 @@ type
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
+    function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
+  end;
+
+  TGeometryData = class (TLabClass)
+  private
+    var _Geometry: TLabSceneGeometry;
+  public
+    var UniformOffset: TVkInt32;
+    constructor Create(const Geometry: TLabSceneGeometry);
+    destructor Destroy; override;
   end;
 
   TGeometrySubsetData = class (TLabClass)
@@ -107,6 +115,16 @@ var
   App: TLabApp;
 
 implementation
+
+constructor TGeometryData.Create(const Geometry: TLabSceneGeometry);
+begin
+
+end;
+
+destructor TGeometryData.Destroy;
+begin
+  inherited Destroy;
+end;
 
 constructor TGeometrySubsetData.Create(const Subset: TLabSceneGeometry.TSubset);
   var map: Pointer;
@@ -159,16 +177,6 @@ begin
   FreeAndNil(IndexBufferStaging);
   FreeAndNil(IndexBuffer);
   inherited Destroy;
-end;
-
-class constructor TShaderManager.CreateClass;
-begin
-
-end;
-
-class destructor TShaderManager.DestroyClass;
-begin
-
 end;
 
 constructor TLabApp.Create;
@@ -252,7 +260,8 @@ procedure TLabApp.ProcessScene;
   var r_n: TLabSceneNode;
   var r_a: TLabSceneNodeAttachmentGeometry;
   var r_g: TLabSceneGeometry.TSubset;
-  var i_n, i_a, i_g: Integer;
+  var geom_data: TGeometryData;
+  var i, i_n, i_a, i_g: Integer;
 begin
   for i_n := 0 to Scene.Root.Children.Count - 1 do
   begin
@@ -267,25 +276,63 @@ begin
       end;
     end;
   end;
+  Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
+  Transforms.Ptr.Count := Scene.Geometries.Count;
+  UniformBuffer := TLabBuffer.Create(
+    Device, Transforms.Ptr.DataSize,
+    TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
+    [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  );
+  for i := 0 to Scene.Geometries.Count - 1 do
+  begin
+    geom_data := TGeometryData.Create(Scene.Geometries[i]);
+    geom_data.UniformOffset := i;
+    Scene.Geometries[i].UserData := geom_data;
+  end;
 end;
 
 procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
+  var i: Integer;
+  var i_n, i_a: Integer;
+  var r_n: TLabSceneNode;
+  var r_a: TLabSceneNodeAttachmentGeometry;
+  var geom_data: TGeometryData;
+  var UniformData: Pointer;
 begin
   fov := LabDegToRad * 70;
-  with Transforms do
+  for i_n := 0 to Scene.Root.Children.Count - 1 do
   begin
-    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
-    World := LabMatRotationX(-LabPi * 0.5) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-    Clip := LabMat(
-      1, 0, 0, 0,
-      0, -1, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1
+    r_n := Scene.Root.Children[i_n];
+    for i_a := 0 to r_n.Attachments.Count - 1 do
+    begin
+      r_a := r_n.Attachments[i_a];
+      geom_data := TGeometryData(r_a.Geometry.UserData);
+      with Transforms.Ptr.Items[geom_data.UniformOffset]^ do
+      begin
+        Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+        View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+        World := r_n.Transform * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+        Clip := LabMat(
+          1, 0, 0, 0,
+          0, -1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        );
+        WVP := World * View * Projection * Clip;
+      end;
+    end;
+  end;
+  UniformData := nil;
+  if (UniformBuffer.Ptr.Map(UniformData)) then
+  begin
+    Move(Transforms.Ptr.Data^, UniformData^, Transforms.Ptr.DataSize);
+    UniformBuffer.Ptr.FlushMappedMemoryRanges(
+      [LabMappedMemoryRange(UniformBuffer.Ptr.Memory, 0, UniformBuffer.Ptr.Size)]
     );
-    WVP := World * View * Projection * Clip;
+    UniformBuffer.Ptr.Unmap;
   end;
 end;
 
@@ -358,13 +405,13 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
   DescriptorSetLayout := TLabDescriptorSetLayout.Create(
     Device, [LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
   );
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/skull.dae');
+  Scene.Add('../Models/maya/maya.dae');
+  ProcessScene;
   DescriptorPool := TLabDescriptorPool.Create(
     Device,
     [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
@@ -391,7 +438,6 @@ begin
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
-  ProcessScene;
   TransferBuffers;
 end;
 
@@ -424,6 +470,7 @@ procedure TLabApp.Loop;
   var r_n: TLabSceneNode;
   var r_a: TLabSceneNodeAttachmentGeometry;
   var r_g: TLabSceneGeometry.TSubset;
+  var geom_data: TGeometryData;
   var subset_data: TGeometrySubsetData;
   var CurPipeline: TLabGraphicsPipeline;
   var r: TVkResult;
@@ -470,14 +517,11 @@ begin
     for i_a := 0 to r_n.Attachments.Count - 1 do
     begin
       r_a := r_n.Attachments[i_a];
+      geom_data := TGeometryData(r_a.Geometry.UserData);
       for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
       begin
         r_g := r_a.Geometry.Subsets[i_g];
         subset_data := TGeometrySubsetData(r_g.UserData);
-        //vb := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexBuffer;
-        //ib := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].IndexBuffer;
-        //vs := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].VertexShader.Ptr;
-        //ps := Scene.Root.Children[i].Attachments[j].Geometry.Subsets[s].PixelShader.Ptr;
         Pipeline := TLabGraphicsPipeline.FindOrCreate(
           Device, PipelineCache, PipelineLayout.Ptr,
           [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
@@ -493,7 +537,7 @@ begin
             VK_FALSE, VK_FALSE,
             VK_POLYGON_MODE_FILL,
             TVkFlags(VK_CULL_MODE_BACK_BIT),
-            VK_FRONT_FACE_CLOCKWISE
+            VK_FRONT_FACE_COUNTER_CLOCKWISE
           ),
           LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
           LabPipelineMultisampleState(),
@@ -507,7 +551,7 @@ begin
           CmdBuffer.Ptr.BindDescriptorSets(
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             PipelineLayout.Ptr,
-            0, 1, DescriptorSets.Ptr, []
+            0, 1, DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[geom_data.UniformOffset]]
           );
           CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
           CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
@@ -531,6 +575,17 @@ begin
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
+end;
+
+function TLabApp.GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
+  var align: TVkDeviceSize;
+begin
+  align := Device.Ptr.PhysicalDevice.Ptr.Properties^.limits.minUniformBufferOffsetAlignment;
+  Result := BufferSize;
+  if align > 0 then
+  begin
+    Result := (Result + align - 1) and (not(align - 1));
+  end;
 end;
 
 end.

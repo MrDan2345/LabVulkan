@@ -115,9 +115,11 @@ type
   private
     var _Scene: TLabScene;
     var _Subsets: TSubsetList;
+    var _UserData: TObject;
   public
     property Scene: TLabScene read _Scene;
     property Subsets: TSubsetList read _Subsets;
+    property UserData: TObject read _UserData write _UserData;
     constructor Create(const AScene: TLabScene; const ColladaGeometry: TLabColladaGeometry);
     destructor Destroy; override;
   end;
@@ -175,6 +177,7 @@ type
   public
     property Device: TLabDeviceShared read _Device;
     property Root: TLabSceneNode read _Root;
+    property Geometries: TLabSceneGeometryList read _Geometries;
     procedure Add(const FileName: String);
     constructor Create(const ADevice: TLabDeviceShared);
     destructor Destroy; override;
@@ -684,9 +687,12 @@ constructor TLabSceneGeometry.TSubset.Create(
     Inc(IndexCount);
   end;
   var AttribIndices: array of TVkInt32;
+  var AttribSwizzles: array of TLabSwizzle;
   var Source: TLabColladaSource;
   var i, j, Offset, ind: TVkInt32;
   var crc: TVkUInt32;
+  var AssetSwizzle: TLabSwizzle;
+  var Root: TLabColladaRoot;
 begin
   _Geometry := AGeometry;
   VertexCount := 0;
@@ -747,6 +753,36 @@ begin
     Offset += Source.DataArray.ItemSize * Source.Accessor.Stride;
   end;
   VertexDescriptor := Triangles.VertexDescriptor;
+  AssetSwizzle.SetIdentity;
+  SetLength(AttribSwizzles, Length(VertexDescriptor));
+  Root := TLabColladaRoot(Triangles.GetRoot);
+  if Assigned(Root.Asset) then AssetSwizzle := Root.Asset.UpAxis;
+  for i := 0 to High(VertexDescriptor) do
+  begin
+    if (VertexDescriptor[i].Semantic in [as_position, as_normal, as_tangent, as_binormal]) then
+    begin
+      AttribSwizzles[i] := AssetSwizzle;
+    end
+    else
+    begin
+      AttribSwizzles[i].SetIdentity;
+    end;
+  end;
+  for i := 0 to VertexCount - 1 do
+  begin
+    for j := 0 to High(VertexAttributes) do
+    begin
+      BufferPtrVert := VertexData + VertexStride * i + VertexAttributes[j].Offset;
+      if VertexDescriptor[j].DataType = at_float then
+      begin
+        case VertexDescriptor[j].DataCount of
+          2: PLabVec2(BufferPtrVert)^ := PLabVec2(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
+          3: PLabVec3(BufferPtrVert)^ := PLabVec3(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
+          4: PLabVec4(BufferPtrVert)^ := PLabVec4(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
+        end;
+      end;
+    end;
+  end;
 end;
 
 destructor TLabSceneGeometry.TSubset.Destroy;
@@ -779,6 +815,7 @@ destructor TLabSceneGeometry.Destroy;
 begin
   while _Subsets.Count > 0 do _Subsets.Pop.Free;
   _Subsets.Free;
+  FreeAndNil(_UserData);
   inherited Destroy;
 end;
 
@@ -796,6 +833,7 @@ constructor TLabSceneNode.Create(
   const ANode: TLabColladaNode
 );
   var i: TVkInt32;
+  var Root: TLabColladaRoot;
 begin
   _Scene := AScene;
   _Children := TNodeList.Create;
@@ -815,6 +853,11 @@ begin
       begin
         _Attachments.Add(TLabSceneNodeAttachmentGeometry.Create(_Scene, Self, TLabColladaInstanceGeometry(ANode.Children[i])));
       end;
+    end;
+    Root := TLabColladaRoot(ANode.GetRoot);
+    if Assigned(Root.Asset) then
+    begin
+      _Transform := _Transform.Swizzle(Root.Asset.UpAxis);
     end;
   end
   else

@@ -8,17 +8,17 @@
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="7"/>
-        <CursorPos X="26" Y="20"/>
-        <UsageCount Value="39"/>
+        <TopLine Value="10"/>
+        <CursorPos X="31" Y="26"/>
+        <UsageCount Value="57"/>
         <Loaded Value="True"/>
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="505"/>
-        <CursorPos Y="531"/>
-        <UsageCount Value="21"/>
+        <TopLine Value="390"/>
+        <CursorPos X="52" Y="404"/>
+        <UsageCount Value="29"/>
         <Loaded Value="True"/>
       </Unit1>
       <Unit2>
@@ -26,7 +26,7 @@
         <EditorIndex Value="15"/>
         <TopLine Value="331"/>
         <CursorPos X="31" Y="347"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="28"/>
         <Loaded Value="True"/>
       </Unit2>
       <Unit3>
@@ -34,7 +34,7 @@
         <EditorIndex Value="18"/>
         <TopLine Value="178"/>
         <CursorPos X="23" Y="194"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="28"/>
         <Loaded Value="True"/>
       </Unit3>
       <Unit4>
@@ -42,7 +42,7 @@
         <EditorIndex Value="17"/>
         <TopLine Value="1397"/>
         <CursorPos X="8" Y="1413"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="28"/>
         <Loaded Value="True"/>
       </Unit4>
       <Unit5>
@@ -50,7 +50,7 @@
         <EditorIndex Value="16"/>
         <TopLine Value="70"/>
         <CursorPos Y="87"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="28"/>
         <Loaded Value="True"/>
       </Unit5>
       <Unit6>
@@ -58,7 +58,7 @@
         <EditorIndex Value="14"/>
         <TopLine Value="38"/>
         <CursorPos X="56" Y="85"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="28"/>
         <Loaded Value="True"/>
       </Unit6>
       <Unit7>
@@ -66,7 +66,7 @@
         <EditorIndex Value="13"/>
         <TopLine Value="83"/>
         <CursorPos X="103" Y="101"/>
-        <UsageCount Value="19"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit7>
       <Unit8>
@@ -74,7 +74,7 @@
         <EditorIndex Value="12"/>
         <TopLine Value="305"/>
         <CursorPos Y="319"/>
-        <UsageCount Value="19"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit8>
       <Unit9>
@@ -82,15 +82,15 @@
         <EditorIndex Value="10"/>
         <TopLine Value="16"/>
         <CursorPos X="52" Y="45"/>
-        <UsageCount Value="19"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit9>
       <Unit10>
         <Filename Value="..\Common\LabMath.pas"/>
         <EditorIndex Value="9"/>
-        <TopLine Value="446"/>
-        <CursorPos X="56" Y="462"/>
-        <UsageCount Value="19"/>
+        <TopLine Value="724"/>
+        <CursorPos X="50" Y="745"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit10>
       <Unit11>
@@ -98,7 +98,7 @@
         <EditorIndex Value="11"/>
         <TopLine Value="304"/>
         <CursorPos X="13" Y="320"/>
-        <UsageCount Value="19"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit11>
       <Unit12>
@@ -106,31 +106,32 @@
         <EditorIndex Value="8"/>
         <TopLine Value="91"/>
         <CursorPos Y="111"/>
-        <UsageCount Value="19"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit12>
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="6"/>
-        <TopLine Value="718"/>
-        <CursorPos X="49" Y="749"/>
-        <UsageCount Value="19"/>
+        <TopLine Value="841"/>
+        <CursorPos X="47" Y="859"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit13>
       <Unit14>
         <Filename Value="..\Common\LabUtils.pas"/>
         <EditorIndex Value="5"/>
-        <TopLine Value="220"/>
-        <UsageCount Value="18"/>
+        <TopLine Value="198"/>
+        <CursorPos X="65" Y="218"/>
+        <UsageCount Value="26"/>
         <Loaded Value="True"/>
       </Unit14>
       <Unit15>
         <Filename Value="..\Common\LabColladaParser.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="4"/>
-        <TopLine Value="66"/>
-        <CursorPos X="3" Y="181"/>
-        <UsageCount Value="18"/>
+        <TopLine Value="1241"/>
+        <CursorPos X="67" Y="1262"/>
+        <UsageCount Value="26"/>
         <Loaded Value="True"/>
       </Unit15>
       <Unit16>
@@ -138,7 +139,7 @@
         <EditorIndex Value="3"/>
         <TopLine Value="270"/>
         <CursorPos X="50" Y="294"/>
-        <UsageCount Value="18"/>
+        <UsageCount Value="26"/>
         <Loaded Value="True"/>
       </Unit16>
       <Unit17>
@@ -146,7 +147,7 @@
         <EditorIndex Value="2"/>
         <TopLine Value="183"/>
         <CursorPos X="10" Y="199"/>
-        <UsageCount Value="18"/>
+        <UsageCount Value="26"/>
         <Loaded Value="True"/>
       </Unit17>
       <Unit18>
@@ -154,27 +155,9 @@
         <EditorIndex Value="7"/>
         <TopLine Value="311"/>
         <CursorPos Y="336"/>
-        <UsageCount Value="12"/>
+        <UsageCount Value="20"/>
         <Loaded Value="True"/>
       </Unit18>
     </Units>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints Count="2">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="main.pas"/>
-        <Line Value="132"/>
-      </Item1>
-      <Item2>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="main.pas"/>
-        <Line Value="299"/>
-      </Item2>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>

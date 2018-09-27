@@ -44,6 +44,24 @@ type
   TLabQuatRef = array[0..3] of TLabFloat;
   PLabQuatRef = ^TLabQuatRef;
 
+  TLabSwizzle = object
+  private
+    const DefaultSwizzle: TLabUInt8 = (0 or (1 shl 2) or (2 shl 4) or (3 shl 6));
+    var _Remap: TLabUInt8;
+    function GetOffset(const Index: TLabUInt8): TLabUInt8; inline;
+    procedure SetOffset(const Index: TLabUInt8; const Value: TLabUInt8); inline;
+  public
+    property Remap: TLabUInt8 read _Remap;
+    property Offset[const Index: TLabUInt8]: TLabUInt8 read GetOffset write SetOffset; default;
+    procedure SetIdentity; inline;
+    procedure SetValue(
+      const ord0: TLabUInt8 = 0;
+      const ord1: TLabUInt8 = 1;
+      const ord2: TLabUInt8 = 2;
+      const ord3: TLabUInt8 = 3
+    );
+  end;
+
   PLabMat = ^TLabMat;
   TLabMat = object
   private
@@ -91,6 +109,7 @@ type
     function Transpose: TLabMat; inline;
     function Inverse: TLabMat; inline;
     function ToStr: AnsiString;
+    function Swizzle(const Remap: TLabSwizzle): TLabMat; inline;
   end;
   TLabMatArr = array[Word] of TLabMat;
   PLabMatArr = ^TLabMatArr;
@@ -120,6 +139,7 @@ type
     function Transform4x4(const m: TLabMat): TLabVec2;
     function AsVec3: TLabVec3Ref; inline;
     function AsVec4: TLabVec4Ref; inline;
+    function Swizzle(const Remap: TLabSwizzle): TLabVec2; inline;
   end;
 
   PLabVec3 = ^TLabVec3;
@@ -141,6 +161,7 @@ type
     function Transform4x3(const m: TLabMat): TLabVec3;
     function Transform4x4(const m: TLabMat): TLabVec3;
     function AsVec4: TLabVec4Ref; inline;
+    function Swizzle(const Remap: TLabSwizzle): TLabVec3; inline;
   end;
 
   PLabVec4 = ^TLabVec4;
@@ -152,6 +173,7 @@ type
     var x, y, z, w: TLabFloat;
     property Arr[const Index: TLabInt32]: TLabFloat read GetArr write SetArr; default;
     procedure SetValue(const vx, vy, vz, vw: TLabFloat); inline;
+    function Swizzle(const Remap: TLabSwizzle): TLabVec4; inline;
   end;
 
   PLabQuat = ^TLabQuat;
@@ -422,6 +444,12 @@ type
   operator = (q0, q1: TLabQuat): Boolean; inline;
   operator = (m0, m1: TLabMat): Boolean; inline;
 
+function LabSwizzle(
+  const ord0: TLabUInt8 = 0;
+  const ord1: TLabUInt8 = 1;
+  const ord2: TLabUInt8 = 2;
+  const ord3: TLabUInt8 = 3
+): TLabSwizzle; inline;
 function LabRect(const x, y, w, h: TLabFloat): TLabRect; inline;
 function LabVec2: TLabVec2; inline;
 function LabVec2(const x, y: TLabFloat): TLabVec2; inline;
@@ -567,6 +595,36 @@ const
 
 implementation
 
+//TLabSwizzle BEGIN
+function TLabSwizzle.GetOffset(const Index: TLabUInt8): TLabUInt8;
+begin
+  Result := (_Remap shr (Index * 2)) and 3;
+end;
+
+procedure TLabSwizzle.SetOffset(const Index: TLabUInt8; const Value: TLabUInt8);
+  var ind: TLabUInt8;
+begin
+  ind := Index * 2;
+  _Remap := (_Remap and (not (3 shl ind))) or (Value shl ind);
+end;
+
+procedure TLabSwizzle.SetIdentity;
+begin
+  _Remap := DefaultSwizzle;
+end;
+
+procedure TLabSwizzle.SetValue(
+  const ord0: TLabUInt8;
+  const ord1: TLabUInt8;
+  const ord2: TLabUInt8;
+  const ord3: TLabUInt8
+);
+  var i: TLabInt32;
+begin
+  _Remap := ord0 or (ord1 shl 2) or (ord2 shl 4) or (ord3 shl 6);
+end;
+//TLabSwizzle END
+
 //TLabMat BEGIN
 function TLabMat.GetMat(const ix, iy: TLabInt32): TLabFloat;
 begin
@@ -660,6 +718,23 @@ begin
     FormatFloat('0.0##', e02) + ', ' + FormatFloat('0.0##', e12) + ', ' + FormatFloat('0.0##', e22) + ', ' + FormatFloat('0.0##', e22) + ', '#$D#$A +
     FormatFloat('0.0##', e03) + ', ' + FormatFloat('0.0##', e13) + ', ' + FormatFloat('0.0##', e23) + ', ' + FormatFloat('0.0##', e23) + #$D#$A +
     ')'
+  );
+end;
+
+function TLabMat.Swizzle(const Remap: TLabSwizzle): TLabMat;
+begin
+  Result := {Self * LabMat(
+    1, 0, 0, 0,
+    0, 0, 1, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1
+  );         }
+
+  LabMat(
+    Mat[Remap[0], Remap[0]], Mat[Remap[1], Remap[0]], Mat[Remap[2], Remap[0]], Mat[Remap[3], Remap[0]],
+    Mat[Remap[0], Remap[1]], Mat[Remap[1], Remap[1]], Mat[Remap[2], Remap[1]], Mat[Remap[3], Remap[1]],
+    Mat[Remap[0], Remap[2]], Mat[Remap[1], Remap[2]], Mat[Remap[2], Remap[2]], Mat[Remap[3], Remap[2]],
+    Mat[Remap[0], Remap[3]], Mat[Remap[1], Remap[3]], Mat[Remap[2], Remap[3]], Mat[Remap[3], Remap[3]]
   );
 end;
 //TLabMat END
@@ -768,6 +843,11 @@ function TLabVec2.AsVec4: TLabVec4Ref;
 begin
   Result := LabVec4(x, y, 0, 0);
 end;
+
+function TLabVec2.Swizzle(const Remap: TLabSwizzle): TLabVec2;
+begin
+  Result := LabVec2(Arr[Remap[0]], Arr[Remap[1]]);
+end;
 //TLabVec2 END
 
 //TLabVec3 BEGIN
@@ -835,6 +915,11 @@ function TLabVec3.AsVec4: TLabVec4Ref;
 begin
   Result := LabVec4(x, y, z, 0);
 end;
+
+function TLabVec3.Swizzle(const Remap: TLabSwizzle): TLabVec3;
+begin
+  Result := LabVec3(Arr[Remap[0]], Arr[Remap[1]], Arr[Remap[2]]);
+end;
 //TLabVec3 END
 
 //TLabVec4 BEGIN
@@ -851,6 +936,11 @@ end;
 procedure TLabVec4.SetValue(const vx, vy, vz, vw: TLabFloat);
 begin
   x := vx; y := vy; z := vz; w := vw;
+end;
+
+function TLabVec4.Swizzle(const Remap: TLabSwizzle): TLabVec4;
+begin
+  Result := LabVec4(Arr[Remap[0]], Arr[Remap[1]], Arr[Remap[2]], Arr[Remap[3]]);
 end;
 //TLabVec4 END
 
@@ -1860,6 +1950,17 @@ begin
 end;
 
 {$Warnings off}
+
+function LabSwizzle(
+  const ord0: TLabUInt8;
+  const ord1: TLabUInt8;
+  const ord2: TLabUInt8;
+  const ord3: TLabUInt8
+): TLabSwizzle;
+begin
+  Result.SetValue(ord0, ord1, ord2, ord3);
+end;
+
 function LabRect(const x, y, w, h: TLabFloat): TLabRect;
 begin
   Result.x := x;

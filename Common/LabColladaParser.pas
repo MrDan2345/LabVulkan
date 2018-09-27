@@ -218,6 +218,69 @@ type
   end;
   TLabColladaMeshList = specialize TLabList<TLabColladaMesh>;
 
+  TLabColladaImage = class (TLabColladaObject)
+  private
+    _Source: DOMString;
+  public
+    property Source: DOMString read _Source;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaImageList = specialize TLabList<TLabColladaImage>;
+
+  TLabColladaEffectProfileParamType = (pt_invalid, pt_surface, pt_sampler, pt_float, pt_float2, pt_float3, pt_float4);
+
+  TLabColladaEffectProfileParam = class (TLabColladaObject)
+  public
+    type TDataSurface = class
+      InitFrom: DOMString;
+    end;
+    type TDataSampler = class
+      Source: DOMString;
+    end;
+    type TDataFloat = class
+      Value: TLabFloat;
+    end;
+    type TDataFloat2 = class
+      Value: TLabVec2;
+    end;
+    type TDataFloat3 = class
+      Value: TLabVec3;
+    end;
+    type TDataFloat4 = class
+      Value: TLabVec4;
+    end;
+  private
+    _ParamType: TLabColladaEffectProfileParamType;
+    _Data: TObject;
+  public
+    property ParamType: TLabColladaEffectProfileParamType read _ParamType;
+    function AsSurface: TDataSurface; inline;
+    function AsSampler: TDataSampler; inline;
+    function AsFloat: TDataFloat; inline;
+    function AsFloat2: TDataFloat2; inline;
+    function AsFloat3: TDataFloat3; inline;
+    function AsFloat4: TDataFloat4; inline;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaEffectProfile = class (TLabColladaObject)
+  public
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaEffect = class (TLabColladaObject)
+  private
+    _Profile: TLabColladaEffectProfile;
+  public
+    property Profile: TLabColladaEffectProfile read _Profile;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaEffectList = specialize TLabList<TLabColladaEffect>;
+
   TLabColladaGeometry = class (TLabColladaObject)
   private
     _Name: DOMString;
@@ -297,6 +360,14 @@ type
   end;
   TLabColladaVisualSceneList = specialize TLabList<TLabColladaVisualScene>;
 
+  TLabColladaLibraryImages = class (TLabColladaObject)
+  private
+    _Images: TLabColladaImageList;
+  public
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaLibraryGeometries = class (TLabColladaObject)
   private
     _Geometries: TLabColladaGeometryList;
@@ -335,12 +406,25 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaAsset = class (TLabColladaObject)
+  private
+    _UpAxis: TLabSwizzle;
+  public
+    property UpAxis: TLabSwizzle read _UpAxis;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaRoot = class (TLabColladaObject)
   private
+    _Asset: TLabColladaAsset;
+    _LibImages: TLabColladaLibraryImages;
     _LibGeometries: TLabColladaLibraryGeometries;
     _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
   public
+    property Asset: TLabColladaAsset read _Asset;
+    property LibImages: TLabColladaLibraryImages read _LibImages;
     property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
     property Scene: TLabColladaScene read _Scene;
@@ -393,13 +477,14 @@ end;
 
 function LoadMatrix(const Node: TDOMNode): TLabMat;
   var Data: DOMString;
-  var i, p: TVkInt32;
+  var x, y, p: TVkInt32;
 begin
   Data := Node.TextContent;
   p := 1;
-  for i := 0 to 15 do
+  for y := 0 to 3 do
+  for x := 0 to 3 do
   begin
-    Result.Arr[i] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
+    Result.Mat[x, y] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
   end;
 end;
 
@@ -1101,6 +1186,204 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaImage.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+begin
+  inherited Create(XMLNode, AParent);
+  CurNode := XMLNode.FindNode('init_from');
+  if Assigned(CurNode) then
+  begin
+    _Source := CurNode.TextContent;
+  end;
+end;
+
+destructor TLabColladaImage.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TLabColladaEffectProfileParam.AsSurface: TDataSurface;
+begin
+  Result := _Data as TDataSurface;
+end;
+
+function TLabColladaEffectProfileParam.AsSampler: TDataSampler;
+begin
+  Result := _Data as TDataSampler;
+end;
+
+function TLabColladaEffectProfileParam.AsFloat: TDataFloat;
+begin
+  Result := _Data as TDataFloat;
+end;
+
+function TLabColladaEffectProfileParam.AsFloat2: TDataFloat2;
+begin
+  Result := _Data as TDataFloat2;
+end;
+
+function TLabColladaEffectProfileParam.AsFloat3: TDataFloat3;
+begin
+  Result := _Data as TDataFloat3;
+end;
+
+function TLabColladaEffectProfileParam.AsFloat4: TDataFloat4;
+begin
+  Result := _Data as TDataFloat4;
+end;
+
+constructor TLabColladaEffectProfileParam.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode, Node: TDOMNode;
+  var NodeName, VecData: DOMString;
+  var DataSurface: TDataSurface;
+  var DataSampler: TDataSampler;
+  var DataFloat: TDataFloat;
+  var DataFloat2: TDataFloat2;
+  var DataFloat3: TDataFloat3;
+  var DataFloat4: TDataFloat4;
+  var i, p: TVkInt32;
+begin
+  inherited Create(XMLNode, AParent);
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'surface' then
+    begin
+      DataSurface := TDataSurface.Create;
+      Node := CurNode.FindNode('init_from');
+      if Assigned(Node) then
+      begin
+        DataSurface.InitFrom := Node.TextContent;
+      end;
+      _Data := DataSurface;
+    end
+    else if (NodeName = 'sampler1d')
+    or (NodeName = 'sampler2d')
+    or (NodeName = 'sampler3d') then
+    begin
+      DataSampler := TDataSampler.Create;
+      Node := CurNode.FindNode('source');
+      if Assigned(Node) then
+      begin
+        DataSampler.Source := Node.TextContent;
+      end;
+      _Data := DataSampler;
+    end
+    else if (NodeName = 'float') then
+    begin
+      DataFloat := TDataFloat.Create;
+      VecData := CurNode.TextContent;
+      p := 1;
+      DataFloat.Value := StrToFloatDef(FindNextValue(VecData, p), 0);
+      _Data := DataFloat;
+    end
+    else if (NodeName = 'float2') then
+    begin
+      DataFloat2 := TDataFloat2.Create;
+      VecData := CurNode.TextContent;
+      p := 1;
+      for i := 0 to 1 do
+      begin
+        DataFloat2.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+      end;
+      _Data := DataFloat2;
+    end
+    else if (NodeName = 'float3') then
+    begin
+      DataFloat3 := TDataFloat3.Create;
+      VecData := CurNode.TextContent;
+      p := 1;
+      for i := 0 to 2 do
+      begin
+        DataFloat3.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+      end;
+      _Data := DataFloat3;
+    end
+    else if (NodeName = 'float4') then
+    begin
+      DataFloat4 := TDataFloat4.Create;
+      VecData := CurNode.TextContent;
+      p := 1;
+      for i := 0 to 3 do
+      begin
+        DataFloat4.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+      end;
+      _Data := DataFloat4;
+    end
+    else
+    begin
+      CurNode := CurNode.NextSibling;
+      Continue;
+    end;
+    Break;
+  end;
+end;
+
+destructor TLabColladaEffectProfileParam.Destroy;
+begin
+  if Assigned(_Data) then _Data.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaEffectProfile.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'newparam' then
+    begin
+
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaEffectProfile.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabColladaEffect.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'profile_common' then Break;
+    CurNode := CurNode.NextSibling;
+  end;
+  if Assigned(CurNode) then
+  begin
+    _Profile := TLabColladaEffectProfile.Create(CurNode, Self);
+  end;
+end;
+
+destructor TLabColladaEffect.Destroy;
+begin
+  if Assigned(_Profile) then _Profile.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaInstance.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1343,6 +1626,34 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaLibraryImages.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Images := TLabColladaImageList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'image' then
+    begin
+      _Images.Add(TLabColladaImage.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryImages.Destroy;
+begin
+  while _Images.Count > 0 do _Images.Pop.Free;
+  _Images.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaLibraryGeometries.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1447,6 +1758,35 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaAsset.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var Str: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _UpAxis.SetIdentity;
+  CurNode := XMLNode.FindNode('up_axis');
+  if Assigned(CurNode) then
+  begin
+    Str := LowerCase(CurNode.TextContent);
+    if Str = 'x_up' then
+    begin
+      _UpAxis.SetValue(1, 0);
+    end
+    else if Str = 'z_up' then
+    begin
+      _UpAxis.SetValue(0, 2, 1);
+    end;
+  end;
+end;
+
+destructor TLabColladaAsset.Destroy;
+begin
+  inherited Destroy;
+end;
+
 constructor TLabColladaRoot.Create(
   const XMLNode: TDOMNode
 );
@@ -1461,7 +1801,11 @@ begin
   while Assigned(CurNode) do
   begin
     NodeName := LowerCase(CurNode.NodeName);
-    if NodeName = 'library_cameras' then
+    if NodeName = 'asset' then
+    begin
+      _Asset := TLabColladaAsset.Create(CurNode, Self);
+    end
+    else if NodeName = 'library_cameras' then
     begin
     end
     else if NodeName = 'library_lights' then
@@ -1469,6 +1813,7 @@ begin
     end
     else if NodeName = 'library_images' then
     begin
+      _LibImages := TLabColladaLibraryImages.Create(CurNode, Self);
     end
     else if NodeName = 'library_effects' then
     begin
