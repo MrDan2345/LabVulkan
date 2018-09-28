@@ -13,7 +13,8 @@ uses
   LabColladaParser,
   LabDevice,
   LabBuffer,
-  LabShader;
+  LabShader,
+  LabImageData;
 
 type
   TLabScene = class;
@@ -125,6 +126,40 @@ type
   end;
   TLabSceneGeometryList = specialize TLabList<TLabSceneGeometry>;
 
+  TLabSceneImage = class (TLabClass)
+  private
+    var _Scene: TLabScene;
+    var _Image: TLabImageData;
+  public
+    property Scene: TLabScene read _Scene;
+    property Image: TLabImageData read _Image;
+    constructor Create(const AScene: TLabScene; const ColladaImage: TLabColladaImage);
+    destructor Destroy; override;
+  end;
+  TLabSceneImageList = specialize TLabList<TLabSceneImage>;
+
+  TLabSceneEffect = class (TLabClass)
+  private
+    var _Scene: TLabScene;
+  public
+    property Scene: TLabScene read _Scene;
+    constructor Create(const AScene: TLabScene; const ColladaEffect: TLabColladaEffect);
+    destructor Destroy; override;
+  end;
+  TLabSceneEffectList = specialize TLabList<TLabSceneEffect>;
+
+  TLabSceneMaterial = class (TLabClass)
+  private
+    var _Scene: TLabScene;
+    var _Effect: TLabSceneEffect;
+  public
+    property Scene: TLabScene read _Scene;
+    property Effect: TLabSceneEffect read _Effect;
+    constructor Create(const AScene: TLabScene; const ColladaMaterial: TLabColladaMaterial);
+    destructor Destroy; override;
+  end;
+  TLabSceneMaterialList = specialize TLabList<TLabSceneMaterial>;
+
   TLabSceneNode = class;
   TLabSceneNodeAttachment = class (TLabClass)
   private
@@ -136,8 +171,15 @@ type
   end;
 
   TLabSceneNodeAttachmentGeometry = class (TLabSceneNodeAttachment)
+  public
+    type TMaterialBinding = class
+      Material: TLabSceneMaterial;
+      Symbol: String;
+    end;
+    type TMaterialBindingList = specialize TLabList<TMaterialBinding>;
   private
     var _Geometry: TLabSceneGeometry;
+    var _MaterialBindings: TMaterialBindingList;
   public
     property Geometry: TLabSceneGeometry read _Geometry;
     constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceGeometry: TLabColladaInstanceGeometry);
@@ -171,14 +213,22 @@ type
 
   TLabScene = class (TLabClass)
   private
+    var _Path: String;
     var _Device: TLabDeviceShared;
     var _Root: TLabSceneNode;
+    var _Images: TLabSceneImageList;
     var _Geometries: TLabSceneGeometryList;
+    var _Effects: TLabSceneEffectList;
+    var _Materials: TLabSceneMaterialList;
   public
     property Device: TLabDeviceShared read _Device;
     property Root: TLabSceneNode read _Root;
+    property Images: TLabSceneImageList read _Images;
+    property Effects: TLabSceneEffectList read _Effects;
+    property Materials: TLabSceneMaterialList read _Materials;
     property Geometries: TLabSceneGeometryList read _Geometries;
     procedure Add(const FileName: String);
+    function ResolvePath(const Path: String): String;
     constructor Create(const ADevice: TLabDeviceShared);
     destructor Destroy; override;
   end;
@@ -568,6 +618,8 @@ constructor TLabSceneNodeAttachmentGeometry.Create(
   const ANode: TLabSceneNode;
   const ColladaInstanceGeometry: TLabColladaInstanceGeometry
 );
+  var i: Integer;
+  var mb: TMaterialBinding;
 begin
   inherited Create(AScene, ANode);
   if Assigned(ColladaInstanceGeometry.Geometry)
@@ -576,10 +628,25 @@ begin
   begin
     _Geometry := TLabSceneGeometry(ColladaInstanceGeometry.Geometry.UserData);
   end;
+  _MaterialBindings := TMaterialBindingList.Create;
+  for i := 0 to ColladaInstanceGeometry.MaterialBindings.Count - 1 do
+  begin
+    if Assigned(ColladaInstanceGeometry.MaterialBindings[i].Material)
+    and Assigned(ColladaInstanceGeometry.MaterialBindings[i].Material.UserData)
+    and (ColladaInstanceGeometry.MaterialBindings[i].Material.UserData is TLabSceneMaterial) then
+    begin
+      mb := TMaterialBinding.Create;
+      mb.Material := TLabSceneMaterial(ColladaInstanceGeometry.MaterialBindings[i].Material.UserData);
+      mb.Symbol := AnsiString(ColladaInstanceGeometry.MaterialBindings[i].Symbol);
+      _MaterialBindings.Add(mb);
+    end;
+  end;
 end;
 
 destructor TLabSceneNodeAttachmentGeometry.Destroy;
 begin
+  while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
+  _MaterialBindings.Free;
   inherited Destroy;
 end;
 
@@ -819,6 +886,63 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabSceneImage.Create(
+  const AScene: TLabScene;
+  const ColladaImage: TLabColladaImage
+);
+  var Path: String;
+begin
+  _Scene := AScene;
+  ColladaImage.UserData := Self;
+  _Image := TLabImageDataPNG.Create;
+  Path := AScene.ResolvePath(ColladaImage.Source);
+  if FileExists(Path) then
+  begin
+    _Image.Load(Path);
+  end;
+end;
+
+destructor TLabSceneImage.Destroy;
+begin
+  _Image.Free;
+  inherited Destroy;
+end;
+
+constructor TLabSceneEffect.Create(
+  const AScene: TLabScene;
+  const ColladaEffect: TLabColladaEffect
+);
+begin
+  _Scene := AScene;
+  ColladaEffect.UserData := Self;
+end;
+
+destructor TLabSceneEffect.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabSceneMaterial.Create(
+  const AScene: TLabScene;
+  const ColladaMaterial: TLabColladaMaterial
+);
+begin
+  _Scene := AScene;
+  ColladaMaterial.UserData := Self;
+  if Assigned(ColladaMaterial.InstanceEffect)
+  and Assigned(ColladaMaterial.InstanceEffect.Effect)
+  and Assigned(ColladaMaterial.InstanceEffect.Effect.UserData)
+  and (ColladaMaterial.InstanceEffect.Effect.UserData is TLabSceneEffect) then
+  begin
+    _Effect := TLabSceneEffect(ColladaMaterial.InstanceEffect.Effect.UserData);
+  end;
+end;
+
+destructor TLabSceneMaterial.Destroy;
+begin
+  inherited Destroy;
+end;
+
 procedure TLabSceneNode.SetParent(const Value: TLabSceneNode);
 begin
   if _Parent = Value then Exit;
@@ -879,12 +1003,25 @@ procedure TLabScene.Add(const FileName: String);
   var Collada: TLabColladaParser;
   var i: TVkInt32;
 begin
+  _Path := ExpandFileName(ExtractFileDir(FileName) + PathDelim);
   Collada := TLabColladaParser.Create(FileName);
   if not Assigned(Collada.RootNode)
   or not Assigned(Collada.RootNode.Scene) then
   begin
     Collada.Free;
     Exit;
+  end;
+  for i := 0 to Collada.RootNode.LibImages.Images.Count - 1 do
+  begin
+    _Images.Add(TLabSceneImage.Create(Self, Collada.RootNode.LibImages.Images[i]));
+  end;
+  for i := 0 to Collada.RootNode.LibEffects.Effects.Count - 1 do
+  begin
+    _Effects.Add(TLabSceneEffect.Create(Self, Collada.RootNode.LibEffects.Effects[i]));
+  end;
+  for i := 0 to Collada.RootNode.LibMaterials.Materials.Count - 1 do
+  begin
+    _Materials.Add(TLabSceneMaterial.Create(Self, Collada.RootNode.LibMaterials.Materials[i]));
   end;
   for i := 0 to Collada.RootNode.LibGeometries.Geometries.Count - 1 do
   begin
@@ -895,19 +1032,38 @@ begin
     TLabSceneNode.Create(Self, _Root, Collada.RootNode.Scene.VisualScene.VisualScene.Nodes[i]);
   end;
   Collada.Free;
+  _Path := '';
+end;
+
+function TLabScene.ResolvePath(const Path: String): String;
+  var FullPath: String;
+begin
+  FullPath := ExpandFileName(_Path + Path);
+  if FileExists(FullPath) then Exit(FullPath);
+  if FileExists(Path) then Exit(Path);
+  Result := ExtractFileName(Path);
 end;
 
 constructor TLabScene.Create(const ADevice: TLabDeviceShared);
 begin
   _Device := ADevice;
   _Root := TLabSceneNode.Create(Self, nil, nil);
+  _Images := TLabSceneImageList.Create;
   _Geometries := TLabSceneGeometryList.Create;
+  _Effects := TLabSceneEffectList.Create;
+  _Materials := TLabSceneMaterialList.Create();
 end;
 
 destructor TLabScene.Destroy;
 begin
+  while _Materials.Count > 0 do _Materials.Pop.Free;
+  _Materials.Free;
+  while _Effects.Count > 0 do _Effects.Pop.Free;
+  _Effects.Free;
   while _Geometries.Count > 0 do _Geometries.Pop.Free;
   _Geometries.Free;
+  while _Images.Count > 0 do _Images.Pop.Free;
+  _Images.Free;
   _Root.Free;
   inherited Destroy;
 end;

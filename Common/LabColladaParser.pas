@@ -58,6 +58,16 @@ type
   TLabColladaObjectList = TLabColladaObject.TObjectList;
   TLabColladaObjectClass = TLabColladaObject.CSelf;
 
+  TLabColladaInstance = class (TLabColladaObject)
+  private
+    _url: DOMString;
+  public
+    property Url: DOMString read _url;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaInstanceList = specialize TLabList<TLabColladaInstance>;
+
   TLabColladaInput = class (TLabColladaObject)
   private
     _Semantic: DOMString;
@@ -281,6 +291,27 @@ type
   end;
   TLabColladaEffectList = specialize TLabList<TLabColladaEffect>;
 
+  TLabColladaInstanceEffect = class (TLabColladaInstance)
+  private
+    _Effect: TLabColladaEffect;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Effect: TLabColladaEffect read _Effect;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaMaterial = class (TLabColladaObject)
+  private
+    _InstanceEffect: TLabColladaInstanceEffect;
+  public
+    property InstanceEffect: TLabColladaInstanceEffect read _InstanceEffect;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaMaterialList = specialize TLabList<TLabColladaMaterial>;
+
   TLabColladaGeometry = class (TLabColladaObject)
   private
     _Name: DOMString;
@@ -293,35 +324,30 @@ type
   end;
   TLabColladaGeometryList = specialize TLabList<TLabColladaGeometry>;
 
-  TLabColladaInstance = class (TLabColladaObject)
-  private
-    _url: DOMString;
-  public
-    property Url: DOMString read _url;
-    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
-    destructor Destroy; override;
-  end;
-  TLabColladaInstanceList = specialize TLabList<TLabColladaInstance>;
-
-  TLabColladaInstanceMaterialBinding = class (TLabColladaObject)
+  TLabColladaInstanceMaterial = class (TLabColladaObject)
   private
     _Symbol: DOMString;
     _Target: DOMString;
+    _Material: TLabColladaMaterial;
+  protected
+    procedure ResolveLinks; override;
   public
+    property Material: TLabColladaMaterial read _Material;
+    property Symbol: DOMString read _Symbol;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
-  TLabColladaInstanceMaterialBindingList = specialize TLabList<TLabColladaInstanceMaterialBinding>;
+  TLabColladaInstanceMaterialList = specialize TLabList<TLabColladaInstanceMaterial>;
 
   TLabColladaInstanceGeometry = class (TLabColladaInstance)
   private
     _Geometry: TLabColladaGeometry;
-    _MaterialBindings: TLabColladaInstanceMaterialBindingList;
+    _MaterialBindings: TLabColladaInstanceMaterialList;
   protected
     procedure ResolveLinks; override;
   public
     property Geometry: TLabColladaGeometry read _Geometry;
-    property MaterialBindings: TLabColladaInstanceMaterialBindingList read _MaterialBindings;
+    property MaterialBindings: TLabColladaInstanceMaterialList read _MaterialBindings;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -360,10 +386,29 @@ type
   end;
   TLabColladaVisualSceneList = specialize TLabList<TLabColladaVisualScene>;
 
+  TLabColladaLibraryMaterials = class (TLabColladaObject)
+  private
+    _Materials: TLabColladaMaterialList;
+  public
+    property Materials: TLabColladaMaterialList read _Materials;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaLibraryEffects = class (TLabColladaObject)
+  private
+    _Effects: TLabColladaEffectList;
+  public
+    property Effects: TLabColladaEffectList read _Effects;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaLibraryImages = class (TLabColladaObject)
   private
     _Images: TLabColladaImageList;
   public
+    property Images: TLabColladaImageList read _Images;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -418,12 +463,16 @@ type
   TLabColladaRoot = class (TLabColladaObject)
   private
     _Asset: TLabColladaAsset;
+    _LibMaterials: TLabColladaLibraryMaterials;
+    _LibEffects: TLabColladaLibraryEffects;
     _LibImages: TLabColladaLibraryImages;
     _LibGeometries: TLabColladaLibraryGeometries;
     _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
   public
     property Asset: TLabColladaAsset read _Asset;
+    property LibMaterials: TLabColladaLibraryMaterials read _LibMaterials;
+    property LibEffects: TLabColladaLibraryEffects read _LibEffects;
     property LibImages: TLabColladaLibraryImages read _LibImages;
     property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
@@ -1007,7 +1056,7 @@ function TLabColladaTriangles.GetVertexDescriptor: TLabColladaVertexDescriptor;
       if Source.DataArray.ArrayType in [at_bool, at_float, at_int] then
       begin
         for i := 0 to High(SemanticMap) do
-        if SemanticMap[i].Name = Input.Semantic then
+        if SemanticMap[i].Name = AnsiString(Input.Semantic) then
         begin
           Result[CurAttr].Semantic := SemanticMap[i].Value;
           Result[CurAttr].DataType := Source.DataArray.ArrayType;
@@ -1384,6 +1433,26 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaMaterial.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+begin
+  inherited Create(XMLNode, AParent);
+  CurNode := XMLNode.FindNode('instance_effect');
+  if Assigned(CurNode) then
+  begin
+    _InstanceEffect := TLabColladaInstanceEffect.Create(CurNode, Self);
+  end;
+end;
+
+destructor TLabColladaMaterial.Destroy;
+begin
+  FreeAndNil(_InstanceEffect);
+  inherited Destroy;
+end;
+
 constructor TLabColladaInstance.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1398,7 +1467,18 @@ begin
   inherited Destroy;
 end;
 
-constructor TLabColladaInstanceMaterialBinding.Create(
+procedure TLabColladaInstanceMaterial.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(_Target);
+  if Assigned(Obj) and (Obj is TLabColladaMaterial) then
+  begin
+    _Material := TLabColladaMaterial(Obj);
+  end;
+end;
+
+constructor TLabColladaInstanceMaterial.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
 );
@@ -1408,7 +1488,31 @@ begin
   _Target := FindAttribute(XMLNode, 'target');
 end;
 
-destructor TLabColladaInstanceMaterialBinding.Destroy;
+destructor TLabColladaInstanceMaterial.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TLabColladaInstanceEffect.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaEffect) then
+  begin
+    _Effect := TLabColladaEffect(Obj);
+  end;
+end;
+
+constructor TLabColladaInstanceEffect.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+begin
+  inherited Create(XMLNode, AParent);
+end;
+
+destructor TLabColladaInstanceEffect.Destroy;
 begin
   inherited Destroy;
 end;
@@ -1433,7 +1537,7 @@ constructor TLabColladaInstanceGeometry.Create(
 begin
   inherited Create(XMLNode, AParent);
   _Geometry := nil;
-  _MaterialBindings := TLabColladaInstanceMaterialBindingList.Create;
+  _MaterialBindings := TLabColladaInstanceMaterialList.Create;
   CurNode := XMLNode.FindNode('bind_material');
   if Assigned(CurNode) then
   begin
@@ -1446,7 +1550,7 @@ begin
         NodeName := LowerCase(CurNode.NodeName);
         if NodeName = 'instance_material' then
         begin
-          _MaterialBindings.Add(TLabColladaInstanceMaterialBinding.Create(CurNode, Self));
+          _MaterialBindings.Add(TLabColladaInstanceMaterial.Create(CurNode, Self));
         end;
         CurNode := CurNode.NextSibling;
       end;
@@ -1626,6 +1730,50 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaLibraryMaterials.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Materials := TLabColladaMaterialList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'material' then
+    begin
+      _Materials.Add(TLabColladaMaterial.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryMaterials.Destroy;
+begin
+  while _Materials.Count > 0 do _Materials.Pop.Free;
+  _Materials.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaLibraryEffects.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+begin
+  inherited Create(XMLNode, AParent);
+  _Effects := TLabColladaEffectList.Create;
+end;
+
+destructor TLabColladaLibraryEffects.Destroy;
+begin
+  while _Effects.Count > 0 do _Effects.Pop.Free;
+  _Effects.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaLibraryImages.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1795,9 +1943,6 @@ constructor TLabColladaRoot.Create(
 begin
   inherited Create(XMLNode, nil);
   CurNode := XMLNode.FirstChild;
-  _LibGeometries := nil;
-  _LibVisualScenes := nil;
-  _Scene := nil;
   while Assigned(CurNode) do
   begin
     NodeName := LowerCase(CurNode.NodeName);
@@ -1817,9 +1962,11 @@ begin
     end
     else if NodeName = 'library_effects' then
     begin
+      _LibEffects := TLabColladaLibraryEffects.Create(CurNode, Self);
     end
     else if NodeName = 'library_materials' then
     begin
+      _LibMaterials := TLabColladaLibraryMaterials.Create(CurNode, Self);
     end
     else if NodeName = 'library_geometries' then
     begin
@@ -1842,9 +1989,13 @@ end;
 
 destructor TLabColladaRoot.Destroy;
 begin
-  if Assigned(_LibVisualScenes) then _LibVisualScenes.Free;
-  if Assigned(_LibGeometries) then _LibGeometries.Free;
-  if Assigned(_Scene) then _Scene.Free;
+  FreeAndNil(_LibMaterials);
+  FreeAndNil(_LibEffects);
+  FreeAndNil(_LibImages);
+  FreeAndNil(_LibVisualScenes);
+  FreeAndNil(_LibGeometries);
+  FreeAndNil(_Scene);
+  FreeAndNil(_Asset);
   inherited Destroy;
 end;
 
