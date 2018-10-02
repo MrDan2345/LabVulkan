@@ -138,11 +138,48 @@ type
   end;
   TLabSceneImageList = specialize TLabList<TLabSceneImage>;
 
+  TLabSceneEffectParameter = class (TLabClass)
+  protected
+    var _Scene: TLabScene;
+    var _ParameterType: TLabColladaEffectProfileParamType;
+  public
+    property ParameterType: TLabColladaEffectProfileParamType read _ParameterType;
+    constructor Create(const AScene: TLabScene);
+  end;
+  TLabSceneEffectParameterList = specialize TLabList<TLabSceneEffectParameter>;
+
+  TLabSceneEffectParameterSampler = class (TLabSceneEffectParameter)
+  public
+    constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
+  end;
+
+  TLabSceneEffectParameterFloat = class (TLabSceneEffectParameter)
+  public
+    constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
+  end;
+
+  TLabSceneEffectParameterFloat2 = class (TLabSceneEffectParameter)
+  public
+    constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
+  end;
+
+  TLabSceneEffectParameterFloat3 = class (TLabSceneEffectParameter)
+  public
+    constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
+  end;
+
+  TLabSceneEffectParameterFloat4 = class (TLabSceneEffectParameter)
+  public
+    constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
+  end;
+
   TLabSceneEffect = class (TLabClass)
   private
     var _Scene: TLabScene;
+    var _Params: TLabSceneEffectParameterList;
   public
     property Scene: TLabScene read _Scene;
+    property Params: TLabSceneEffectParameterList read _Params;
     constructor Create(const AScene: TLabScene; const ColladaEffect: TLabColladaEffect);
     destructor Destroy; override;
   end;
@@ -908,17 +945,80 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabSceneEffectParameter.Create(const AScene: TLabScene);
+begin
+  _Scene := AScene;
+end;
+
+constructor TLabSceneEffectParameterSampler.Create(
+  const AScene: TLabScene;
+  const Param: TLabColladaEffectProfileParam
+);
+begin
+  inherited Create(AScene);
+  //Param.AsSampler.Surface.Image.Source;
+end;
+
+constructor TLabSceneEffectParameterFloat.Create(
+  const AScene: TLabScene;
+  const Param: TLabColladaEffectProfileParam
+);
+begin
+  inherited Create(AScene);
+end;
+
+constructor TLabSceneEffectParameterFloat2.Create(
+  const AScene: TLabScene;
+  const Param: TLabColladaEffectProfileParam
+);
+begin
+  inherited Create(AScene);
+end;
+
+constructor TLabSceneEffectParameterFloat3.Create(
+  const AScene: TLabScene;
+  const Param: TLabColladaEffectProfileParam
+);
+begin
+  inherited Create(AScene);
+end;
+
+constructor TLabSceneEffectParameterFloat4.Create(
+  const AScene: TLabScene;
+  const Param: TLabColladaEffectProfileParam
+);
+begin
+  inherited Create(AScene);
+end;
+
 constructor TLabSceneEffect.Create(
   const AScene: TLabScene;
   const ColladaEffect: TLabColladaEffect
 );
+  var i: TVkInt32;
 begin
   _Scene := AScene;
+  _Params := TLabSceneEffectParameterList.Create;
   ColladaEffect.UserData := Self;
+  if Assigned(ColladaEffect.Profile) then
+  begin
+    for i := 0 to ColladaEffect.Profile.Params.Count - 1 do
+    begin
+      case ColladaEffect.Profile.Params[i].ParamType of
+        pt_sampler: _Params.Add(TLabSceneEffectParameterSampler.Create(_Scene, ColladaEffect.Profile.Params[i]));
+        pt_float: _Params.Add(TLabSceneEffectParameterFloat.Create(_Scene, ColladaEffect.Profile.Params[i]));
+        pt_float2: _Params.Add(TLabSceneEffectParameterFloat2.Create(_Scene, ColladaEffect.Profile.Params[i]));
+        pt_float3: _Params.Add(TLabSceneEffectParameterFloat3.Create(_Scene, ColladaEffect.Profile.Params[i]));
+        pt_float4: _Params.Add(TLabSceneEffectParameterFloat4.Create(_Scene, ColladaEffect.Profile.Params[i]));
+      end;
+    end;
+  end;
 end;
 
 destructor TLabSceneEffect.Destroy;
 begin
+  while _Params.Count > 0 do _Params.Pop.Free;
+  _Params.Free;
   inherited Destroy;
 end;
 

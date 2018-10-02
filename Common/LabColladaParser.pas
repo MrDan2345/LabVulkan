@@ -244,9 +244,11 @@ type
   public
     type TDataSurface = class
       InitFrom: DOMString;
+      Image: TLabColladaImage;
     end;
     type TDataSampler = class
       Source: DOMString;
+      Surface: TDataSurface;
     end;
     type TDataFloat = class
       Value: TLabFloat;
@@ -274,9 +276,15 @@ type
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
+  TLabColladaEffectProfileParamList = specialize TLabList<TLabColladaEffectProfileParam>;
 
   TLabColladaEffectProfile = class (TLabColladaObject)
+  private
+    _Params: TLabColladaEffectProfileParamList;
+  protected
+    procedure ResolveLinks; override;
   public
+    property Params: TLabColladaEffectProfileParamList read _Params;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -1381,6 +1389,30 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaEffectProfile.ResolveLinks;
+  var i, j: TVkInt32;
+  var Obj: TLabColladaObject;
+begin
+  for i := 0 to _Params.Count - 1 do
+  begin
+    case _Params[i].ParamType of
+      pt_sampler:
+      begin
+        Obj := Find(_Params[i].AsSampler.Source);
+        if (Obj is TLabColladaEffectProfileParam)
+        and (TLabColladaEffectProfileParam(Obj).ParamType = pt_surface) then
+        begin
+          _Params[i].AsSampler.Surface := TLabColladaEffectProfileParam(Obj).AsSurface;
+        end;
+      end;
+      pt_surface:
+      begin
+        _Params[i].AsSurface.Image := TLabColladaImage(Find(_Params[i].AsSurface.InitFrom));
+      end;
+    end;
+  end;
+end;
+
 constructor TLabColladaEffectProfile.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -1389,13 +1421,14 @@ constructor TLabColladaEffectProfile.Create(
   var NodeName: DOMString;
 begin
   inherited Create(XMLNode, AParent);
+  _Params := TLabColladaEffectProfileParamList.Create;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
     NodeName := LowerCase(CurNode.NodeName);
     if NodeName = 'newparam' then
     begin
-
+      _Params.Add(TLabColladaEffectProfileParam.Create(CurNode, Self));
     end;
     CurNode := CurNode.NextSibling;
   end;
@@ -1403,6 +1436,8 @@ end;
 
 destructor TLabColladaEffectProfile.Destroy;
 begin
+  while _Params.Count > 0 do _Params.Pop.Free;
+  _Params.Free;
   inherited Destroy;
 end;
 
@@ -1762,9 +1797,21 @@ constructor TLabColladaLibraryEffects.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
 );
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
 begin
   inherited Create(XMLNode, AParent);
   _Effects := TLabColladaEffectList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'effect' then
+    begin
+      _Effects.Add(TLabColladaEffect.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
 end;
 
 destructor TLabColladaLibraryEffects.Destroy;

@@ -391,9 +391,9 @@ procedure TLabApp.Initialize;
   var fov: TVkFloat;
   var ColladaParser: TLabColladaParser;
 begin
-  ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
-  ColladaParser.RootNode.Dump;
-  ColladaParser.Free;
+  //ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
+  //ColladaParser.RootNode.Dump;
+  //ColladaParser.Free;
   Window := TLabWindow.Create(500, 500);
   Window.Caption := 'Vulkan Model';
   Device := TLabDevice.Create(
