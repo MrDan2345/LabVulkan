@@ -65,6 +65,7 @@ type
     var PipelineCache: TLabPipelineCacheShared;
     var Scene: TLabScene;
     var Transforms: TUniformArrayShared;
+    var UniformBufferMap: Pointer;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -561,17 +562,14 @@ procedure TLabApp.UpdateTransforms;
       UpdateNode(Node.Children[i_n]);
     end;
   end;
-  var UniformData: Pointer;
 begin
   UpdateNode(Scene.Root);
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
+  if Assigned(UniformBufferMap) then
   begin
-    Move(Transforms.Ptr.Data^, UniformData^, Transforms.Ptr.DataSize);
+    Move(Transforms.Ptr.Data^, UniformBufferMap^, Transforms.Ptr.DataSize);
     UniformBuffer.Ptr.FlushMappedMemoryRanges(
       [LabMappedMemoryRange(UniformBuffer.Ptr.Memory, 0, UniformBuffer.Ptr.Size)]
     );
-    UniformBuffer.Ptr.Unmap;
   end;
 end;
 
@@ -700,10 +698,12 @@ begin
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
+  UniformBuffer.Ptr.Map(UniformBufferMap);
 end;
 
 procedure TLabApp.Finalize;
 begin
+  UniformBuffer.Ptr.Unmap;
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
   Scene.Free;
