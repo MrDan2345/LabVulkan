@@ -786,7 +786,6 @@ procedure TLabApp.Loop;
       RenderNode(Node.Children[i]);
     end;
   end;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
@@ -801,12 +800,6 @@ begin
     SwapchainCreate;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms, UniformData^, SizeOf(Transforms));
-    UniformBuffer.Ptr.Unmap;
-  end;
   CmdBuffer.Ptr.RecordBegin();
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
