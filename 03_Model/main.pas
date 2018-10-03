@@ -49,12 +49,17 @@ type
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
+    var SampleCount: TVkSampleCountFlagBits;
+    var BackBuffers: array of record
+      var Depth: TLabDepthBufferShared;
+      var Frame: TLabFrameBufferShared;
+      var ColorMS: TLabImageShared;
+      var ColorMSView: TLabImageViewShared;
+    end;
     var CmdPool: TLabCommandPoolShared;
     var CmdBuffer: TLabCommandBufferShared;
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
-    var DepthBuffers: array of TLabDepthBufferShared;
-    var FrameBuffers: array of TLabFrameBufferShared;
     var UniformBuffer: TLabBufferShared;
     var RenderPass: TLabRenderPassShared;
     var PipelineCache: TLabPipelineCacheShared;
@@ -130,10 +135,6 @@ type
   end;
 
 const
-  NUM_SAMPLES = VK_SAMPLE_COUNT_1_BIT;
-  NUM_DESCRIPTOR_SETS = 1;
-  NUM_VIEWPORTS = 1;
-  NUM_SCISSORS = NUM_VIEWPORTS;
   FENCE_TIMEOUT = 100000000;
 
   VK_DYNAMIC_STATE_BEGIN_RANGE = VK_DYNAMIC_STATE_VIEWPORT;
@@ -351,62 +352,121 @@ procedure TLabApp.SwapchainCreate;
   var i: Integer;
 begin
   SwapChain := TLabSwapChain.Create(Device, Surface);
-  SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
+  if Length(BackBuffers) <> SwapChain.Ptr.ImageCount then
+  begin
+    SetLength(BackBuffers, SwapChain.Ptr.ImageCount);
+  end;
+  CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
+  CmdBuffer := TLabCommandBuffer.Create(CmdPool);
+  CmdBuffer.Ptr.RecordBegin();
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
+    BackBuffers[i].Depth := TLabDepthBuffer.Create(
+      Device, SwapChain.Ptr.Width, SwapChain.Ptr.Height, VK_FORMAT_UNDEFINED,
+      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) or TVkFlags(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT),
+      SampleCount
+    );
+    BackBuffers[i].ColorMS := TLabImage.Create(
+      Device, SwapChain.Ptr.Format,
+      TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or TVkFlags(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT),
+      [], SwapChain.Ptr.Width, SwapChain.Ptr.Height, 1, 1, 1, SampleCount, VK_IMAGE_TILING_OPTIMAL,
+      VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE, TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+    );
+    BackBuffers[i].ColorMSView := TLabImageView.Create(
+      Device, BackBuffers[i].ColorMS.Ptr.VkHandle,
+      BackBuffers[i].ColorMS.Ptr.Format
+    );
+    CmdBuffer.Ptr.PipelineBarrier(
+      TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
+      TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+      0, [], [],
+      [
+        LabImageMemoryBarrier(
+          BackBuffers[i].ColorMS.Ptr.VkHandle,
+          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          0, TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+        )
+      ]
+    );
   end;
+  CmdBuffer.Ptr.RecordEnd;
+  QueueSubmit(
+    SwapChain.Ptr.QueueFamilyGraphics,
+    [CmdBuffer.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE
+  );
+  QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
   RenderPass := TLabRenderPass.Create(
     Device,
     [
       LabAttachmentDescription(
         SwapChain.Ptr.Format,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        0
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
       ),
       LabAttachmentDescription(
-        DepthBuffers[0].Ptr.Format,
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        SwapChain.Ptr.Format,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
-        VK_ATTACHMENT_STORE_OP_STORE,
-        VK_ATTACHMENT_LOAD_OP_LOAD,
-        VK_ATTACHMENT_STORE_OP_STORE,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        0
+        VK_ATTACHMENT_STORE_OP_STORE
+      ),
+      LabAttachmentDescription(
+        BackBuffers[0].Depth.Ptr.Format,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        SampleCount,
+        VK_ATTACHMENT_LOAD_OP_CLEAR,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE
       )
-    ], [
+    ],
+    [
       LabSubpassDescriptionData(
         [],
         [LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)],
-        [],
-        LabAttachmentReference(1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+        [LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)],
+        LabAttachmentReference(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
         []
       )
     ],
-    []
+    [
+      //LabSubpassDependency(
+      //  VK_SUBPASS_EXTERNAL, 0,
+      //  TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT), TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+      //  TVkFlags(VK_ACCESS_MEMORY_READ_BIT), TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+      //),
+      //LabSubpassDependency(
+      //  0, VK_SUBPASS_EXTERNAL,
+      //  TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT), TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+      //  TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT), TVkFlags(VK_ACCESS_MEMORY_READ_BIT)
+      //)
+    ]
   );
-  SetLength(FrameBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    FrameBuffers[i] := TLabFrameBuffer.Create(
+    BackBuffers[i].Frame := TLabFrameBuffer.Create(
       Device, RenderPass.Ptr,
       SwapChain.Ptr.Width, SwapChain.Ptr.Height,
-      [SwapChain.Ptr.Images[i]^.View.VkHandle, DepthBuffers[i].Ptr.View.VkHandle]
+      [
+        BackBuffers[i].ColorMSView.Ptr.VkHandle,
+        SwapChain.Ptr.Images[i]^.View.VkHandle,
+        BackBuffers[i].Depth.Ptr.View.VkHandle
+      ]
     );
   end;
 end;
 
 procedure TLabApp.SwapchainDestroy;
 begin
-  FrameBuffers := nil;
-  DepthBuffers := nil;
+  CmdBuffer := nil;
+  CmdPool := nil;
+  BackBuffers := nil;
   RenderPass := nil;
   SwapChain := nil;
 end;
@@ -624,6 +684,13 @@ begin
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
   Surface := TLabSurface.Create(Window);
+  SampleCount := Device.Ptr.PhysicalDevice.Ptr.GetSupportedSampleCount(
+    [
+      VK_SAMPLE_COUNT_8_BIT,
+      VK_SAMPLE_COUNT_4_BIT,
+      VK_SAMPLE_COUNT_2_BIT
+    ]
+  );
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
@@ -645,8 +712,6 @@ begin
   Semaphore := nil;
   PipelineCache := nil;
   UniformBuffer := nil;
-  CmdBuffer := nil;
-  CmdPool := nil;
   Surface := nil;
   Device := nil;
   Window.Free;
@@ -695,7 +760,7 @@ procedure TLabApp.Loop;
               VK_FRONT_FACE_COUNTER_CLOCKWISE
             ),
             LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-            LabPipelineMultisampleState(),
+            LabPipelineMultisampleState(SampleCount),
             LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
           );
         end;
@@ -758,8 +823,11 @@ begin
     LabAssertVkError(r);
   end;
   CmdBuffer.Ptr.BeginRenderPass(
-    RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
-    [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
+    RenderPass.Ptr, BackBuffers[cur_buffer].Frame.Ptr,
+    [
+      LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0.4, 0.7, 1.0, 1.0),
+      LabClearValue(1.0, 0), LabClearValue(1.0, 0)
+    ]
   );
   cur_pipeline := nil;
   RenderNode(Scene.Root);

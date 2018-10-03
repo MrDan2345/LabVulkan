@@ -364,6 +364,17 @@ begin
         4: StrCode += '  gl_Position = xf.wvp * in_position0;'#$D#$A;
       end;
     end
+    else if (Desc[i].Semantic = as_normal) then
+    begin
+      case Desc[i].DataCount of
+        1: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + ', 0, 0);'#$D#$A;
+        2: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + ', 0);'#$D#$A;
+        3: StrCode += '  out_' + Sem + ' = mat3(xf.w) * in_' + Sem + ';'#$D#$A;
+        4: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + '.xyz);'#$D#$A;
+      end;
+      StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec3 out_' + Sem + ';'#$D#$A;
+      Inc(loc_out);
+    end
     else
     begin
       StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec' + IntToStr(Desc[i].DataCount) + ' out_' + Sem + ';'#$D#$A;
@@ -427,7 +438,7 @@ begin
           4: StrCode += '  vec3 normal = normalize(in_' + Sem + '.xyz);'#$D#$A;
           else StrCode += '  vec3 normal = normalize(in_' + Sem + ');'#$D#$A;
         end;
-        StrCode += '  color.xyz *= (dot(normal, normalize(vec3(1, -1, 1))) * 0.5 + 0.5) * 0.8 + 0.2;'#$D#$A;
+        StrCode += '  color.xyz *= (dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) /* 0.9 + 0.1*/;'#$D#$A;
       end;
       as_color:
       begin

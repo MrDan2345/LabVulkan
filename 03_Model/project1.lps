@@ -9,15 +9,16 @@
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
         <TopLine Value="10"/>
-        <CursorPos X="40" Y="24"/>
-        <UsageCount Value="98"/>
+        <CursorPos X="37" Y="27"/>
+        <UsageCount Value="99"/>
         <Loaded Value="True"/>
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="689"/>
-        <CursorPos X="11" Y="712"/>
+        <TopLine Value="807"/>
+        <CursorPos X="7" Y="829"/>
         <UsageCount Value="49"/>
         <Loaded Value="True"/>
       </Unit1>
@@ -48,8 +49,8 @@
       <Unit5>
         <Filename Value="..\Common\LabPhysicalDevice.pas"/>
         <EditorIndex Value="21"/>
-        <TopLine Value="70"/>
-        <CursorPos Y="87"/>
+        <TopLine Value="20"/>
+        <CursorPos X="116" Y="35"/>
         <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit5>
@@ -111,10 +112,9 @@
       </Unit12>
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="10"/>
-        <TopLine Value="428"/>
-        <CursorPos X="79" Y="451"/>
+        <TopLine Value="424"/>
+        <CursorPos X="70" Y="437"/>
         <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit13>
