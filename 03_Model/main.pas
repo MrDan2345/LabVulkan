@@ -29,6 +29,7 @@ uses
   LabSync,
   LabColladaParser,
   LabScene,
+  LabImageData,
   Classes,
   sysutils;
 
@@ -55,12 +56,7 @@ type
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
     var UniformBuffer: TLabBufferShared;
-    var DescriptorSetLayout: TLabDescriptorSetLayoutShared;
-    var PipelineLayout: TLabPipelineLayoutShared;
-    var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
-    var DescriptorPool: TLabDescriptorPoolShared;
-    var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Scene: TLabScene;
     var Transforms: TUniformArrayShared;
@@ -76,12 +72,12 @@ type
     function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
   end;
 
-  TGeometryData = class (TLabClass)
+  TNodeData = class (TLabClass)
   private
-    var _Geometry: TLabSceneGeometry;
+    var _Node: TLabSceneNode;
   public
     var UniformOffset: TVkInt32;
-    constructor Create(const Geometry: TLabSceneGeometry);
+    constructor Create(const Node: TLabSceneNode);
     destructor Destroy; override;
   end;
 
@@ -93,9 +89,43 @@ type
     VertexBuffer: TLabVertexBuffer;
     IndexBufferStaging: TLabBuffer;
     IndexBuffer: TLabIndexBuffer;
-    VertexShader: TLabSceneVertexShaderShared;
-    PixelShader: TLabScenePixelShaderShared;
     constructor Create(const Subset: TLabSceneGeometry.TSubset);
+    destructor Destroy; override;
+  end;
+  TGeometrySubsetDataWeak = specialize TLabWeakRef<TGeometrySubsetData>;
+
+  TImageData = class (TLabClass)
+  private
+    var _Image: TLabSceneImage;
+  public
+    Texture: TLabImageShared;
+    TextureStaging: TLabBufferShared;
+    TextureView: TLabImageViewShared;
+    TextureSampler: TLabSamplerShared;
+    constructor Create(const Image: TLabSceneImage);
+    destructor Destroy; override;
+  end;
+
+  TInstanceData = class (TLabClass)
+  public
+    type TPass = class
+      Subset: TLabSceneGeometry.TSubset;
+      Material: TLabSceneMaterial;
+      VertexShader: TLabSceneVertexShaderShared;
+      PixelShader: TLabScenePixelShaderShared;
+      DescriptorSetLayout: TLabDescriptorSetLayoutShared;
+      PipelineLayout: TLabPipelineLayoutShared;
+      DescriptorPool: TLabDescriptorPoolShared;
+      DescriptorSets: TLabDescriptorSetsShared;
+      Image: TImageData;
+      Pipeline: TLabPipelineShared;
+    end;
+    type TPassList = specialize TLabList<TPass>;
+  private
+    var _Attackment: TLabSceneNodeAttachmentGeometry;
+  public
+    Passes: TPassList;
+    constructor Create(const Attachment: TLabSceneNodeAttachmentGeometry);
     destructor Destroy; override;
   end;
 
@@ -104,7 +134,6 @@ const
   NUM_DESCRIPTOR_SETS = 1;
   NUM_VIEWPORTS = 1;
   NUM_SCISSORS = NUM_VIEWPORTS;
-  //Amount of time, in nanoseconds, to wait for a command buffer to complete
   FENCE_TIMEOUT = 100000000;
 
   VK_DYNAMIC_STATE_BEGIN_RANGE = VK_DYNAMIC_STATE_VIEWPORT;
@@ -116,12 +145,12 @@ var
 
 implementation
 
-constructor TGeometryData.Create(const Geometry: TLabSceneGeometry);
+constructor TNodeData.Create(const Node: TLabSceneNode);
 begin
-
+  _Node := Node;
 end;
 
-destructor TGeometryData.Destroy;
+destructor TNodeData.Destroy;
 begin
   inherited Destroy;
 end;
@@ -166,8 +195,6 @@ begin
     IndexBufferStaging.Unmap;
   end;
   Subset.FreeIndexData;
-  VertexShader := TLabSceneShaderFactory.MakeVertexShader(Subset.Geometry.Scene, Subset.VertexDescriptor);
-  PixelShader := TLabSceneShaderFactory.MakePixelShader(Subset.Geometry.Scene, Subset.VertexDescriptor);
 end;
 
 destructor TGeometrySubsetData.Destroy;
@@ -176,6 +203,134 @@ begin
   FreeAndNil(VertexBuffer);
   FreeAndNil(IndexBufferStaging);
   FreeAndNil(IndexBuffer);
+  inherited Destroy;
+end;
+
+constructor TImageData.Create(const Image: TLabSceneImage);
+  var x, y: Integer;
+  var c: PLabColor;
+  var map: Pointer;
+begin
+  _Image := Image;
+  Texture := TLabImage.Create(
+    App.Device,
+    VK_FORMAT_R8G8B8A8_UNORM,
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+    [], _Image.Image.Width, _Image.Image.Height, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+    VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  TextureStaging := TLabBuffer.Create(
+    App.Device, Texture.Ptr.DataSize,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if (TextureStaging.Ptr.Map(map)) then
+  begin
+    if _Image.Image.Format = idf_r8g8b8a8 then
+    begin
+      Move(_Image.Image.Data^, map^, _Image.Image.DataSize);
+    end
+    else
+    begin
+      c := PLabColor(map);
+      for y := 0 to _Image.Image.Height - 1 do
+      for x := 0 to _Image.Image.Width - 1 do
+      begin
+        c^ := _Image.Image.Pixels[x, y];
+        Inc(c);
+      end;
+    end;
+    TextureStaging.Ptr.Unmap;
+  end;
+  TextureView := TLabImageView.Create(
+    App.Device, Texture.Ptr.VkHandle, Texture.Ptr.Format
+  );
+  TextureSampler := TLabSampler.Create(App.Device);
+end;
+
+destructor TImageData.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TInstanceData.Create(const Attachment: TLabSceneNodeAttachmentGeometry);
+  var i, j: Integer;
+  var r_s: TLabSceneGeometry.TSubset;
+  var Pass: TPass;
+begin
+  _Attackment := Attachment;
+  Passes := TPassList.Create;
+  for i := 0 to Attachment.Geometry.Subsets.Count - 1 do
+  begin
+    r_s := Attachment.Geometry.Subsets[i];
+    Pass := TPass.Create;
+    for j := 0 to Attachment.MaterialBindings.Count - 1 do
+    if r_s.Material = Attachment.MaterialBindings[j].Symbol then
+    begin
+      Pass.Material := Attachment.MaterialBindings[j].Material;
+      Break;
+    end;
+    if Assigned(Pass.Material) then
+    begin
+      for j := 0 to Pass.Material.Effect.Params.Count - 1 do
+      if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
+      begin
+        Pass.Image := TImageData(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
+        Break;
+      end;
+    end;
+    Pass.Subset := r_s;
+    Pass.VertexShader := TLabSceneShaderFactory.MakeVertexShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
+    Pass.PixelShader := TLabSceneShaderFactory.MakePixelShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
+    Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
+      App.Device,
+      [
+        LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+        LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+      ]
+    );
+    Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
+      Pass.DescriptorPool := TLabDescriptorPool.Create(
+      App.Device,
+      [
+        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
+      ],
+      1
+    );
+    Pass.DescriptorSets := TLabDescriptorSets.Create(
+      App.Device, Pass.DescriptorPool,
+      [Pass.DescriptorSetLayout.Ptr.VkHandle]
+    );
+    Pass.DescriptorSets.Ptr.UpdateSets(
+      [
+        LabWriteDescriptorSetUniformBuffer(
+          Pass.DescriptorSets.Ptr.VkHandle[0], 0,
+          [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
+        ),
+        LabWriteDescriptorSetImageSampler(
+          Pass.DescriptorSets.Ptr.VkHandle[0], 1,
+          [
+            LabDescriptorImageInfo(
+              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+              Pass.Image.TextureView.Ptr.VkHandle,
+              Pass.Image.TextureSampler.Ptr.VkHandle
+            )
+          ]
+        )
+      ],
+      []
+    );
+    Passes.Add(Pass);
+  end;
+end;
+
+destructor TInstanceData.Destroy;
+begin
+  while Passes.Count > 0 do Passes.Pop.Free;
+  Passes.Free;
   inherited Destroy;
 end;
 
@@ -257,74 +412,99 @@ begin
 end;
 
 procedure TLabApp.ProcessScene;
-  var r_n: TLabSceneNode;
-  var r_a: TLabSceneNodeAttachmentGeometry;
-  var r_g: TLabSceneGeometry.TSubset;
-  var geom_data: TGeometryData;
-  var i, i_n, i_a, i_g: Integer;
-begin
-  for i_n := 0 to Scene.Root.Children.Count - 1 do
+  var inst_count: Integer;
+  procedure ProcessNode(const Node: TLabSceneNode);
+    var i: Integer;
+    var nd: TNodeData;
   begin
-    r_n := Scene.Root.Children[i_n];
-    for i_a := 0 to r_n.Attachments.Count - 1 do
+    if Node.Attachments.Count > 0 then
     begin
-      r_a := r_n.Attachments[i_a];
-      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
-      begin
-        r_g := r_a.Geometry.Subsets[i_g];
-        r_g.UserData := TGeometrySubsetData.Create(r_g);
-      end;
+      nd := TNodeData.Create(Node);
+      nd.UniformOffset := inst_count;
+      Node.UserData := nd;
+      Inc(inst_count);
+    end;
+    for i := 0 to Node.Children.Count - 1 do
+    begin
+      ProcessNode(Node.Children[i]);
     end;
   end;
+  procedure CreateInstances(const Node: TLabSceneNode);
+    var i: Integer;
+  begin
+    for i := 0 to Node.Attachments.Count - 1 do
+    begin
+      Node.Attachments[i].UserData := TInstanceData.Create(Node.Attachments[i]);
+    end;
+    for i := 0 to Node.Children.Count - 1 do
+    begin
+      CreateInstances(Node.Children[i]);
+    end;
+  end;
+  var r_g: TLabSceneGeometry;
+  var r_s: TLabSceneGeometry.TSubset;
+  var r_i: TLabSceneImage;
+  var i_i, i_g, i_s: Integer;
+begin
+  for i_g := 0 to Scene.Geometries.Count - 1 do
+  begin
+    r_g := Scene.Geometries[i_g];
+    for i_s := 0 to r_g.Subsets.Count - 1 do
+    begin
+      r_s := r_g.Subsets[i_s];
+      r_s.UserData := TGeometrySubsetData.Create(r_s);
+    end;
+  end;
+  for i_i := 0 to Scene.Images.Count - 1 do
+  begin
+    r_i := Scene.Images[i_i];
+    r_i.UserData := TImageData.Create(r_i);
+  end;
+  inst_count := 0;
+  ProcessNode(Scene.Root);
   Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
-  Transforms.Ptr.Count := Scene.Geometries.Count;
+  Transforms.Ptr.Count := inst_count;
   UniformBuffer := TLabBuffer.Create(
     Device, Transforms.Ptr.DataSize,
     TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
     [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
-  for i := 0 to Scene.Geometries.Count - 1 do
-  begin
-    geom_data := TGeometryData.Create(Scene.Geometries[i]);
-    geom_data.UniformOffset := i;
-    Scene.Geometries[i].UserData := geom_data;
-  end;
+  CreateInstances(Scene.Root);
 end;
 
 procedure TLabApp.UpdateTransforms;
-  var fov: TVkFloat;
-  var Clip: TLabMat;
-  var i: Integer;
-  var i_n, i_a: Integer;
-  var r_n: TLabSceneNode;
-  var r_a: TLabSceneNodeAttachmentGeometry;
-  var geom_data: TGeometryData;
-  var UniformData: Pointer;
-begin
-  fov := LabDegToRad * 70;
-  for i_n := 0 to Scene.Root.Children.Count - 1 do
+  procedure UpdateNode(const Node: TLabSceneNode);
+    var i_n, i_a: Integer;
+    var r_a: TLabSceneNodeAttachmentGeometry;
+    var nd: TNodeData;
+    var Clip: TLabMat;
+    var fov: TVkFloat;
   begin
-    r_n := Scene.Root.Children[i_n];
-    for i_a := 0 to r_n.Attachments.Count - 1 do
+    fov := LabDegToRad * 70;
+    nd := TNodeData(Node.UserData);
+    if Assigned(nd) then
+    with Transforms.Ptr.Items[nd.UniformOffset]^ do
     begin
-      r_a := r_n.Attachments[i_a];
-      geom_data := TGeometryData(r_a.Geometry.UserData);
-      with Transforms.Ptr.Items[geom_data.UniformOffset]^ do
-      begin
-        Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-        View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
-        World := r_n.Transform * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-        Clip := LabMat(
-          1, 0, 0, 0,
-          0, -1, 0, 0,
-          0, 0, 1, 0,
-          0, 0, 0, 1
-        );
-        WVP := World * View * Projection * Clip;
-      end;
+      Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+      View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+      World := Node.Transform * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+      Clip := LabMat(
+        1, 0, 0, 0,
+        0, -1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+      );
+      WVP := World * View * Projection * Clip;
+    end;
+    for i_n := 0 to Node.Children.Count - 1 do
+    begin
+      UpdateNode(Node.Children[i_n]);
     end;
   end;
+  var UniformData: Pointer;
+begin
+  UpdateNode(Scene.Root);
   UniformData := nil;
   if (UniformBuffer.Ptr.Map(UniformData)) then
   begin
@@ -337,53 +517,98 @@ begin
 end;
 
 procedure TLabApp.TransferBuffers;
-  var i_n, i_a, i_g: Integer;
-  var r_n: TLabSceneNode;
-  var r_a: TLabSceneNodeAttachmentGeometry;
-  var r_g: TLabSceneGeometry.TSubset;
+  var i_g, i_s, i_i: Integer;
+  var r_g: TLabSceneGeometry;
+  var r_s: TLabSceneGeometry.TSubset;
+  var r_i: TLabSceneImage;
   var subset_data: TGeometrySubsetData;
+  var image_data: TImageData;
 begin
   CmdBuffer.Ptr.RecordBegin;
-  for i_n := 0 to Scene.Root.Children.Count - 1 do
+  for i_g := 0 to Scene.Geometries.Count - 1 do
   begin
-    r_n := Scene.Root.Children[i_n];
-    for i_a := 0 to r_n.Attachments.Count - 1 do
+    r_g := Scene.Geometries[i_g];
+    for i_s := 0 to r_g.Subsets.Count - 1 do
     begin
-      r_a := r_n.Attachments[i_a];
-      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
-      begin
-        r_g := r_a.Geometry.Subsets[i_g];
-        subset_data := TGeometrySubsetData(r_g.UserData);
-        CmdBuffer.Ptr.CopyBuffer(
-          subset_data.VertexBufferStaging.VkHandle,
-          subset_data.VertexBuffer.VkHandle,
-          LabBufferCopy(subset_data.VertexBufferStaging.Size)
-        );
-        CmdBuffer.Ptr.CopyBuffer(
-          subset_data.IndexBufferStaging.VkHandle,
-          subset_data.IndexBuffer.VkHandle,
-          LabBufferCopy(subset_data.IndexBufferStaging.Size)
-        );
-      end;
+      r_s := r_g.Subsets[i_s];
+      subset_data := TGeometrySubsetData(r_s.UserData);
+      CmdBuffer.Ptr.CopyBuffer(
+        subset_data.VertexBufferStaging.VkHandle,
+        subset_data.VertexBuffer.VkHandle,
+        LabBufferCopy(subset_data.VertexBufferStaging.Size)
+      );
+      CmdBuffer.Ptr.CopyBuffer(
+        subset_data.IndexBufferStaging.VkHandle,
+        subset_data.IndexBuffer.VkHandle,
+        LabBufferCopy(subset_data.IndexBufferStaging.Size)
+      );
     end;
+  end;
+  for i_i := 0 to Scene.Images.Count - 1 do
+  begin
+    r_i := Scene.Images[i_i];
+    image_data := TImageData(r_i.UserData);
+    CmdBuffer.Ptr.PipelineBarrier(
+      TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
+      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
+      0,
+      [], [],
+      [
+        LabImageMemoryBarrier(
+          image_data.Texture.Ptr.VkHandle,
+          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+          0, TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT)
+        )
+      ]
+    );
+    CmdBuffer.Ptr.CopyBufferToImage(
+      image_data.TextureStaging.Ptr.VkHandle,
+      image_data.Texture.Ptr.VkHandle,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      [
+        LabBufferImageCopy(
+          LabOffset3D(0, 0, 0),
+          LabExtent3D(
+            image_data.Texture.Ptr.Width,
+            image_data.Texture.Ptr.Height,
+            image_data.Texture.Ptr.Depth
+          )
+        )
+      ]
+    );
+    CmdBuffer.Ptr.PipelineBarrier(
+      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
+      TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
+      0,
+      [], [],
+      [
+        LabImageMemoryBarrier(
+          image_data.Texture.Ptr.VkHandle,
+          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT)
+        )
+      ]
+    );
   end;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(SwapChain.Ptr.QueueFamilyGraphics, [CmdBuffer.Ptr.VkHandle], [], [], VK_NULL_HANDLE);
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
-  for i_n := 0 to Scene.Root.Children.Count - 1 do
+  for i_g := 0 to Scene.Geometries.Count - 1 do
   begin
-    r_n := Scene.Root.Children[i_n];
-    for i_a := 0 to r_n.Attachments.Count - 1 do
+    r_g := Scene.Geometries[i_g];
+    for i_s := 0 to r_g.Subsets.Count - 1 do
     begin
-      r_a := r_n.Attachments[i_a];
-      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
-      begin
-        r_g := r_a.Geometry.Subsets[i_g];
-        subset_data := TGeometrySubsetData(r_g.UserData);
-        FreeAndNil(subset_data.VertexBufferStaging);
-        FreeAndNil(subset_data.IndexBufferStaging);
-      end;
+      r_s := r_g.Subsets[i_s];
+      subset_data := TGeometrySubsetData(r_s.UserData);
+      FreeAndNil(subset_data.VertexBufferStaging);
+      FreeAndNil(subset_data.IndexBufferStaging);
     end;
+  end;
+  for i_i := 0 to Scene.Images.Count - 1 do
+  begin
+    r_i := Scene.Images[i_i];
+    image_data := TImageData(r_i.UserData);
+    image_data.TextureStaging := nil;
   end;
 end;
 
@@ -391,9 +616,6 @@ procedure TLabApp.Initialize;
   var fov: TVkFloat;
   var ColladaParser: TLabColladaParser;
 begin
-  //ColladaParser := TLabColladaParser.Create('../Models/skull.dae');
-  //ColladaParser.RootNode.Dump;
-  //ColladaParser.Free;
   Window := TLabWindow.Create(500, 500);
   Window.Caption := 'Vulkan Model';
   Device := TLabDevice.Create(
@@ -405,36 +627,9 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device, [LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))]
-  );
-  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/maya/maya.dae');
   ProcessScene;
-  DescriptorPool := TLabDescriptorPool.Create(
-    Device,
-    [LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)],
-    1
-  );
-  DescriptorSets := TLabDescriptorSets.Create(
-    Device, DescriptorPool,
-    [DescriptorSetLayout.Ptr.VkHandle]
-  );
-  DescriptorSets.Ptr.UpdateSets(
-    [
-      LabWriteDescriptorSet(
-        DescriptorSets.Ptr.VkHandle[0],
-        0,
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        0,
-        1,
-        nil,
-        UniformBuffer.Ptr.BufferInfo
-      )
-    ],
-    []
-  );
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
@@ -448,12 +643,7 @@ begin
   Scene.Free;
   Fence := nil;
   Semaphore := nil;
-  Pipeline := nil;
   PipelineCache := nil;
-  DescriptorSets := nil;
-  DescriptorPool := nil;
-  PipelineLayout := nil;
-  DescriptorSetLayout := nil;
   UniformBuffer := nil;
   CmdBuffer := nil;
   CmdPool := nil;
@@ -464,15 +654,76 @@ begin
 end;
 
 procedure TLabApp.Loop;
+  var cur_pipeline: TLabGraphicsPipeline;
+  procedure RenderNode(const Node: TLabSceneNode);
+    var nd: TNodeData;
+    var i, i_a, i_s, i_p: Integer;
+    var r_a: TLabSceneNodeAttachmentGeometry;
+    var r_s: TLabSceneGeometry.TSubset;
+    var r_p: TInstanceData.TPass;
+    var inst_data: TInstanceData;
+    var subset_data: TGeometrySubsetData;
+  begin
+    nd := TNodeData(Node.UserData);
+    if Assigned(nd) then
+    for i_a := 0 to Node.Attachments.Count - 1 do
+    begin
+      r_a := Node.Attachments[i_a];
+      inst_data := TInstanceData(r_a.UserData);
+      for i_p := 0 to inst_data.Passes.Count - 1 do
+      begin
+        r_p := inst_data.Passes[i_p];
+        r_s := r_p.Subset;
+        subset_data := TGeometrySubsetData(r_s.UserData);
+        if not r_p.Pipeline.IsValid then
+        begin
+          r_p.Pipeline := TLabGraphicsPipeline.FindOrCreate(
+            Device, PipelineCache, r_p.PipelineLayout.Ptr,
+            [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+            [r_p.VertexShader.Ptr.Shader, r_p.PixelShader.Ptr.Shader],
+            RenderPass.Ptr, 0,
+            LabPipelineViewportState(),
+            LabPipelineInputAssemblyState(),
+            LabPipelineVertexInputState(
+              [subset_data.VertexBuffer.MakeBindingDesc(0)],
+              subset_data.VertexBuffer.MakeAttributeDescArr(0, 0)
+            ),
+            LabPipelineRasterizationState(
+              VK_FALSE, VK_FALSE,
+              VK_POLYGON_MODE_FILL,
+              TVkFlags(VK_CULL_MODE_BACK_BIT),
+              VK_FRONT_FACE_COUNTER_CLOCKWISE
+            ),
+            LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
+            LabPipelineMultisampleState(),
+            LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
+          );
+        end;
+        if not Assigned(cur_pipeline)
+        or (cur_pipeline.Hash <> TLabGraphicsPipeline(r_p.Pipeline.Ptr).Hash) then
+        begin
+          cur_pipeline := TLabGraphicsPipeline(r_p.Pipeline.Ptr);
+          CmdBuffer.Ptr.BindPipeline(cur_pipeline);
+          CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
+          CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+        end;
+        CmdBuffer.Ptr.BindDescriptorSets(
+          VK_PIPELINE_BIND_POINT_GRAPHICS,
+          r_p.PipelineLayout.Ptr,
+          0, 1, r_p.DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
+        );
+        CmdBuffer.Ptr.BindVertexBuffers(0, [subset_data.VertexBuffer.VkHandle], [0]);
+        CmdBuffer.Ptr.BindIndexBuffer(subset_data.IndexBuffer.VkHandle, 0, subset_data.IndexBuffer.IndexType);
+        CmdBuffer.Ptr.DrawIndexed(subset_data.IndexBuffer.IndexCount);
+      end;
+    end;
+    for i := 0 to Node.Children.Count - 1 do
+    begin
+      RenderNode(Node.Children[i]);
+    end;
+  end;
   var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
-  var i_n, i_a, i_g: Integer;
-  var r_n: TLabSceneNode;
-  var r_a: TLabSceneNodeAttachmentGeometry;
-  var r_g: TLabSceneGeometry.TSubset;
-  var geom_data: TGeometryData;
-  var subset_data: TGeometrySubsetData;
-  var CurPipeline: TLabGraphicsPipeline;
   var r: TVkResult;
 begin
   TLabVulkan.IsActive := Window.IsActive;
@@ -510,58 +761,8 @@ begin
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
   );
-  CurPipeline := nil;
-  for i_n := 0 to Scene.Root.Children.Count - 1 do
-  begin
-    r_n := Scene.Root.Children[i_n];
-    for i_a := 0 to r_n.Attachments.Count - 1 do
-    begin
-      r_a := r_n.Attachments[i_a];
-      geom_data := TGeometryData(r_a.Geometry.UserData);
-      for i_g := 0 to r_a.Geometry.Subsets.Count - 1 do
-      begin
-        r_g := r_a.Geometry.Subsets[i_g];
-        subset_data := TGeometrySubsetData(r_g.UserData);
-        Pipeline := TLabGraphicsPipeline.FindOrCreate(
-          Device, PipelineCache, PipelineLayout.Ptr,
-          [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-          [subset_data.VertexShader.Ptr.Shader, subset_data.PixelShader.Ptr.Shader],
-          RenderPass.Ptr, 0,
-          LabPipelineViewportState(),
-          LabPipelineInputAssemblyState(),
-          LabPipelineVertexInputState(
-            [subset_data.VertexBuffer.MakeBindingDesc(0)],
-            subset_data.VertexBuffer.MakeAttributeDescArr(0, 0)
-          ),
-          LabPipelineRasterizationState(
-            VK_FALSE, VK_FALSE,
-            VK_POLYGON_MODE_FILL,
-            TVkFlags(VK_CULL_MODE_BACK_BIT),
-            VK_FRONT_FACE_COUNTER_CLOCKWISE
-          ),
-          LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-          LabPipelineMultisampleState(),
-          LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
-        );
-        if not Assigned(CurPipeline)
-        or (CurPipeline.Hash <> TLabGraphicsPipeline(Pipeline.Ptr).Hash) then
-        begin
-          CurPipeline := TLabGraphicsPipeline(Pipeline.Ptr);
-          CmdBuffer.Ptr.BindPipeline(Pipeline.Ptr);
-          CmdBuffer.Ptr.BindDescriptorSets(
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            PipelineLayout.Ptr,
-            0, 1, DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[geom_data.UniformOffset]]
-          );
-          CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-          CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
-        end;
-        CmdBuffer.Ptr.BindVertexBuffers(0, [subset_data.VertexBuffer.VkHandle], [0]);
-        CmdBuffer.Ptr.BindIndexBuffer(subset_data.IndexBuffer.VkHandle, 0, subset_data.IndexBuffer.IndexType);
-        CmdBuffer.Ptr.DrawIndexed(subset_data.IndexBuffer.IndexCount);
-      end;
-    end;
-  end;
+  cur_pipeline := nil;
+  RenderNode(Scene.Root);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(

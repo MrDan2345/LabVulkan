@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.79.0 commit date:2018-02-21, commit time:10:41, hash:8928d99270f</authoring_tool>
     </contributor>
-    <created>2018-09-27T15:53:32</created>
-    <modified>2018-09-27T15:53:32</modified>
+    <created>2018-10-03T10:25:48</created>
+    <modified>2018-10-03T10:25:48</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -81,30 +81,30 @@
     </light>
   </library_lights>
   <library_images>
-    <image id="SirenHead_Bm_tga" name="SirenHead_Bm_tga">
-      <init_from>SirenHead_Bm.tga</init_from>
+    <image id="SirenHead_Bm_png" name="SirenHead_Bm_png">
+      <init_from>SirenHead_Bm.png</init_from>
     </image>
-    <image id="SirenBody_Bm_tga" name="SirenBody_Bm_tga">
-      <init_from>SirenBody_Bm.tga</init_from>
+    <image id="SirenBody_Bm_png" name="SirenBody_Bm_png">
+      <init_from>SirenBody_Bm.png</init_from>
     </image>
-    <image id="SirenHands_Dif_tga" name="SirenHands_Dif_tga">
-      <init_from>SirenHands_Dif.tga</init_from>
+    <image id="SirenHands_Dif_png" name="SirenHands_Dif_png">
+      <init_from>SirenHands_Dif.png</init_from>
     </image>
-    <image id="Mouth_tga" name="Mouth_tga">
-      <init_from>Mouth.tga</init_from>
+    <image id="Mouth_png" name="Mouth_png">
+      <init_from>Mouth.png</init_from>
     </image>
   </library_images>
   <library_effects>
     <effect id="Model001_Material003-effect">
       <profile_COMMON>
-        <newparam sid="SirenHead_Bm_tga-surface">
+        <newparam sid="SirenHead_Bm_png-surface">
           <surface type="2D">
-            <init_from>SirenHead_Bm_tga</init_from>
+            <init_from>SirenHead_Bm_png</init_from>
           </surface>
         </newparam>
-        <newparam sid="SirenHead_Bm_tga-sampler">
+        <newparam sid="SirenHead_Bm_png-sampler">
           <sampler2D>
-            <source>SirenHead_Bm_tga-surface</source>
+            <source>SirenHead_Bm_png-surface</source>
           </sampler2D>
         </newparam>
         <technique sid="common">
@@ -116,7 +116,7 @@
               <color sid="ambient">0 0 0 1</color>
             </ambient>
             <diffuse>
-              <texture texture="SirenHead_Bm_tga-sampler"/>
+              <texture texture="SirenHead_Bm_png-sampler"/>
             </diffuse>
             <specular>
               <color sid="specular">0.5 0.5 0.5 1</color>
@@ -133,14 +133,14 @@
     </effect>
     <effect id="Model001_Material002-effect">
       <profile_COMMON>
-        <newparam sid="SirenBody_Bm_tga-surface">
+        <newparam sid="SirenBody_Bm_png-surface">
           <surface type="2D">
-            <init_from>SirenBody_Bm_tga</init_from>
+            <init_from>SirenBody_Bm_png</init_from>
           </surface>
         </newparam>
-        <newparam sid="SirenBody_Bm_tga-sampler">
+        <newparam sid="SirenBody_Bm_png-sampler">
           <sampler2D>
-            <source>SirenBody_Bm_tga-surface</source>
+            <source>SirenBody_Bm_png-surface</source>
           </sampler2D>
         </newparam>
         <technique sid="common">
@@ -152,7 +152,7 @@
               <color sid="ambient">0 0 0 1</color>
             </ambient>
             <diffuse>
-              <texture texture="SirenBody_Bm_tga-sampler"/>
+              <texture texture="SirenBody_Bm_png-sampler"/>
             </diffuse>
             <specular>
               <color sid="specular">0.5 0.5 0.5 1</color>
@@ -169,14 +169,14 @@
     </effect>
     <effect id="Model001_Material001-effect">
       <profile_COMMON>
-        <newparam sid="SirenHands_Dif_tga-surface">
+        <newparam sid="SirenHands_Dif_png-surface">
           <surface type="2D">
-            <init_from>SirenHands_Dif_tga</init_from>
+            <init_from>SirenHands_Dif_png</init_from>
           </surface>
         </newparam>
-        <newparam sid="SirenHands_Dif_tga-sampler">
+        <newparam sid="SirenHands_Dif_png-sampler">
           <sampler2D>
-            <source>SirenHands_Dif_tga-surface</source>
+            <source>SirenHands_Dif_png-surface</source>
           </sampler2D>
         </newparam>
         <technique sid="common">
@@ -188,7 +188,7 @@
               <color sid="ambient">0 0 0 1</color>
             </ambient>
             <diffuse>
-              <texture texture="SirenHands_Dif_tga-sampler"/>
+              <texture texture="SirenHands_Dif_png-sampler"/>
             </diffuse>
             <specular>
               <color sid="specular">0.5 0.5 0.5 1</color>
@@ -205,14 +205,14 @@
     </effect>
     <effect id="Model001_Material004-effect">
       <profile_COMMON>
-        <newparam sid="Mouth_tga-surface">
+        <newparam sid="Mouth_png-surface">
           <surface type="2D">
-            <init_from>Mouth_tga</init_from>
+            <init_from>Mouth_png</init_from>
           </surface>
         </newparam>
-        <newparam sid="Mouth_tga-sampler">
+        <newparam sid="Mouth_png-sampler">
           <sampler2D>
-            <source>Mouth_tga-surface</source>
+            <source>Mouth_png-surface</source>
           </sampler2D>
         </newparam>
         <technique sid="common">
@@ -224,7 +224,7 @@
               <color sid="ambient">0 0 0 1</color>
             </ambient>
             <diffuse>
-              <texture texture="Mouth_tga-sampler"/>
+              <texture texture="Mouth_png-sampler"/>
             </diffuse>
             <specular>
               <color sid="specular">0.5 0.5 0.5 1</color>

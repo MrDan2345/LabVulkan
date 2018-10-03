@@ -68,6 +68,8 @@ type
   end;
   TLabColladaInstanceList = specialize TLabList<TLabColladaInstance>;
 
+  TLabColladaMaterial = class;
+
   TLabColladaInput = class (TLabColladaObject)
   private
     _Semantic: DOMString;
@@ -208,6 +210,7 @@ type
     property VertexLayout: TLabColladaInputList read _VertexLayout;
     property VertexSize: TVkInt32 read GetVertexSize;
     property VertexDescriptor: TLabColladaVertexDescriptor read GetVertexDescriptor;
+    property Material: DOMString read _MaterialRef;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
     function CopyInputData(const Target: Pointer; const Input: TLabColladaInput; const Index: TVkInt32): Pointer;
@@ -1320,6 +1323,7 @@ begin
         DataSurface.InitFrom := Node.TextContent;
       end;
       _Data := DataSurface;
+      _ParamType := pt_surface;
     end
     else if (NodeName = 'sampler1d')
     or (NodeName = 'sampler2d')
@@ -1332,6 +1336,7 @@ begin
         DataSampler.Source := Node.TextContent;
       end;
       _Data := DataSampler;
+      _ParamType := pt_sampler;
     end
     else if (NodeName = 'float') then
     begin
@@ -1340,6 +1345,7 @@ begin
       p := 1;
       DataFloat.Value := StrToFloatDef(FindNextValue(VecData, p), 0);
       _Data := DataFloat;
+      _ParamType := pt_float;
     end
     else if (NodeName = 'float2') then
     begin
@@ -1351,6 +1357,7 @@ begin
         DataFloat2.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
       end;
       _Data := DataFloat2;
+      _ParamType := pt_float2;
     end
     else if (NodeName = 'float3') then
     begin
@@ -1362,6 +1369,7 @@ begin
         DataFloat3.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
       end;
       _Data := DataFloat3;
+      _ParamType := pt_float3;
     end
     else if (NodeName = 'float4') then
     begin
@@ -1373,6 +1381,7 @@ begin
         DataFloat4.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
       end;
       _Data := DataFloat4;
+      _ParamType := pt_float4;
     end
     else
     begin

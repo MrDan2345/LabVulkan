@@ -254,8 +254,6 @@ end;
 procedure TLabApp.Initialize;
   var map: PVkVoid;
   var img: TLabImageData;
-  var uniform_desc_info: TVkDescriptorBufferInfo;
-  var image_desc_info: TVkDescriptorImageInfo;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Caption := 'Vulkan Texture';
@@ -343,36 +341,23 @@ begin
     Device, DescriptorPool,
     [DescriptorSetLayout.Ptr.VkHandle]
   );
-  FillChar(uniform_desc_info, SizeOf(uniform_desc_info), 0);
-  begin
-    uniform_desc_info.buffer := UniformBuffer.Ptr.VkHandle;
-    uniform_desc_info.offset := 0;
-    uniform_desc_info.range := UniformBuffer.Ptr.Size;
-  end;
-  FillChar(image_desc_info, SizeOf(image_desc_info), 0);
-  begin
-    image_desc_info.imageLayout := VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_desc_info.imageView := TextureView.Ptr.VkHandle;
-    image_desc_info.sampler := TextureSampler.Ptr.VkHandle;
-  end;
   DescriptorSets.Ptr.UpdateSets(
     [
-      LabWriteDescriptorSet(
+      LabWriteDescriptorSetUniformBuffer(
         DescriptorSets.Ptr.VkHandle[0],
         0,
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        0,
-        1,
-        nil,
-        @uniform_desc_info
+        [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]
       ),
-      LabWriteDescriptorSet(
+      LabWriteDescriptorSetImageSampler(
         DescriptorSets.Ptr.VkHandle[0],
         1,
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        0,
-        1,
-        @image_desc_info
+        [
+          LabDescriptorImageInfo(
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            TextureView.Ptr.VkHandle,
+            TextureSampler.Ptr.VkHandle
+          )
+        ]
       )
     ],
     []

@@ -29,6 +29,13 @@ type
   end;
   TLabDescriptorSetLayoutShared = specialize TLabSharedRef<TLabDescriptorSetLayout>;
 
+  TLabWriteDescriptorSet = record
+    WriteDescriptorSet: TVkWriteDescriptorSet;
+    ImageInfos: array of TVkDescriptorImageInfo;
+    BufferInfos: array of TVkDescriptorBufferInfo;
+    TexelBufferViews: array of TVkBufferView;
+  end;
+
   TLabDescriptorSets = class (TLabClass)
   private
     var _Device: TLabDeviceShared;
@@ -48,7 +55,7 @@ type
     );
     destructor Destroy; override;
     procedure UpdateSets(
-      const Writes: array of TVkWriteDescriptorSet;
+      const Writes: array of TLabWriteDescriptorSet;
       const Copies: array of TVkCopyDescriptorSet
     );
   end;
@@ -66,12 +73,36 @@ function LabWriteDescriptorSet(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
   const DescriptorType: TVkDescriptorType;
-  const DstArrayElement: TVkUInt32 = 0;
-  const DescriptorCount: TVkUInt32 = 1;
-  const ImageInfo: PVkDescriptorImageInfo = nil;
-  const BufferInfo: PVkDescriptorBufferInfo = nil;
-  const TexelBufferView: PVkBufferView = nil
-): TVkWriteDescriptorSet;
+  const DstArrayElement: TVkUInt32;
+  const DescriptorCount: TVkUInt32;
+  const ImageInfos: array of TVkDescriptorImageInfo;
+  const BufferInfos: array of TVkDescriptorBufferInfo;
+  const TexelBufferViews: array of TVkBufferView
+): TLabWriteDescriptorSet; inline;
+
+function LabWriteDescriptorSetUniformBuffer(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet; inline;
+
+function LabWriteDescriptorSetImageSampler(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const ImageInfo: array of TVkDescriptorImageInfo
+): TLabWriteDescriptorSet; inline;
+
+function LabDescriptorBufferInfo(
+  const Buffer: TVkBuffer;
+  const Offset: TVkDeviceSize = 0;
+  const Range: TVkDeviceSize = VK_WHOLE_SIZE
+): TVkDescriptorBufferInfo; inline;
+
+function LabDescriptorImageInfo(
+  const ImageLayout: TVkImageLayout;
+  const ImageView: TVkImageView;
+  const Sampler: TVkSampler
+): TVkDescriptorImageInfo; inline;
 
 implementation
 
@@ -150,11 +181,36 @@ begin
 end;
 
 procedure TLabDescriptorSets.UpdateSets(
-  const Writes: array of TVkWriteDescriptorSet;
+  const Writes: array of TLabWriteDescriptorSet;
   const Copies: array of TVkCopyDescriptorSet
 );
+  var WriteData: array of TVkWriteDescriptorSet;
+  var WritePtr: PVkWriteDescriptorSet;
+  var CopyPtr: PVkCopyDescriptorSet;
+  var i: TVkInt32;
 begin
-  Vulkan.UpdateDescriptorSets(_Device.Ptr.VkHandle, Length(Writes), @Writes[0], Length(Copies), @Copies[0]);
+  if Length(Writes) > 0 then
+  begin
+    SetLength(WriteData, Length(Writes));
+    for i := 0 to High(Writes) do
+    begin
+      WriteData[i] := Writes[i].WriteDescriptorSet;
+    end;
+    WritePtr := @WriteData[0];
+  end
+  else
+  begin
+    WritePtr := nil;
+  end;
+  if Length(Copies) > 0 then
+  begin
+    CopyPtr := @Copies[0];
+  end
+  else
+  begin
+    CopyPtr := nil;
+  end;
+  Vulkan.UpdateDescriptorSets(_Device.Ptr.VkHandle, Length(Writes), WritePtr, Length(Copies), CopyPtr);
 end;
 
 function LabDescriptorBinding(
@@ -172,27 +228,98 @@ begin
   Result.pImmutableSamplers := PImmutableSamplers;
 end;
 
-function LabWriteDescriptorSet(
+function LabWriteDescriptorSet(const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32; const DescriptorType: TVkDescriptorType;
+  const DstArrayElement: TVkUInt32; const DescriptorCount: TVkUInt32;
+  const ImageInfos: array of TVkDescriptorImageInfo;
+  const BufferInfos: array of TVkDescriptorBufferInfo;
+  const TexelBufferViews: array of TVkBufferView): TLabWriteDescriptorSet;
+begin
+  Result.WriteDescriptorSet.sType := VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  Result.WriteDescriptorSet.pNext := nil;
+  Result.WriteDescriptorSet.dstSet := DstSet;
+  Result.WriteDescriptorSet.dstBinding := DstBinding;
+  Result.WriteDescriptorSet.dstArrayElement := DstArrayElement;
+  Result.WriteDescriptorSet.descriptorCount := DescriptorCount;
+  Result.WriteDescriptorSet.descriptorType := DescriptorType;
+  if Length(ImageInfos) > 0 then
+  begin
+    SetLength(Result.ImageInfos, Length(ImageInfos));
+    Move(ImageInfos[0], Result.ImageInfos[0], SizeOf(TVkDescriptorImageInfo));
+    Result.WriteDescriptorSet.pImageInfo := @Result.ImageInfos[0];
+  end
+  else
+  begin
+    Result.WriteDescriptorSet.pImageInfo := nil;
+  end;
+  if Length(BufferInfos) > 0 then
+  begin
+    SetLength(Result.BufferInfos, Length(BufferInfos));
+    Move(BufferInfos[0], Result.BufferInfos[0], SizeOf(TVkDescriptorBufferInfo));
+    Result.WriteDescriptorSet.pBufferInfo := @Result.BufferInfos[0];
+  end
+  else
+  begin
+    Result.WriteDescriptorSet.pBufferInfo := nil;
+  end;
+  if Length(TexelBufferViews) > 0 then
+  begin
+    SetLength(Result.TexelBufferViews, Length(TexelBufferViews));
+    Move(TexelBufferViews[0], Result.TexelBufferViews[0], SizeOf(TVkBufferView));
+    Result.WriteDescriptorSet.pTexelBufferView := @TexelBufferViews[0];
+  end
+  else
+  begin
+    Result.WriteDescriptorSet.pTexelBufferView := nil;
+  end;
+end;
+
+function LabWriteDescriptorSetUniformBuffer(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
-  const DescriptorType: TVkDescriptorType;
-  const DstArrayElement: TVkUInt32;
-  const DescriptorCount: TVkUInt32;
-  const ImageInfo: PVkDescriptorImageInfo;
-  const BufferInfo: PVkDescriptorBufferInfo;
-  const TexelBufferView: PVkBufferView
-): TVkWriteDescriptorSet;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
 begin
-  Result.sType := VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  Result.pNext := nil;
-  Result.dstSet := DstSet;
-  Result.dstBinding := DstBinding;
-  Result.dstArrayElement := DstArrayElement;
-  Result.descriptorCount := DescriptorCount;
-  Result.descriptorType := DescriptorType;
-  Result.pImageInfo := ImageInfo;
-  Result.pBufferInfo := BufferInfo;
-  Result.pTexelBufferView := TexelBufferView;
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    0, Length(BufferInfo), [], BufferInfo, []
+  );
+end;
+
+function LabWriteDescriptorSetImageSampler(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const ImageInfo: array of TVkDescriptorImageInfo
+): TLabWriteDescriptorSet;
+begin
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    0, Length(ImageInfo), ImageInfo, [], []
+  );
+end;
+
+function LabDescriptorBufferInfo(
+  const Buffer: TVkBuffer;
+  const Offset: TVkDeviceSize;
+  const Range: TVkDeviceSize
+): TVkDescriptorBufferInfo;
+begin
+  Result.buffer := Buffer;
+  Result.offset := Offset;
+  Result.range := Range;
+end;
+
+function LabDescriptorImageInfo(
+  const ImageLayout: TVkImageLayout;
+  const ImageView: TVkImageView;
+  const Sampler: TVkSampler
+): TVkDescriptorImageInfo;
+begin
+  Result.imageLayout := ImageLayout;
+  Result.imageView := ImageView;
+  Result.sampler := Sampler;
 end;
 
 end.

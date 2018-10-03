@@ -26,6 +26,7 @@ type
     var _Flags: TVkImageCreateFlags;
     var _Handle: TVkImage;
     var _Memory: TVkDeviceMemory;
+    var _DataSize: TVkDeviceSize;
   public
     property Device: TLabDeviceShared read _Device;
     property Format: TVkFormat read _Format;
@@ -34,6 +35,7 @@ type
     property Depth: TVkInt32 read _Depth;
     property VkHandle: TVkImage read _Handle;
     property ImageType: TVkImageType read _ImageType;
+    property DataSize: TVkDeviceSize read _DataSize;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const AFormat: TVkFormat;
@@ -196,6 +198,7 @@ begin
   LabAssertVkError(Vulkan.CreateImage(_Device.Ptr.VkHandle, @image_info, nil, @_Handle));
   Vulkan.GetImageMemoryRequirements(_Device.Ptr.VkHandle, _Handle, @mem_reqs);
   mem_alloc.allocationSize := mem_reqs.size;
+  _DataSize := mem_reqs.size;
   pass := _Device.Ptr.MemoryTypeFromProperties(
     mem_reqs.memoryTypeBits,
     AMemoryFlags,

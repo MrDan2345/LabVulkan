@@ -15,6 +15,8 @@ type
     r, g, b, a: Byte;
   end;
   PLabColor = ^TLabColor;
+  TLabColorArr = array[Word] of TLabColor;
+  PLabColorArr = ^TLabColorArr;
 
   generic TLabSharedRef<T> = record
   public

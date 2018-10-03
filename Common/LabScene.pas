@@ -18,6 +18,7 @@ uses
 
 type
   TLabScene = class;
+  TLabSceneMaterial = class;
 
   TLabSceneShader = class (TLabClass)
   private
@@ -81,11 +82,13 @@ type
     class function GetSemanticValue(const SemanticName: String): TLabColladaVertexAttributeSemantic;
     class function MakeVertexShader(
       const AScene: TLabScene;
-      const Desc: TLabColladaVertexDescriptor
+      const Desc: TLabColladaVertexDescriptor;
+      const Material: TLabSceneMaterial
     ): TLabSceneVertexShader;
     class function MakePixelShader(
       const AScene: TLabScene;
-      const Desc: TLabColladaVertexDescriptor
+      const Desc: TLabColladaVertexDescriptor;
+      const Material: TLabSceneMaterial
     ): TLabScenePixelShader;
   end;
 
@@ -105,6 +108,7 @@ type
       IndexData: Pointer;
       IndexStride: TVkUInt8;
       IndexType: TVkIndexType;
+      Material: String;
       property Geometry: TLabSceneGeometry read _Geometry;
       property UserData: TObject read _UserData write _UserData;
       procedure FreeVertexData;
@@ -130,9 +134,11 @@ type
   private
     var _Scene: TLabScene;
     var _Image: TLabImageData;
+    var _UserData: TObject;
   public
     property Scene: TLabScene read _Scene;
     property Image: TLabImageData read _Image;
+    property UserData: TObject read _UserData write _UserData;
     constructor Create(const AScene: TLabScene; const ColladaImage: TLabColladaImage);
     destructor Destroy; override;
   end;
@@ -142,14 +148,19 @@ type
   protected
     var _Scene: TLabScene;
     var _ParameterType: TLabColladaEffectProfileParamType;
+    var _Name: String;
   public
     property ParameterType: TLabColladaEffectProfileParamType read _ParameterType;
-    constructor Create(const AScene: TLabScene);
+    property Name: String read _Name;
+    constructor Create(const AScene: TLabScene; const AName: String);
   end;
   TLabSceneEffectParameterList = specialize TLabList<TLabSceneEffectParameter>;
 
   TLabSceneEffectParameterSampler = class (TLabSceneEffectParameter)
+  private
+    var _Image: TLabSceneImage;
   public
+    property Image: TLabSceneImage read _Image;
     constructor Create(const AScene: TLabScene; const Param: TLabColladaEffectProfileParam);
   end;
 
@@ -210,15 +221,23 @@ type
   TLabSceneNodeAttachmentGeometry = class (TLabSceneNodeAttachment)
   public
     type TMaterialBinding = class
+    private
+      var _UserData: TObject;
+    public
       Material: TLabSceneMaterial;
       Symbol: String;
+      property UserData: TObject read _UserData write _UserData;
+      destructor Destroy; override;
     end;
     type TMaterialBindingList = specialize TLabList<TMaterialBinding>;
   private
     var _Geometry: TLabSceneGeometry;
     var _MaterialBindings: TMaterialBindingList;
+    var _UserData: TObject;
   public
     property Geometry: TLabSceneGeometry read _Geometry;
+    property MaterialBindings: TMaterialBindingList read _MaterialBindings;
+    property UserData: TObject read _UserData write _UserData;
     constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceGeometry: TLabColladaInstanceGeometry);
     destructor Destroy; override;
   end;
@@ -233,6 +252,7 @@ type
     var _Children: TNodeList;
     var _Transform: TLabMat;
     var _Attachments: TLabSceneNodeAttachmentGeometryList;
+    var _UserData: TObject;
     procedure SetParent(const Value: TLabSceneNode);
   public
     property Scene: TLabScene read _Scene;
@@ -240,6 +260,7 @@ type
     property Children: TNodeList read _Children;
     property Transform: TLabMat read _Transform write _Transform;
     property Attachments: TLabSceneNodeAttachmentGeometryList read _Attachments;
+    property UserData: TObject read _UserData write _UserData;
     constructor Create(
       const AScene: TLabScene;
       const AParent: TLabSceneNode;
@@ -296,7 +317,8 @@ end;
 
 class function TLabSceneShaderFactory.MakeVertexShader(
   const AScene: TLabScene;
-  const Desc: TLabColladaVertexDescriptor
+  const Desc: TLabColladaVertexDescriptor;
+  const Material: TLabSceneMaterial
 ): TLabSceneVertexShader;
   var ShaderCode: String = '#version 400'#$D#$A +
     '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
@@ -308,19 +330,11 @@ class function TLabSceneShaderFactory.MakeVertexShader(
     '  mat4 wvp;'#$D#$A +
     '} xf;'#$D#$A +
     '<$attribs$>' +
-    //'layout (location = 0) in vec3 in_position;'#$D#$A +
-    //'layout (location = 1) in vec3 in_normal;'#$D#$A +
-    //'layout (location = 2) in vec3 in_color;'#$D#$A +
-    //'layout (location = 0) out vec3 out_color;'#$D#$A +
-    //'layout (location = 1) out vec3 out_normal;'#$D#$A +
     'out gl_PerVertex {'#$D#$A +
     '  vec4 gl_Position;'#$D#$A +
     '};'#$D#$A +
     'void main() {'#$D#$A +
     '<$code$>' +
-    //'  out_normal = in_normal;'#$D#$A +
-    //'  out_color = in_color;'#$D#$A +
-    //'  gl_Position = xf.wvp * vec4(in_position, 1);'#$D#$A +
     '}'
   ;
   var StrAttrIn: String;
@@ -337,17 +351,17 @@ begin
   loc_out := 0;
   for i := 0 to High(Desc) do
   begin
-    Sem := GetSemanticName(Desc[i].Semantic);
+    Sem := GetSemanticName(Desc[i].Semantic) + IntToStr(Desc[i].SetNumber);
     StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in vec' + IntToStr(Desc[i].DataCount) + ' in_' + Sem + ';'#$D#$A;
     Inc(loc_in);
     if (Desc[i].Semantic = as_position) then
     begin
       case Desc[i].DataCount of
         0: StrCode += '  gl_Position = vec4(0, 0, 0, 1);'#$D#$A;
-        1: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 0, 0, 1);'#$D#$A;
-        2: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 0, 1);'#$D#$A;
-        3: StrCode += '  gl_Position = xf.wvp * vec4(in_position, 1);'#$D#$A;
-        4: StrCode += '  gl_Position = xf.wvp * in_position;'#$D#$A;
+        1: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 0, 0, 1);'#$D#$A;
+        2: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 0, 1);'#$D#$A;
+        3: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 1);'#$D#$A;
+        4: StrCode += '  gl_Position = xf.wvp * in_position0;'#$D#$A;
       end;
     end
     else
@@ -364,20 +378,15 @@ end;
 
 class function TLabSceneShaderFactory.MakePixelShader(
   const AScene: TLabScene;
-  const Desc: TLabColladaVertexDescriptor
+  const Desc: TLabColladaVertexDescriptor;
+  const Material: TLabSceneMaterial
 ): TLabScenePixelShader;
   var ShaderCode: String = '#version 400'#$D#$A +
     '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
     '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
     '<$attribs$>' +
-    //'layout (location = 0) in vec3 in_color;'#$D#$A +
-    //'layout (location = 1) in vec3 in_normal;'#$D#$A +
-    //'layout (location = 0) out vec4 outColor;'#$D#$A +
     'void main() {'#$D#$A +
     '<$code$>' +
-    //'  vec3 normal = normalize(in_normal);'#$D#$A +
-    //'  float c = (dot(normal, normalize(vec3(1, -1, 1))) * 0.5 + 0.5) * 0.8 + 0.2;'#$D#$A +
-    //'  outColor = vec4(in_color * c, 1);'#$D#$A +
     '}'
   ;
   var StrAttr: String;
@@ -385,24 +394,38 @@ class function TLabSceneShaderFactory.MakePixelShader(
   var Code: String;
   var Sem: String;
   var i, loc: TVkInt32;
+  var Texture: String;
+  var TexCoord: String;
 begin
   StrAttr := '';
+  Texture := '';
+  TexCoord := '';
+  for i := 0 to Material.Effect.Params.Count - 1 do
+  if Material.Effect.Params[i].ParameterType = pt_sampler then
+  begin
+    Texture := 'tex_sampler0';
+    Break;
+  end;
+  if Length(Texture) > 0 then
+  begin
+    StrAttr += 'layout (binding = 1) uniform sampler2D ' + Texture + ';'#$D#$A;
+  end;
   loc := 0;
-  StrCode := 'vec4 color = vec4(1, 1, 1, 1);'#$D#$A;
+  StrCode := '  vec4 color = vec4(1, 1, 1, 1);'#$D#$A;
   for i := 0 to High(Desc) do
   begin
     if Desc[i].Semantic = as_position then Continue;
-    Sem := GetSemanticName(Desc[i].Semantic);
+    Sem := GetSemanticName(Desc[i].Semantic) + IntToStr(Desc[i].SetNumber);
     StrAttr += 'layout (location = ' + IntToStr(loc) + ') in vec' + IntToStr(Desc[i].DataCount) + ' in_' + Sem + ';'#$D#$A;
     Inc(loc);
     case Desc[i].Semantic of
       as_normal:
       begin
         case Desc[i].DataCount of
-          1: StrCode += '  vec3 normal = normalize(vec3(in_normal, 0, 0));'#$D#$A;
-          2: StrCode += '  vec3 normal = normalize(vec3(in_normal, 0));'#$D#$A;
-          4: StrCode += '  vec3 normal = normalize(in_normal.xyz);'#$D#$A;
-          else StrCode += '  vec3 normal = normalize(in_normal);'#$D#$A;
+          1: StrCode += '  vec3 normal = normalize(vec3(in_' + Sem + ', 0, 0));'#$D#$A;
+          2: StrCode += '  vec3 normal = normalize(vec3(in_' + Sem + ', 0));'#$D#$A;
+          4: StrCode += '  vec3 normal = normalize(in_' + Sem + '.xyz);'#$D#$A;
+          else StrCode += '  vec3 normal = normalize(in_' + Sem + ');'#$D#$A;
         end;
         StrCode += '  color.xyz *= (dot(normal, normalize(vec3(1, -1, 1))) * 0.5 + 0.5) * 0.8 + 0.2;'#$D#$A;
       end;
@@ -415,10 +438,20 @@ begin
           4: StrCode += '  color *= in_color;'#$D#$A;
         end;
       end;
+      as_texcoord:
+      begin
+        if Length(TexCoord) = 0 then TexCoord := 'in_' + Sem;
+      end;
     end;
   end;
   StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
+  if (Length(Texture) > 0)
+  and (Length(TexCoord) > 0) then
+  begin
+    StrCode += '  color *= texture(' + Texture + ', vec2(' + TexCoord + '.x, -' + TexCoord + '.y));'#$D#$A;
+  end;
   StrCode += '  out_color = color;'#$D#$A;
+  //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
   Code := LabStrReplace(ShaderCode, '<$attribs$>', StrAttr);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
   Result := TLabScenePixelShader.FindOrCreate(ASCene, Code);
@@ -650,6 +683,12 @@ begin
   _Shader := TLabPixelShader.Create(_Scene.Device, @ShaderData[0], Length(ShaderData));
 end;
 
+destructor TLabSceneNodeAttachmentGeometry.TMaterialBinding.Destroy;
+begin
+  FreeAndNil(_UserData);
+  inherited Destroy;
+end;
+
 constructor TLabSceneNodeAttachmentGeometry.Create(
   const AScene: TLabScene;
   const ANode: TLabSceneNode;
@@ -682,6 +721,7 @@ end;
 
 destructor TLabSceneNodeAttachmentGeometry.Destroy;
 begin
+  FreeAndNil(_UserData);
   while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
   _MaterialBindings.Free;
   inherited Destroy;
@@ -803,6 +843,7 @@ begin
   IndexCount := 0;
   Triangles.UserData := Self;
   VertexStride := Triangles.VertexSize;
+  Material := AnsiString(Triangles.Material);
   if Triangles.Count * 3 > High(TVkUInt16) then
   begin
     IndexStride := 4;
@@ -941,13 +982,15 @@ end;
 
 destructor TLabSceneImage.Destroy;
 begin
+  FreeAndNil(_UserData);
   _Image.Free;
   inherited Destroy;
 end;
 
-constructor TLabSceneEffectParameter.Create(const AScene: TLabScene);
+constructor TLabSceneEffectParameter.Create(const AScene: TLabScene; const AName: String);
 begin
   _Scene := AScene;
+  _Name := AName;
 end;
 
 constructor TLabSceneEffectParameterSampler.Create(
@@ -955,8 +998,13 @@ constructor TLabSceneEffectParameterSampler.Create(
   const Param: TLabColladaEffectProfileParam
 );
 begin
-  inherited Create(AScene);
-  //Param.AsSampler.Surface.Image.Source;
+  _ParameterType := pt_sampler;
+  inherited Create(AScene, Param.id);
+  if Assigned(Param.AsSampler.Surface)
+  and Assigned(Param.AsSampler.Surface.Image) then
+  begin
+    _Image := TLabSceneImage(Param.AsSampler.Surface.Image.UserData);
+  end;
 end;
 
 constructor TLabSceneEffectParameterFloat.Create(
@@ -964,7 +1012,8 @@ constructor TLabSceneEffectParameterFloat.Create(
   const Param: TLabColladaEffectProfileParam
 );
 begin
-  inherited Create(AScene);
+  _ParameterType := pt_float;
+  inherited Create(AScene, Param.id);
 end;
 
 constructor TLabSceneEffectParameterFloat2.Create(
@@ -972,7 +1021,8 @@ constructor TLabSceneEffectParameterFloat2.Create(
   const Param: TLabColladaEffectProfileParam
 );
 begin
-  inherited Create(AScene);
+  _ParameterType := pt_float2;
+  inherited Create(AScene, Param.id);
 end;
 
 constructor TLabSceneEffectParameterFloat3.Create(
@@ -980,7 +1030,8 @@ constructor TLabSceneEffectParameterFloat3.Create(
   const Param: TLabColladaEffectProfileParam
 );
 begin
-  inherited Create(AScene);
+  _ParameterType := pt_float3;
+  inherited Create(AScene, Param.id);
 end;
 
 constructor TLabSceneEffectParameterFloat4.Create(
@@ -988,7 +1039,8 @@ constructor TLabSceneEffectParameterFloat4.Create(
   const Param: TLabColladaEffectProfileParam
 );
 begin
-  inherited Create(AScene);
+  _ParameterType := pt_float4;
+  inherited Create(AScene, Param.id);
 end;
 
 constructor TLabSceneEffect.Create(
@@ -1092,6 +1144,7 @@ end;
 
 destructor TLabSceneNode.Destroy;
 begin
+  FreeAndNil(_UserData);
   while _Attachments.Count > 0 do _Attachments.Pop.Free;
   _Attachments.Free;
   while _Children.Count > 0 do _Children.Pop.Free;

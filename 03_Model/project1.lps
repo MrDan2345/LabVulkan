@@ -4,180 +4,200 @@
     <PathDelim Value="\"/>
     <Version Value="10"/>
     <BuildModes Active="Default"/>
-    <Units Count="20">
+    <Units Count="24">
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
         <TopLine Value="10"/>
-        <CursorPos X="31" Y="26"/>
-        <UsageCount Value="90"/>
+        <CursorPos X="40" Y="24"/>
+        <UsageCount Value="98"/>
         <Loaded Value="True"/>
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="403"/>
-        <CursorPos X="44" Y="413"/>
-        <UsageCount Value="45"/>
+        <TopLine Value="689"/>
+        <CursorPos X="11" Y="712"/>
+        <UsageCount Value="49"/>
         <Loaded Value="True"/>
       </Unit1>
       <Unit2>
         <Filename Value="..\Common\LabVulkan.pas"/>
-        <EditorIndex Value="16"/>
-        <TopLine Value="331"/>
-        <CursorPos X="31" Y="347"/>
-        <UsageCount Value="44"/>
+        <EditorIndex Value="20"/>
+        <TopLine Value="250"/>
+        <CursorPos X="48" Y="266"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit2>
       <Unit3>
         <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\inc\objpash.inc"/>
-        <EditorIndex Value="19"/>
+        <EditorIndex Value="23"/>
         <TopLine Value="178"/>
         <CursorPos X="23" Y="194"/>
-        <UsageCount Value="44"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit3>
       <Unit4>
         <Filename Value="..\Vulkan.pas"/>
-        <EditorIndex Value="18"/>
-        <TopLine Value="1397"/>
-        <CursorPos X="8" Y="1413"/>
-        <UsageCount Value="44"/>
+        <EditorIndex Value="22"/>
+        <TopLine Value="3986"/>
+        <CursorPos X="8" Y="4002"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit4>
       <Unit5>
         <Filename Value="..\Common\LabPhysicalDevice.pas"/>
-        <EditorIndex Value="17"/>
+        <EditorIndex Value="21"/>
         <TopLine Value="70"/>
         <CursorPos Y="87"/>
-        <UsageCount Value="44"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit5>
       <Unit6>
         <Filename Value="..\Common\LabDevice.pas"/>
-        <EditorIndex Value="15"/>
+        <EditorIndex Value="19"/>
         <TopLine Value="38"/>
         <CursorPos X="56" Y="85"/>
-        <UsageCount Value="44"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit6>
       <Unit7>
         <Filename Value="..\Common\LabSync.pas"/>
-        <EditorIndex Value="14"/>
+        <EditorIndex Value="18"/>
         <TopLine Value="83"/>
         <CursorPos X="103" Y="101"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit7>
       <Unit8>
         <Filename Value="..\Common\LabSwapChain.pas"/>
-        <EditorIndex Value="13"/>
+        <EditorIndex Value="17"/>
         <TopLine Value="305"/>
         <CursorPos Y="319"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit8>
       <Unit9>
         <Filename Value="..\Common\LabPlatform.pas"/>
-        <EditorIndex Value="10"/>
+        <EditorIndex Value="14"/>
         <TopLine Value="16"/>
         <CursorPos X="52" Y="45"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit9>
       <Unit10>
         <Filename Value="..\Common\LabMath.pas"/>
-        <EditorIndex Value="9"/>
-        <TopLine Value="724"/>
+        <EditorIndex Value="13"/>
+        <TopLine Value="13"/>
         <CursorPos X="50" Y="745"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit10>
       <Unit11>
         <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\sysutils\sysutilh.inc"/>
-        <EditorIndex Value="11"/>
+        <EditorIndex Value="15"/>
         <TopLine Value="254"/>
         <CursorPos X="3" Y="270"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit11>
       <Unit12>
         <Filename Value="..\Common\LabSurface.pas"/>
-        <EditorIndex Value="8"/>
+        <EditorIndex Value="12"/>
         <TopLine Value="91"/>
         <CursorPos Y="111"/>
-        <UsageCount Value="43"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit12>
       <Unit13>
         <Filename Value="..\Common\LabScene.pas"/>
         <IsVisibleTab Value="True"/>
-        <EditorIndex Value="6"/>
-        <TopLine Value="157"/>
-        <CursorPos X="17" Y="173"/>
-        <UsageCount Value="43"/>
+        <EditorIndex Value="10"/>
+        <TopLine Value="428"/>
+        <CursorPos X="79" Y="451"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit13>
       <Unit14>
         <Filename Value="..\Common\LabUtils.pas"/>
-        <EditorIndex Value="5"/>
-        <TopLine Value="228"/>
+        <EditorIndex Value="9"/>
+        <TopLine Value="211"/>
         <CursorPos Y="246"/>
-        <UsageCount Value="42"/>
+        <UsageCount Value="46"/>
         <Loaded Value="True"/>
       </Unit14>
       <Unit15>
         <Filename Value="..\Common\LabColladaParser.pas"/>
-        <EditorIndex Value="4"/>
-        <TopLine Value="229"/>
-        <CursorPos X="27" Y="247"/>
-        <UsageCount Value="42"/>
+        <EditorIndex Value="8"/>
+        <TopLine Value="1362"/>
+        <CursorPos X="30" Y="1384"/>
+        <UsageCount Value="46"/>
         <Loaded Value="True"/>
       </Unit15>
       <Unit16>
         <Filename Value="..\Common\LabImage.pas"/>
-        <EditorIndex Value="3"/>
-        <TopLine Value="270"/>
-        <CursorPos X="50" Y="294"/>
-        <UsageCount Value="42"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="23"/>
+        <CursorPos X="53" Y="38"/>
+        <UsageCount Value="46"/>
         <Loaded Value="True"/>
       </Unit16>
       <Unit17>
         <Filename Value="..\Common\LabPipeline.pas"/>
-        <EditorIndex Value="2"/>
+        <EditorIndex Value="6"/>
         <TopLine Value="183"/>
         <CursorPos X="10" Y="199"/>
-        <UsageCount Value="42"/>
+        <UsageCount Value="46"/>
         <Loaded Value="True"/>
       </Unit17>
       <Unit18>
         <Filename Value="..\Common\LabBuffer.pas"/>
-        <EditorIndex Value="7"/>
+        <EditorIndex Value="11"/>
         <TopLine Value="311"/>
         <CursorPos Y="336"/>
-        <UsageCount Value="36"/>
+        <UsageCount Value="40"/>
         <Loaded Value="True"/>
       </Unit18>
       <Unit19>
         <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\win64\system.pp"/>
         <UnitName Value="System"/>
-        <EditorIndex Value="12"/>
+        <EditorIndex Value="16"/>
         <TopLine Value="25"/>
         <CursorPos X="2" Y="41"/>
-        <UsageCount Value="23"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit19>
+      <Unit20>
+        <Filename Value="..\Common\LabImageData.pas"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="16"/>
+        <CursorPos X="68" Y="27"/>
+        <UsageCount Value="14"/>
+        <Loaded Value="True"/>
+      </Unit20>
+      <Unit21>
+        <Filename Value="..\Common\LabTypes.pas"/>
+        <EditorIndex Value="5"/>
+        <TopLine Value="2"/>
+        <CursorPos X="32" Y="18"/>
+        <UsageCount Value="14"/>
+        <Loaded Value="True"/>
+      </Unit21>
+      <Unit22>
+        <Filename Value="..\Common\LabDescriptorPool.pas"/>
+        <EditorIndex Value="3"/>
+        <CursorPos X="3" Y="12"/>
+        <UsageCount Value="14"/>
+        <Loaded Value="True"/>
+      </Unit22>
+      <Unit23>
+        <Filename Value="..\Common\LabDescriptorSet.pas"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="28"/>
+        <CursorPos X="17" Y="44"/>
+        <UsageCount Value="14"/>
+        <Loaded Value="True"/>
+      </Unit23>
     </Units>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints Count="1">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\Common\LabScene.pas"/>
-        <Line Value="676"/>
-      </Item1>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>
