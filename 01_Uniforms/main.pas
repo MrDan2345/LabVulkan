@@ -276,7 +276,7 @@ begin
   );
   DescriptorSets.Ptr.UpdateSets(
     [
-      LabWriteDescriptorSetUniformBuffer(
+      LabWriteDescriptorSetUniformBufferDynamic(
         DescriptorSets.Ptr.VkHandle[0],
         0,
         [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]

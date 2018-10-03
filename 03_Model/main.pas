@@ -288,15 +288,15 @@ begin
     Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
       App.Device,
       [
-        LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+        LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
         LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
       ]
     );
     Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
-      Pass.DescriptorPool := TLabDescriptorPool.Create(
+    Pass.DescriptorPool := TLabDescriptorPool.Create(
       App.Device,
       [
-        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1),
         LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
       ],
       1
@@ -307,7 +307,7 @@ begin
     );
     Pass.DescriptorSets.Ptr.UpdateSets(
       [
-        LabWriteDescriptorSetUniformBuffer(
+        LabWriteDescriptorSetUniformBufferDynamic(
           Pass.DescriptorSets.Ptr.VkHandle[0], 0,
           [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
         ),

@@ -86,6 +86,12 @@ function LabWriteDescriptorSetUniformBuffer(
   const BufferInfo: array of TVkDescriptorBufferInfo
 ): TLabWriteDescriptorSet; inline;
 
+function LabWriteDescriptorSetUniformBufferDynamic(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet; inline;
+
 function LabWriteDescriptorSetImageSampler(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
@@ -283,6 +289,19 @@ begin
   Result := LabWriteDescriptorSet(
     DstSet, DstBinding,
     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    0, Length(BufferInfo), [], BufferInfo, []
+  );
+end;
+
+function LabWriteDescriptorSetUniformBufferDynamic(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
+begin
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
     0, Length(BufferInfo), [], BufferInfo, []
   );
 end;
