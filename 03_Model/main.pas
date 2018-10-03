@@ -22,7 +22,6 @@ uses
   LabDescriptorSet,
   LabPipeline,
   LabRenderPass,
-  LabShader,
   LabFrameBuffer,
   LabDescriptorPool,
   LabPlatform,
@@ -541,13 +540,13 @@ procedure TLabApp.UpdateTransforms;
     var Clip: TLabMat;
     var fov: TVkFloat;
   begin
-    fov := LabDegToRad * 70;
+    fov := LabDegToRad * 45;
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
     with Transforms.Ptr.Items[nd.UniformOffset]^ do
     begin
       Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-      View := LabMatView(LabVec3(0, 3, -8), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+      View := LabMatView(LabVec3(0, 3, -14), LabVec3(0, 0.7, 0), LabVec3(0, 1, 0));
       World := Node.Transform * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
       Clip := LabMat(
         1, 0, 0, 0,
