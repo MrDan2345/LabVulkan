@@ -438,7 +438,7 @@ begin
           4: StrCode += '  vec3 normal = normalize(in_' + Sem + '.xyz);'#$D#$A;
           else StrCode += '  vec3 normal = normalize(in_' + Sem + ');'#$D#$A;
         end;
-        StrCode += '  color.xyz *= (dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) /* 0.9 + 0.1*/;'#$D#$A;
+        StrCode += '  color.xyz *= 1.5 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
       end;
       as_color:
       begin
