@@ -23,21 +23,17 @@ type
     end;
     type PImageBuffer = ^TImageBuffer;
   private
-    var _Window: TLabWindow;
     var _Device: TLabDeviceShared;
     var _Surface: TLabSurfaceShared;
     var _Handle: TVkSwapchainKHR;
-    var _Capabilities: TVkSurfaceCapabilitiesKHR;
-    var _Formats: array of TVkSurfaceFormatKHR;
     var _Format: TVkFormat;
-    var _PresentModes: array of TVkPresentModeKHR;
-    var _PresentMode: TVkPresentModeKHR;
     var _Extent: TVkExtent2D;
     var _Images: array of TImageBuffer;
     var _QueueFamilyIndexGraphics: TVkUInt32;
     var _QueueFamilyIndexPresent: TVkUInt32;
     var _QueueFamilyGraphics: TVkQueue;
     var _QueueFamilyPresent: TVkQueue;
+    var _CurImage: TVkUInt32;
     function GetWidth: TVkUInt32; inline;
     function GetHeight: TVkUInt32; inline;
     function GetImageBuffer(const Index: TVkInt32): PImageBuffer; inline;
@@ -53,6 +49,7 @@ type
     property QueueFamilyIndexPresent: TVkUInt32 read _QueueFamilyIndexPresent;
     property QueueFamilyGraphics: TVkQueue read _QueueFamilyGraphics;
     property QueueFamilyPresent: TVkQueue read _QueueFamilyPresent;
+    property CurImage: TVkUInt32 read _CurImage;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const ASurface: TLabSurfaceShared;
@@ -61,7 +58,7 @@ type
       )
     );
     destructor Destroy; override;
-    function AcquireNextImage(const Semaphore: TLabSemaphoreShared; var ImageIndex: TVkUInt32): TVkResult;
+    function AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkResult;
   end;
   TLabSwapChainShared = specialize TLabSharedRef<TLabSwapChain>;
 
@@ -116,6 +113,7 @@ begin
   LabLog('TLabSwapChain.Create');
   _Device := ADevice;
   _Surface := ASurface;
+  _CurImage := $ffffffff;
 
   SetLength(supports_present, _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount);
   for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
@@ -339,7 +337,7 @@ begin
   LabLog('TLabSwapChain.Destroy');
 end;
 
-function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared; var ImageIndex: TVkUInt32): TVkResult;
+function TLabSwapChain.AcquireNextImage(const Semaphore: TLabSemaphoreShared): TVkResult;
 begin
   Result := Vulkan.AcquireNextImageKHR(
     _Device.Ptr.VkHandle,
@@ -347,7 +345,7 @@ begin
     High(TVkUInt64),
     Semaphore.Ptr.VkHandle,
     VK_NULL_HANDLE,
-    @ImageIndex
+    @_CurImage
   );
 end;
 

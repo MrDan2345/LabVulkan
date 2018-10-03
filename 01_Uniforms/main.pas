@@ -365,7 +365,7 @@ begin
     );
     UniformBuffer.Ptr.Unmap;
   end;
-  r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
+  r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
@@ -378,6 +378,7 @@ begin
   begin
     LabAssertVkError(r);
   end;
+  cur_buffer := SwapChain.Ptr.CurImage;
   CmdBuffer.Ptr.RecordBegin();
   CmdBuffer.Ptr.BeginRenderPass(
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,

@@ -127,7 +127,7 @@ type
     end;
     type TPassList = specialize TLabList<TPass>;
   private
-    var _Attackment: TLabSceneNodeAttachmentGeometry;
+    var _Attachment: TLabSceneNodeAttachmentGeometry;
   public
     Passes: TPassList;
     constructor Create(const Attachment: TLabSceneNodeAttachmentGeometry);
@@ -261,7 +261,7 @@ constructor TInstanceData.Create(const Attachment: TLabSceneNodeAttachmentGeomet
   var r_s: TLabSceneGeometry.TSubset;
   var Pass: TPass;
 begin
-  _Attackment := Attachment;
+  _Attachment := Attachment;
   Passes := TPassList.Create;
   for i := 0 to Attachment.Geometry.Subsets.Count - 1 do
   begin
@@ -535,8 +535,7 @@ end;
 
 procedure TLabApp.UpdateTransforms;
   procedure UpdateNode(const Node: TLabSceneNode);
-    var i_n, i_a: Integer;
-    var r_a: TLabSceneNodeAttachmentGeometry;
+    var i_n: Integer;
     var nd: TNodeData;
     var Clip: TLabMat;
     var fov: TVkFloat;
@@ -809,7 +808,7 @@ begin
     UniformBuffer.Ptr.Unmap;
   end;
   CmdBuffer.Ptr.RecordBegin();
-  r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
+  r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
@@ -822,6 +821,7 @@ begin
   begin
     LabAssertVkError(r);
   end;
+  cur_buffer := SwapChain.Ptr.CurImage;
   CmdBuffer.Ptr.BeginRenderPass(
     RenderPass.Ptr, BackBuffers[cur_buffer].Frame.Ptr,
     [

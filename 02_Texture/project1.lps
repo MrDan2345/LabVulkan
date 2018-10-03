@@ -4,7 +4,7 @@
     <PathDelim Value="\"/>
     <Version Value="10"/>
     <BuildModes Active="Default"/>
-    <Units Count="16">
+    <Units Count="1">
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -13,126 +13,6 @@
         <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit0>
-      <Unit1>
-        <Filename Value="main.pas"/>
-        <IsVisibleTab Value="True"/>
-        <EditorIndex Value="1"/>
-        <TopLine Value="313"/>
-        <CursorPos X="5" Y="338"/>
-        <UsageCount Value="23"/>
-        <Loaded Value="True"/>
-      </Unit1>
-      <Unit2>
-        <Filename Value="..\Common\LabImageData.pas"/>
-        <EditorIndex Value="8"/>
-        <TopLine Value="55"/>
-        <CursorPos X="32" Y="71"/>
-        <UsageCount Value="23"/>
-        <Loaded Value="True"/>
-      </Unit2>
-      <Unit3>
-        <Filename Value="..\Common\LabUtils.pas"/>
-        <EditorIndex Value="11"/>
-        <TopLine Value="1308"/>
-        <CursorPos X="72" Y="1319"/>
-        <UsageCount Value="22"/>
-        <Loaded Value="True"/>
-      </Unit3>
-      <Unit4>
-        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\classes\classesh.inc"/>
-        <EditorIndex Value="13"/>
-        <TopLine Value="953"/>
-        <CursorPos X="18" Y="968"/>
-        <UsageCount Value="21"/>
-        <Loaded Value="True"/>
-      </Unit4>
-      <Unit5>
-        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\sysutils\sysutilh.inc"/>
-        <EditorIndex Value="15"/>
-        <TopLine Value="88"/>
-        <CursorPos X="4" Y="104"/>
-        <UsageCount Value="21"/>
-        <Loaded Value="True"/>
-      </Unit5>
-      <Unit6>
-        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\objpas\classes\streams.inc"/>
-        <EditorIndex Value="14"/>
-        <TopLine Value="611"/>
-        <CursorPos X="3" Y="623"/>
-        <UsageCount Value="21"/>
-        <Loaded Value="True"/>
-      </Unit6>
-      <Unit7>
-        <Filename Value="..\Common\LabTypes.pas"/>
-        <EditorIndex Value="9"/>
-        <TopLine Value="259"/>
-        <CursorPos X="24" Y="277"/>
-        <UsageCount Value="20"/>
-        <Loaded Value="True"/>
-      </Unit7>
-      <Unit8>
-        <Filename Value="..\Common\LabMath.pas"/>
-        <EditorIndex Value="12"/>
-        <TopLine Value="217"/>
-        <CursorPos X="51" Y="232"/>
-        <UsageCount Value="20"/>
-        <Loaded Value="True"/>
-      </Unit8>
-      <Unit9>
-        <Filename Value="C:\lazarus\fpc\3.0.4\source\rtl\inc\objpash.inc"/>
-        <EditorIndex Value="10"/>
-        <TopLine Value="236"/>
-        <CursorPos X="8" Y="252"/>
-        <UsageCount Value="20"/>
-        <Loaded Value="True"/>
-      </Unit9>
-      <Unit10>
-        <Filename Value="..\Vulkan.pas"/>
-        <EditorIndex Value="7"/>
-        <TopLine Value="4180"/>
-        <CursorPos X="6" Y="4196"/>
-        <UsageCount Value="19"/>
-        <Loaded Value="True"/>
-      </Unit10>
-      <Unit11>
-        <Filename Value="..\Common\LabImage.pas"/>
-        <EditorIndex Value="6"/>
-        <TopLine Value="105"/>
-        <CursorPos X="20" Y="124"/>
-        <UsageCount Value="19"/>
-        <Loaded Value="True"/>
-      </Unit11>
-      <Unit12>
-        <Filename Value="..\Common\LabBuffer.pas"/>
-        <EditorIndex Value="5"/>
-        <TopLine Value="92"/>
-        <CursorPos X="10" Y="108"/>
-        <UsageCount Value="19"/>
-        <Loaded Value="True"/>
-      </Unit12>
-      <Unit13>
-        <Filename Value="..\Common\LabCommandBuffer.pas"/>
-        <EditorIndex Value="4"/>
-        <TopLine Value="342"/>
-        <CursorPos X="5" Y="357"/>
-        <UsageCount Value="18"/>
-        <Loaded Value="True"/>
-      </Unit13>
-      <Unit14>
-        <Filename Value="..\Common\LabDescriptorSet.pas"/>
-        <EditorIndex Value="3"/>
-        <TopLine Value="178"/>
-        <CursorPos Y="192"/>
-        <UsageCount Value="12"/>
-        <Loaded Value="True"/>
-      </Unit14>
-      <Unit15>
-        <Filename Value="cube_data.pas"/>
-        <EditorIndex Value="2"/>
-        <CursorPos X="68" Y="49"/>
-        <UsageCount Value="12"/>
-        <Loaded Value="True"/>
-      </Unit15>
     </Units>
   </ProjectSession>
 </CONFIG>

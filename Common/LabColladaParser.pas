@@ -1343,7 +1343,7 @@ begin
       DataFloat := TDataFloat.Create;
       VecData := CurNode.TextContent;
       p := 1;
-      DataFloat.Value := StrToFloatDef(FindNextValue(VecData, p), 0);
+      DataFloat.Value := StrToFloatDef(AnsiString(FindNextValue(VecData, p)), 0);
       _Data := DataFloat;
       _ParamType := pt_float;
     end
@@ -1354,7 +1354,7 @@ begin
       p := 1;
       for i := 0 to 1 do
       begin
-        DataFloat2.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+        DataFloat2.Value[i] := StrToFloatDef(AnsiString(FindNextValue(VecData, p)), 0);
       end;
       _Data := DataFloat2;
       _ParamType := pt_float2;
@@ -1366,7 +1366,7 @@ begin
       p := 1;
       for i := 0 to 2 do
       begin
-        DataFloat3.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+        DataFloat3.Value[i] := StrToFloatDef(AnsiString(FindNextValue(VecData, p)), 0);
       end;
       _Data := DataFloat3;
       _ParamType := pt_float3;
@@ -1378,7 +1378,7 @@ begin
       p := 1;
       for i := 0 to 3 do
       begin
-        DataFloat4.Value[i] := StrToFloatDef(FindNextValue(VecData, p), 0);
+        DataFloat4.Value[i] := StrToFloatDef(AnsiString(FindNextValue(VecData, p)), 0);
       end;
       _Data := DataFloat4;
       _ParamType := pt_float4;

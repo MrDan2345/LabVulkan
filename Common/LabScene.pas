@@ -984,7 +984,7 @@ begin
   _Scene := AScene;
   ColladaImage.UserData := Self;
   _Image := TLabImageDataPNG.Create;
-  Path := AScene.ResolvePath(ColladaImage.Source);
+  Path := AScene.ResolvePath(AnsiString(ColladaImage.Source));
   if FileExists(Path) then
   begin
     _Image.Load(Path);
@@ -1010,7 +1010,7 @@ constructor TLabSceneEffectParameterSampler.Create(
 );
 begin
   _ParameterType := pt_sampler;
-  inherited Create(AScene, Param.id);
+  inherited Create(AScene, AnsiString(Param.id));
   if Assigned(Param.AsSampler.Surface)
   and Assigned(Param.AsSampler.Surface.Image) then
   begin
@@ -1024,7 +1024,7 @@ constructor TLabSceneEffectParameterFloat.Create(
 );
 begin
   _ParameterType := pt_float;
-  inherited Create(AScene, Param.id);
+  inherited Create(AScene, AnsiString(Param.id));
 end;
 
 constructor TLabSceneEffectParameterFloat2.Create(
@@ -1033,7 +1033,7 @@ constructor TLabSceneEffectParameterFloat2.Create(
 );
 begin
   _ParameterType := pt_float2;
-  inherited Create(AScene, Param.id);
+  inherited Create(AScene, AnsiString(Param.id));
 end;
 
 constructor TLabSceneEffectParameterFloat3.Create(
@@ -1042,7 +1042,7 @@ constructor TLabSceneEffectParameterFloat3.Create(
 );
 begin
   _ParameterType := pt_float3;
-  inherited Create(AScene, Param.id);
+  inherited Create(AScene, AnsiString(Param.id));
 end;
 
 constructor TLabSceneEffectParameterFloat4.Create(
@@ -1051,7 +1051,7 @@ constructor TLabSceneEffectParameterFloat4.Create(
 );
 begin
   _ParameterType := pt_float4;
-  inherited Create(AScene, Param.id);
+  inherited Create(AScene, AnsiString(Param.id));
 end;
 
 constructor TLabSceneEffect.Create(

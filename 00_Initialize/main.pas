@@ -75,11 +75,6 @@ type
   end;
 
 const
-  NUM_SAMPLES = VK_SAMPLE_COUNT_1_BIT;
-  NUM_DESCRIPTOR_SETS = 1;
-  NUM_VIEWPORTS = 1;
-  NUM_SCISSORS = NUM_VIEWPORTS;
-  //Amount of time, in nanoseconds, to wait for a command buffer to complete
   FENCE_TIMEOUT = 100000000;
 
   VK_DYNAMIC_STATE_BEGIN_RANGE = VK_DYNAMIC_STATE_VIEWPORT;
@@ -345,7 +340,7 @@ begin
     Move(Transforms.MVP, UniformData^, SizeOf(Transforms.MVP));
     UniformBuffer.Ptr.Unmap;
   end;
-  r := SwapChain.Ptr.AcquireNextImage(Semaphore, cur_buffer);
+  r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
@@ -358,6 +353,7 @@ begin
   begin
     LabAssertVkError(r);
   end;
+  cur_buffer := SwapChain.Ptr.CurImage;
   CmdBuffer.Ptr.RecordBegin();
   CmdBuffer.Ptr.BeginRenderPass(
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,

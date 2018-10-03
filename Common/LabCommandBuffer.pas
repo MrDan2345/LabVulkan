@@ -11,8 +11,7 @@ uses
   LabRenderPass,
   LabFrameBuffer,
   LabPipeline,
-  LabDescriptorSet,
-  LabBuffer;
+  LabDescriptorSet;
 
 type
   TLabCommandBuffer = class (TLabClass)
