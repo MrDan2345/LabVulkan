@@ -397,45 +397,78 @@ begin
     Pass.Subset := r_s;
     Pass.VertexShader := TLabSceneShaderFactory.MakeVertexShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
     Pass.PixelShader := TLabSceneShaderFactory.MakePixelShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
-    Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-      App.Device,
-      [
-        LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-        LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
-      ]
-    );
-    Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
-    Pass.DescriptorPool := TLabDescriptorPool.Create(
-      App.Device,
-      [
-        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1),
-        LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
-      ],
-      1
-    );
-    Pass.DescriptorSets := TLabDescriptorSets.Create(
-      App.Device, Pass.DescriptorPool,
-      [Pass.DescriptorSetLayout.Ptr.VkHandle]
-    );
-    Pass.DescriptorSets.Ptr.UpdateSets(
-      [
-        LabWriteDescriptorSetUniformBufferDynamic(
-          Pass.DescriptorSets.Ptr.VkHandle[0], 0,
-          [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
-        ),
-        LabWriteDescriptorSetImageSampler(
-          Pass.DescriptorSets.Ptr.VkHandle[0], 1,
-          [
-            LabDescriptorImageInfo(
-              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-              Pass.Image.TextureView.Ptr.VkHandle,
-              Pass.Image.TextureSampler.Ptr.VkHandle
-            )
-          ]
-        )
-      ],
-      []
-    );
+    if Assigned(Pass.Image) then
+    begin
+      Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
+        App.Device,
+        [
+          LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+          LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+        ]
+      );
+      Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
+      Pass.DescriptorPool := TLabDescriptorPool.Create(
+        App.Device,
+        [
+          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1),
+          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
+        ],
+        1
+      );
+      Pass.DescriptorSets := TLabDescriptorSets.Create(
+        App.Device, Pass.DescriptorPool,
+        [Pass.DescriptorSetLayout.Ptr.VkHandle]
+      );
+      Pass.DescriptorSets.Ptr.UpdateSets(
+        [
+          LabWriteDescriptorSetUniformBufferDynamic(
+            Pass.DescriptorSets.Ptr.VkHandle[0], 0,
+            [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
+          ),
+          LabWriteDescriptorSetImageSampler(
+            Pass.DescriptorSets.Ptr.VkHandle[0], 1,
+            [
+              LabDescriptorImageInfo(
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                Pass.Image.TextureView.Ptr.VkHandle,
+                Pass.Image.TextureSampler.Ptr.VkHandle
+              )
+            ]
+          )
+        ],
+        []
+      );
+    end
+    else
+    begin
+      Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
+        App.Device,
+        [
+          LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))
+        ]
+      );
+      Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
+      Pass.DescriptorPool := TLabDescriptorPool.Create(
+        App.Device,
+        [
+          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
+        ],
+        1
+      );
+      Pass.DescriptorSets := TLabDescriptorSets.Create(
+        App.Device, Pass.DescriptorPool,
+        [Pass.DescriptorSetLayout.Ptr.VkHandle]
+      );
+      Pass.DescriptorSets.Ptr.UpdateSets(
+        [
+          LabWriteDescriptorSetUniformBufferDynamic(
+            Pass.DescriptorSets.Ptr.VkHandle[0], 0,
+            [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
+          )
+        ],
+        []
+      );
+    end;
     Passes.Add(Pass);
   end;
 end;
@@ -764,6 +797,7 @@ begin
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/maya/maya.dae');
+  //Scene.Add('../Models/box.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);

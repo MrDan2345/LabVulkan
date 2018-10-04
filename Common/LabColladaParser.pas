@@ -1128,13 +1128,15 @@ constructor TLabColladaTriangles.Create(
 );
   var CurNode: TDOMNode;
   var NodeName, IndexData: DOMString;
-  var i, p: TVkInt32;
+  var IndexStr: DOMString;
+  var i, p, max_offset: TVkInt32;
 begin
   inherited Create(XMLNode, AParent);
   _MaterialRef := FindAttribute(XMLNode, 'material');
   _Count := StrToIntDef(AnsiString(FindAttribute(XMLNode, 'count')), 0);
   _Inputs := TLabColladaInputList.Create;
   _VertexLayout := TLabColladaInputList.Create;
+  IndexStr := '';
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
@@ -1142,18 +1144,26 @@ begin
     if NodeName = 'input' then
     begin
       _Inputs.Add(TLabColladaInput.Create(CurNode, Self));
+    end
+    else if NodeName = 'p' then
+    begin
+      IndexStr += CurNode.TextContent;
     end;
     CurNode := CurNode.NextSibling;
   end;
-  CurNode := XMLNode.FindNode('p');
-  if Assigned(CurNode) then
+  max_offset := 0;
+  for i := 0 to _Inputs.Count - 1 do
+  if _Inputs[i].Offset > max_offset then
   begin
-    SetLength(_Indices, _Count * 3 * _Inputs.Count);
-    IndexData := CurNode.TextContent;
+    max_offset := _Inputs[i].Offset;
+  end;
+  if Length(IndexStr) > 0 then
+  begin
+    SetLength(_Indices, _Count * 3 * (max_offset + 1));
     p := 1;
     for i := 0 to High(_Indices) do
     begin
-      _Indices[i] := StrToIntDef(AnsiString(FindNextValue(IndexData, p)), 0);
+      _Indices[i] := StrToIntDef(AnsiString(FindNextValue(IndexStr, p)), 0);
     end;
   end;
 end;
@@ -1228,7 +1238,7 @@ begin
         _Vertices := TLabColladaVertices.Create(CurNode, Self);
       end;
     end
-    else if NodeName = 'triangles' then
+    else if (NodeName = 'triangles') or (NodeName = 'polygons') then
     begin
       _TrianglesList.Add(TLabColladaTriangles.Create(CurNode, Self));
     end;

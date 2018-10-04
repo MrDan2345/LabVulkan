@@ -443,10 +443,10 @@ begin
       as_color:
       begin
         case Desc[i].DataCount of
-          1: StrCode += '  color.x *= in_color;'#$D#$A;
-          2: StrCode += '  color.xy *= in_color;'#$D#$A;
-          3: StrCode += '  color.xyz *= in_color;'#$D#$A;
-          4: StrCode += '  color *= in_color;'#$D#$A;
+          1: StrCode += '  color.x *= in_' + Sem + ';'#$D#$A;
+          2: StrCode += '  color.xy *= in_' + Sem + ';'#$D#$A;
+          3: StrCode += '  color.xyz *= in_' + Sem + ';'#$D#$A;
+          4: StrCode += '  color *= in_' + Sem + ';'#$D#$A;
         end;
       end;
       as_texcoord:
@@ -845,7 +845,7 @@ constructor TLabSceneGeometry.TSubset.Create(
   var AttribSwizzles: array of TLabSwizzle;
   var Source: TLabColladaSource;
   var i, j, Offset, ind: TVkInt32;
-  var crc: TVkUInt32;
+  var crc, max_offset: TVkUInt32;
   var AssetSwizzle: TLabSwizzle;
   var Root: TLabColladaRoot;
 begin
@@ -870,6 +870,12 @@ begin
   VertexRemap := PVertexRemapArr(GetMemory(VertexStride * Triangles.Count * 3));
   BufferPtrVert := VertexData;
   BufferPtrInd := IndexData;
+  max_offset := 0;
+  for i := 0 to Triangles.Inputs.Count - 1 do
+  if Triangles.Inputs[i].Offset > max_offset then
+  begin
+    max_offset := Triangles.Inputs[i].Offset;
+  end;
   SetLength(AttribIndices, Triangles.Inputs.Count);
   for i := 0 to Triangles.Count * 3 - 1 do
   begin
@@ -877,7 +883,7 @@ begin
     for j := 0 to Triangles.Inputs.Count - 1 do
     begin
       Offset := Triangles.Inputs[j].Offset;
-      AttribIndices[j] := Triangles.Indices^[i * Triangles.Inputs.Count + Offset];
+      AttribIndices[j] := Triangles.Indices^[i * (max_offset + 1) + Offset];
       crc := LabCRC32(crc, @AttribIndices[j], SizeOf(TVkInt32));
     end;
     ind := FindRemap(crc);
