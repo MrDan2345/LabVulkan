@@ -259,8 +259,7 @@ begin
           LabOffset3D(0, 0, 0), LabOffset3D(mip_dst_width, mip_dst_height, 1),
           TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i + 1), 0, 1
         )
-      ],
-      VK_FILTER_CUBIC_IMG
+      ]
     );
     Cmd.Ptr.PipelineBarrier(
       TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
@@ -286,7 +285,7 @@ begin
     [
       LabImageMemoryBarrier(
         Texture.Image.Ptr.VkHandle,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         TVkFlags(VK_ACCESS_TRANSFER_READ_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT),
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
         TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), Texture.MipLevels - 1
