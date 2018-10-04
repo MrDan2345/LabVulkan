@@ -198,6 +198,9 @@ type
   TLabListPointerShared = specialize TLabSharedRef<TLabListPointer>;
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
+function LabIsPOT(const v: TVkUInt32): Boolean; inline;
+function LabIntLog2(const v: TVkUInt32): TVkUInt32; inline;
+function LabMakePOT(const v: TVkUInt32): TVkUInt32; inline;
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;
 function LabCheckDeviceExtensionPresent(const PhysicalDevice: TVkPhysicalDevice; const ExtensionName: String): Boolean;
 function LabCheckLayerAvailable(const LayerName: AnsiString): Boolean;
@@ -1081,6 +1084,32 @@ begin
   {$Warnings off}
   FillChar(Ptr^, Size, 0);
   {$Warnings on}
+end;
+
+function LabIsPOT(const v: TVkUInt32): Boolean;
+begin
+  Result := (v and (v - 1)) = 0;
+end;
+
+function LabIntLog2(const v: TVkUInt32): TVkUInt32;
+  var v1, s: LongWord;
+begin
+  Result := TVkUInt8(v > $ffff) shl 4; v1 := v shr Result;
+  s := TVkUInt8(v1 > $ff) shl 3; v1 := v1 shr s; Result := Result or s;
+  s := TVkUInt8(v1 > $f) shl 2; v1 := v1 shr s; Result := Result or s;
+  s := TVkUInt8(v1 > $3) shl 1; v1 := v1 shr s; Result := Result or s;
+  Result := Result or (v1 shr 1);
+end;
+
+function LabMakePOT(const v: TVkUInt32): TVkUInt32;
+begin
+  Result := v - 1;
+  Result := Result or (Result shr 1);
+  Result := Result or (Result shr 2);
+  Result := Result or (Result shr 4);
+  Result := Result or (Result shr 8);
+  Result := Result or (Result shr 16);
+  Inc(Result);
 end;
 
 function LabCheckGlobalExtensionPresent(const ExtensionName: AnsiString): Boolean;

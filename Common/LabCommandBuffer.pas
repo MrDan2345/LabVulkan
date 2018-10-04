@@ -86,6 +86,14 @@ type
       const ImageLayout: TVkImageLayout;
       const Regions: array of TVkBufferImageCopy
     );
+    procedure BlitImage(
+      const SrcImage: TVkImage;
+      const SrcImageLayout: TVkImageLayout;
+      const DstImage: TVkImage;
+      const DstImageLayout: TVkImageLayout;
+      const Regions: array of TVkImageBlit;
+      const Filter: TVkFilter = VK_FILTER_LINEAR
+    );
     procedure PipelineBarrier(
       const SrcStageMask: TVkPipelineStageFlags;
       const DstStageMask: TVkPipelineStageFlags;
@@ -125,6 +133,21 @@ function LabImageMemoryBarrier(
   const ImageBaseArrayLayer: TVkUInt32 = 0;
   const ImageArrayLayerCount: TVkUInt32 = 1
 ): TVkImageMemoryBarrier;
+
+function LabImageBlit(
+  const SrcOffsetMin: TVkOffset3D;
+  const SrcOffsetMax: TVkOffset3D;
+  const SrcAspectMask: TVkImageAspectFlags;
+  const SrcMipLevel: TVkUInt32;
+  const SrcBaseArrayLayer: TVkUInt32;
+  const SrcArrayLayerCount: TVkUInt32;
+  const DstOffsetMin: TVkOffset3D;
+  const DstOffsetMax: TVkOffset3D;
+  const DstAspectMask: TVkImageAspectFlags;
+  const DstMipLevel: TVkUInt32;
+  const DstBaseArrayLayer: TVkUInt32;
+  const DstArrayLayerCount: TVkUInt32
+): TVkImageBlit;
 
 implementation
 
@@ -335,6 +358,27 @@ begin
   Vulkan.CmdCopyBufferToImage(_Handle, Src, Dst, ImageLayout, Length(Regions), @Regions[0]);
 end;
 
+procedure TLabCommandBuffer.BlitImage(
+  const SrcImage: TVkImage;
+  const SrcImageLayout: TVkImageLayout;
+  const DstImage: TVkImage;
+  const DstImageLayout: TVkImageLayout;
+  const Regions: array of TVkImageBlit;
+  const Filter: TVkFilter
+);
+begin
+  Vulkan.CmdBlitImage(
+    _Handle,
+    SrcImage,
+    SrcImageLayout,
+    DstImage,
+    DstImageLayout,
+    Length(Regions),
+    @Regions[0],
+    Filter
+  );
+end;
+
 procedure TLabCommandBuffer.PipelineBarrier(
   const SrcStageMask: TVkPipelineStageFlags;
   const DstStageMask: TVkPipelineStageFlags;
@@ -427,6 +471,36 @@ begin
   Result.subresourceRange.levelCount := ImageMipLevelCount;
   Result.subresourceRange.baseArrayLayer := ImageBaseArrayLayer;
   Result.subresourceRange.layerCount := ImageArrayLayerCount;
+end;
+
+function LabImageBlit(
+  const SrcOffsetMin: TVkOffset3D;
+  const SrcOffsetMax: TVkOffset3D;
+  const SrcAspectMask: TVkImageAspectFlags;
+  const SrcMipLevel: TVkUInt32;
+  const SrcBaseArrayLayer: TVkUInt32;
+  const SrcArrayLayerCount: TVkUInt32;
+  const DstOffsetMin: TVkOffset3D;
+  const DstOffsetMax: TVkOffset3D;
+  const DstAspectMask: TVkImageAspectFlags;
+  const DstMipLevel: TVkUInt32;
+  const DstBaseArrayLayer: TVkUInt32;
+  const DstArrayLayerCount: TVkUInt32
+): TVkImageBlit;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.srcOffsets[0] := SrcOffsetMin;
+  Result.srcOffsets[1] := SrcOffsetMax;
+  Result.srcSubresource.aspectMask := SrcAspectMask;
+  Result.srcSubresource.mipLevel := SrcMipLevel;
+  Result.srcSubresource.baseArrayLayer := SrcBaseArrayLayer;
+  Result.srcSubresource.layerCount := SrcArrayLayerCount;
+  Result.dstOffsets[0] := DstOffsetMin;
+  Result.dstOffsets[1] := DstOffsetMax;
+  Result.dstSubresource.aspectMask := DstAspectMask;
+  Result.dstSubresource.mipLevel := DstMipLevel;
+  Result.dstSubresource.baseArrayLayer := DstBaseArrayLayer;
+  Result.dstSubresource.layerCount := DstArrayLayerCount;
 end;
 
 end.

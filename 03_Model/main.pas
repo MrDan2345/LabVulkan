@@ -248,7 +248,11 @@ begin
   TextureView := TLabImageView.Create(
     App.Device, Texture.Ptr.VkHandle, Texture.Ptr.Format
   );
-  TextureSampler := TLabSampler.Create(App.Device);
+  TextureSampler := TLabSampler.Create(
+    App.Device, VK_FILTER_LINEAR, VK_FILTER_LINEAR,
+    VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    VK_TRUE, 16
+  );
 end;
 
 destructor TImageData.Destroy;
