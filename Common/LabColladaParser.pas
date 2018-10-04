@@ -860,11 +860,11 @@ begin
     begin
       _Sources.Add(TLabColladaSource.Create(CurNode, Self));
     end
-    else NodeName = 'sampler' then
+    else if NodeName = 'sampler' then
     begin
       _Samplers.Add(TLabColladaAnimationSampler.Create(CurNode, Self));
     end
-    else NodeName = 'channel' then
+    else if NodeName = 'channel' then
     begin
       _Channels.Add(TLabColladaAnimationChannel.Create(CurNode, Self));
     end;
