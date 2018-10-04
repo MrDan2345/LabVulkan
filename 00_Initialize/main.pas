@@ -324,8 +324,9 @@ procedure TLabApp.Loop;
   var r: TVkResult;
 begin
   TLabVulkan.IsActive := Window.IsActive;
-  if not TLabVulkan.IsActive then Exit;
-  if Window.Mode = wm_minimized then Exit;
+  if not TLabVulkan.IsActive
+  or (Window.Mode = wm_minimized)
+  or (Window.Width * Window.Height = 0) then Exit;
   if (SwapChain.Ptr.Width <> Window.Width)
   or (SwapChain.Ptr.Height <> Window.Height) then
   begin
