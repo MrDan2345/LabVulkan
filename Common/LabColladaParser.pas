@@ -335,6 +335,44 @@ type
   end;
   TLabColladaGeometryList = specialize TLabList<TLabColladaGeometry>;
 
+  TLabColladaAnimationSampler = class (TLabColladaObject)
+  private
+    _Inputs: TLabColladaInputList;
+  public
+    property Inputs: TLabColladaInputList read _Inputs;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaAnimationSamplerList = specialize TLabList<TLabColladaAnimationSampler>;
+
+  TLabColladaAnimationChannel = class (TLabColladaObject)
+  private
+    _Source: DOMString;
+    _Target: DOMString;
+  public
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaAnimationChannelList = specialize TLabList<TLabColladaAnimationChannel>;
+
+  TLabColladaAnimation = class (TLabColladaObject)
+  public
+    type TList = specialize TLabList<TLabColladaAnimation>;
+  private
+    _Animations: TList;
+    _Sources: TLabColladaSourceList;
+    _Samplers: TLabColladaAnimationSamplerList;
+    _Channels: TLabColladaAnimationChannelList;
+  public
+    property Animations: TList read _Animations;
+    property Sources: TLabColladaSourceList read _Sources;
+    property Samplers: TLabColladaAnimationSamplerList read _Samplers;
+    property Channels: TLabColladaAnimationChannelList read _Channels;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaAnimationList = TLabColladaAnimation.TList;
+
   TLabColladaInstanceMaterial = class (TLabColladaObject)
   private
     _Symbol: DOMString;
@@ -396,6 +434,15 @@ type
     destructor Destroy; override;
   end;
   TLabColladaVisualSceneList = specialize TLabList<TLabColladaVisualScene>;
+
+  TLabColladaLibraryAnimations = class (TLabColladaObject)
+  private
+    _Animations: TLabColladaAnimationList;
+  public
+    property Animations: TLabColladaAnimationList read _Animations;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
 
   TLabColladaLibraryMaterials = class (TLabColladaObject)
   private
@@ -746,6 +793,95 @@ destructor TLabColladaGeometry.Destroy;
 begin
   while _Meshes.Count > 0 do _Meshes.Pop.Free;
   _Meshes.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaAnimationSampler.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Inputs := TLabColladaInputList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    _Inputs.Add(TLabColladaInput.Create(CurNode, Self));
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaAnimationSampler.Destroy;
+begin
+  while _Inputs.Count > 0 do _Inputs.Pop.Free;
+  _Inputs.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaAnimationChannel.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+begin
+  inherited Create(XMLNode, AParent);
+  _Source := FindAttribute(XMLNode, 'source');
+  _Target := FindAttribute(XMLNode, 'target');
+end;
+
+destructor TLabColladaAnimationChannel.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabColladaAnimation.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Animations := TLabColladaAnimationList.Create;
+  _Sources := TLabColladaSourceList.Create;
+  _Samplers := TLabColladaAnimationSamplerList.Create;
+  _Channels := TLabColladaAnimationChannelList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'animation' then
+    begin
+      _Animations.Add(TLabColladaAnimation.Create(CurNode, Self));
+    end
+    else if NodeName = 'source' then
+    begin
+      _Sources.Add(TLabColladaSource.Create(CurNode, Self));
+    end
+    else NodeName = 'sampler' then
+    begin
+      _Samplers.Add(TLabColladaAnimationSampler.Create(CurNode, Self));
+    end
+    else NodeName = 'channel' then
+    begin
+      _Channels.Add(TLabColladaAnimationChannel.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaAnimation.Destroy;
+begin
+  while _Channels.Count > 0 do _Channels.Pop.Free;
+  _Channels.Free;
+  while _Samplers.Count > 0 do _Samplers.Pop.Free;
+  _Samplers.Free;
+  while _Sources.Count > 0 do _Sources.Pop.Free;
+  _Sources.Free;
+  while _Animations.Count > 0 do _Animations.Pop.Free;
+  _Animations.Free;
   inherited Destroy;
 end;
 
@@ -1781,6 +1917,34 @@ destructor TLabColladaVisualScene.Destroy;
 begin
   while _Nodes.Count > 0 do _Nodes.Pop.Free;
   _Nodes.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaLibraryAnimations.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Animations := TLabColladaAnimationList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'animation' then
+    begin
+      _Animations.Add(TLabColladaAnimation.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryAnimations.Destroy;
+begin
+  while _Animations.Count > 0 do _Animations.Pop.Free;
+  _Animations.Free;
   inherited Destroy;
 end;
 

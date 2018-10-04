@@ -29,7 +29,7 @@ procedure Initialize;
   var Vertices: array[0..3] of TVertex;
   var Indices: array[0..5] of Word;
 begin
-  Collada := TLabColladaParser.Create('../Models/skull.dae');
+  Collada := TLabColladaParser.Create('../Models/box.dae');
   Collada.RootNode.Dump;
   Vertices[0].Pos.SetValue(-2, 2, 0); Vertices[0].Color.SetValue(1, 0, 0, 1);
   Vertices[1].Pos.SetValue(2, 2, 0); Vertices[1].Color.SetValue(0, 1, 0, 1);
