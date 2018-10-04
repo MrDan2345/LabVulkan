@@ -259,7 +259,8 @@ begin
           LabOffset3D(0, 0, 0), LabOffset3D(mip_dst_width, mip_dst_height, 1),
           TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i + 1), 0, 1
         )
-      ]
+      ],
+      VK_FILTER_CUBIC_IMG
     );
     Cmd.Ptr.PipelineBarrier(
       TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
