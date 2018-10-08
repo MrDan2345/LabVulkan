@@ -443,6 +443,8 @@ type
   operator = (v0, v1: TLabVec4): Boolean; inline;
   operator = (q0, q1: TLabQuat): Boolean; inline;
   operator = (m0, m1: TLabMat): Boolean; inline;
+  operator mod(const a, b: Double): Double; inline;
+  operator mod(const a, b: Single): Single; inline;
 
 function LabSwizzle(
   const ord0: TLabUInt8 = 0;
@@ -510,6 +512,7 @@ function LabMax(const v0, v1: TLabUInt32): TLabUInt32; inline; overload;
 function LabClamp(const f, LimMin, LimMax: TLabFloat): TLabFloat; inline;
 function LabSmoothStep(const t, f0, f1: TLabFloat): TLabFloat; inline;
 function LabLerpFloat(const v0, v1, t: TLabFloat): TLabFloat; inline;
+function LabBezierFloat(const f0, f1, f2, f3: TLabFloat; const t: TLabFloat): TLabFloat; inline;
 function LabLerpVec2(const v0, v1: TLabVec2; const t: TLabFloat): TLabVec2; inline;
 function LabLerpVec3(const v0, v1: TLabVec3; const t: TLabFloat): TLabVec3; inline;
 function LabLerpVec4(const v0, v1: TLabVec4; const t: TLabFloat): TLabVec4; inline;
@@ -1949,6 +1952,16 @@ begin
   Result := True;
 end;
 
+operator mod(const a, b: Double): Double; inline;
+begin
+  Result := a - b * Int(a / b);
+end;
+
+operator mod(const a, b: Single): Single; inline;
+begin
+  Result := a - b * Int(a / b);
+end;
+
 {$Warnings off}
 
 function LabSwizzle(
@@ -2588,6 +2601,14 @@ end;
 function LabSmoothStep(const t, f0, f1: TLabFloat): TLabFloat;
 begin
   Result := LabClamp((t - f0) / (f1 - f0), 0, 1);
+end;
+
+function LabBezierFloat(const f0, f1, f2, f3: TLabFloat; const t: TLabFloat): TLabFloat;
+  var t2, t3: TLabFloat;
+begin
+  t2 := t * t;
+  t3 := t2 * t;
+  Result := t3 * f3 + (3 * t2 - 3 * t3) * f2 + (3 * t3 - 6 * t2 + 3 * t) * f1 + (3 * t2 - t3 - 3 * t + 1) * f0;
 end;
 
 function LabLerpVec2(const v0, v1: TLabVec2; const t: TLabFloat): TLabVec2;

@@ -208,6 +208,25 @@ type
   end;
   TLabSceneMaterialList = specialize TLabList<TLabSceneMaterial>;
 
+  TLabSceneAnimationTrack = class (TLabClass)
+  public
+    constructor Create(const AScene: TLabScene; const ColladaAnimation: TLabColladaAnimationChannel);
+    destructor Destroy; override;
+  end;
+
+  TLabSceneAnimation = class (TLabClass)
+  public
+    constructor Create(const AScene: TLabScene; const ColladaAnimation: TLabColladaAnimation);
+    destructor Destroy; override;
+  end;
+  TLabSceneAnimationList = specialize TLabList<TLabSceneAnimation>;
+
+  TLabSceneAnimationClip = class (TLabClass)
+  public
+    constructor Create(const AScene: TLabScene);
+    destructor Destroy; override;
+  end;
+
   TLabSceneNode = class;
   TLabSceneNodeAttachment = class (TLabClass)
   private
@@ -278,6 +297,7 @@ type
     var _Geometries: TLabSceneGeometryList;
     var _Effects: TLabSceneEffectList;
     var _Materials: TLabSceneMaterialList;
+    var _Animations: TLabSceneAnimationList;
   public
     property Device: TLabDeviceShared read _Device;
     property Root: TLabSceneNode read _Root;
@@ -1108,6 +1128,40 @@ begin
 end;
 
 destructor TLabSceneMaterial.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabSceneAnimationTrack.Create(const AScene: TLabScene;
+  const ColladaAnimation: TLabColladaAnimationChannel);
+begin
+
+end;
+
+destructor TLabSceneAnimationTrack.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabSceneAnimation.Create(
+  const AScene: TLabScene;
+  const ColladaAnimation: TLabColladaAnimation
+);
+begin
+
+end;
+
+destructor TLabSceneAnimation.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabSceneAnimationClip.Create(const AScene: TLabScene);
+begin
+
+end;
+
+destructor TLabSceneAnimationClip.Destroy;
 begin
   inherited Destroy;
 end;

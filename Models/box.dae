@@ -3,10 +3,10 @@
   <asset>
     <contributor>
       <author>Blender User</author>
-      <authoring_tool>Blender 2.79.0 commit date:2018-02-21, commit time:10:41, hash:8928d99270f</authoring_tool>
+      <authoring_tool>Blender 2.79.0 commit date:2018-03-22, commit time:14:10, hash:f4dc9f9d68b</authoring_tool>
     </contributor>
-    <created>2018-10-04T16:50:15</created>
-    <modified>2018-10-04T16:50:15</modified>
+    <created>2018-10-08T15:00:15</created>
+    <modified>2018-10-08T15:00:15</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -790,7 +790,7 @@
         </technique_common>
       </source>
       <source id="Cube_rotation_euler_Y-interpolation">
-        <Name_array id="Cube_rotation_euler_Y-interpolation-array" count="3">BEZIER BEZIER BEZIER</Name_array>
+        <Name_array id="Cube_rotation_euler_Y-interpolation-array" count="3">BEZIER LINEAR BEZIER</Name_array>
         <technique_common>
           <accessor source="#Cube_rotation_euler_Y-interpolation-array" count="3" stride="1">
             <param name="INTERPOLATION" type="name"/>
@@ -798,7 +798,7 @@
         </technique_common>
       </source>
       <source id="Cube_rotation_euler_Y-intangent">
-        <float_array id="Cube_rotation_euler_Y-intangent-array" count="6">-0.1626715 0 0.2539952 -92.92962 0.6706619 0</float_array>
+        <float_array id="Cube_rotation_euler_Y-intangent-array" count="6">-0.1626715 0 0 0 0.6706619 0</float_array>
         <technique_common>
           <accessor source="#Cube_rotation_euler_Y-intangent-array" count="3" stride="2">
             <param name="X" type="float"/>
@@ -807,7 +807,7 @@
         </technique_common>
       </source>
       <source id="Cube_rotation_euler_Y-outtangent">
-        <float_array id="Cube_rotation_euler_Y-outtangent-array" count="6">0.1626715 0 0.5793381 -92.92962 0.9960048 0</float_array>
+        <float_array id="Cube_rotation_euler_Y-outtangent-array" count="6">0.1626715 0 0 0 0.9960048 0</float_array>
         <technique_common>
           <accessor source="#Cube_rotation_euler_Y-outtangent-array" count="3" stride="2">
             <param name="X" type="float"/>
