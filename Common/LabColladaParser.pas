@@ -2125,7 +2125,7 @@ begin
           begin
             XfRotate[i] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
           end;
-          Matrix := Matrix * LabMatRotation(LabVec3(XfRotate[0], XfRotate[1], XfRotate[2]), XfRotate[3] * LabDegToRad);
+          Matrix := LabMatRotation(LabVec3(XfRotate[0], XfRotate[1], XfRotate[2]), XfRotate[3] * LabDegToRad) * Matrix;
         end
         else if NodeName = 'scale' then
         begin
@@ -2135,7 +2135,7 @@ begin
           begin
             XfScale[i] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
           end;
-          Matrix := Matrix * LabMatScaling(XfScale);
+          Matrix := LabMatScaling(XfScale) * Matrix;
         end
         else if NodeName = 'translate' then
         begin
@@ -2145,7 +2145,7 @@ begin
           begin
             XfTranslate[i] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
           end;
-          Matrix := Matrix * LabMatTranslation(XfTranslate);
+          Matrix := LabMatTranslation(XfTranslate) * Matrix;
         end
         else if NodeName = 'skew' then
         begin
@@ -2155,7 +2155,7 @@ begin
           begin
             XfSkew[i] := StrToFloatDef(AnsiString(FindNextValue(Data, p)), 0);
           end;
-          Matrix := Matrix * LabMatSkew(LabVec3(XfSkew[4], XfSkew[5], XfSkew[6]), LabVec3(XfSkew[1], XfSkew[2], XfSkew[3]), XfSkew[0] * LabDegToRad);
+          Matrix := LabMatSkew(LabVec3(XfSkew[4], XfSkew[5], XfSkew[6]), LabVec3(XfSkew[1], XfSkew[2], XfSkew[3]), XfSkew[0] * LabDegToRad) * Matrix;
         end;
         CurNode := CurNode.NextSibling;
       end;

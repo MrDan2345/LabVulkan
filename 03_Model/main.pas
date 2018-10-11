@@ -667,6 +667,7 @@ begin
   end;
   inst_count := 0;
   ProcessNode(Scene.Root);
+  if inst_count = 0 then Exit;
   Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
   Transforms.Ptr.Count := inst_count;
   UniformBuffer := TLabBuffer.Create(
@@ -804,12 +805,12 @@ begin
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
-  UniformBuffer.Ptr.Map(UniformBufferMap);
+  if UniformBuffer.IsValid then UniformBuffer.Ptr.Map(UniformBufferMap);
 end;
 
 procedure TLabApp.Finalize;
 begin
-  UniformBuffer.Ptr.Unmap;
+  if UniformBuffer.IsValid then UniformBuffer.Ptr.Unmap;
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
   Scene.Free;
