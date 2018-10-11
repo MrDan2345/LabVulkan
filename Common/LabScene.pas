@@ -19,6 +19,7 @@ uses
 type
   TLabScene = class;
   TLabSceneMaterial = class;
+  TLabSceneNode = class;
 
   TLabSceneShader = class (TLabClass)
   private
@@ -210,24 +211,93 @@ type
 
   TLabSceneAnimationTrack = class (TLabClass)
   public
-    constructor Create(const AScene: TLabScene; const ColladaAnimation: TLabColladaAnimationChannel);
+    type TSampleType = (
+      st_invalid,
+      st_rotation_x,
+      st_rotation_y,
+      st_rotation_z,
+      st_scale_x,
+      st_scale_y,
+      st_scale_z,
+      st_position_x,
+      st_position_y,
+      st_position_z,
+      st_transform
+    );
+    type TSampleTypeSet = set of TSampleType;
+    const TSampleSingleFloat = [
+      st_rotation_x, st_rotation_y, st_rotation_z,
+      st_scale_x, st_scale_y, st_scale_z,
+      st_position_x, st_position_y, st_position_z
+    ];
+    const TSampleRotationAngle = [
+      st_rotation_x, st_rotation_y, st_rotation_z
+    ];
+    const TSampleScaling = [
+      st_scale_x, st_scale_y, st_scale_z
+    ];
+    const TSamplePosition = [
+      st_position_x, st_position_y, st_position_z
+    ];
+    type TKey = record
+      Time: TVkFloat;
+      Value: PVkFloat;
+      Interpolation: TLabColladaAnimationInterpolation;
+    end;
+  private
+    var _SampleType: TSampleType;
+    var _SampleSize: TVkUInt32;
+    var _SampleCount: TVkUInt32;
+    var _Target: TLabSceneNode;
+    var _MaxTime: TVkFloat;
+    var _Keys: array of TKey;
+    var _Data: Pointer;
+    var _Sample: Pointer;
+    function FindKey(const Time: TVkFloat; const Loop: Boolean = False): TVkInt32;
+    procedure SampleData(const Output: Pointer; const Time: TVkFloat; const Loop: Boolean = False);
+  public
+    property MaxTime: TVkFloat read _MaxTime;
+    procedure Sample(const Time: TVkFloat; const Loop: Boolean = False);
+    constructor Create(const AScene: TLabScene; const ColladaChannel: TLabColladaAnimationChannel);
     destructor Destroy; override;
   end;
+  TLabSceneAnimationTrackList = specialize TLabList<TLabSceneAnimationTrack>;
 
   TLabSceneAnimation = class (TLabClass)
   public
+    type TList = specialize TLabList<TLabSceneAnimation>;
+  private
+    var _Scene: TLabScene;
+    var _Animations: TList;
+    var _Tracks: TLabSceneAnimationTrackList;
+    function GetMaxTime: TVkFloat;
+  public
+    property Animations: TList read _Animations;
+    property Tracks: TLabSceneAnimationTrackList read _Tracks;
+    property MaxTime: TVkFloat read GetMaxTime;
+    procedure Sample(const Time: TVkFloat; const Loop: Boolean = False);
     constructor Create(const AScene: TLabScene; const ColladaAnimation: TLabColladaAnimation);
     destructor Destroy; override;
   end;
-  TLabSceneAnimationList = specialize TLabList<TLabSceneAnimation>;
+  TLabSceneAnimationList = TLabSceneAnimation.TList;
 
   TLabSceneAnimationClip = class (TLabClass)
+  private
+    var _Name: AnsiString;
+    var _Scene: TLabScene;
+    var _Animations: TLabSceneAnimationList;
+    var _MaxTime: TVkFloat;
   public
-    constructor Create(const AScene: TLabScene);
+    property Name: AnsiString read _Name;
+    property Animations: TLabSceneAnimationList read _Animations;
+    property MaxTime: TVkFloat read _MaxTime;
+    procedure Sample(const Time: TVkFloat; const Loop: Boolean = False);
+    procedure UpdateMaxTime;
+    constructor Create(const AScene: TLabScene; const AName: AnsiString);
     destructor Destroy; override;
   end;
+  TLabSceneAnimationClipList = specialize TLabList<TLabSceneAnimationClip>;
 
-  TLabSceneNode = class;
   TLabSceneNodeAttachment = class (TLabClass)
   private
     var _Scene: TLabScene;
@@ -268,6 +338,7 @@ type
   private
     var _Scene: TLabScene;
     var _Parent: TLabSceneNode;
+    var _Name: AnsiString;
     var _Children: TNodeList;
     var _Transform: TLabMat;
     var _Attachments: TLabSceneNodeAttachmentGeometryList;
@@ -276,6 +347,7 @@ type
   public
     property Scene: TLabScene read _Scene;
     property Parent: TLabSceneNode read _Parent write SetParent;
+    property Name: AnsiString read _Name;
     property Children: TNodeList read _Children;
     property Transform: TLabMat read _Transform write _Transform;
     property Attachments: TLabSceneNodeAttachmentGeometryList read _Attachments;
@@ -293,19 +365,28 @@ type
     var _Path: String;
     var _Device: TLabDeviceShared;
     var _Root: TLabSceneNode;
+    var _AxisRemap: TLabSwizzle;
     var _Images: TLabSceneImageList;
     var _Geometries: TLabSceneGeometryList;
     var _Effects: TLabSceneEffectList;
     var _Materials: TLabSceneMaterialList;
     var _Animations: TLabSceneAnimationList;
+    var _AnimationClips: TLabSceneAnimationClipList;
+    var _DefaultAnimationClip: TLabSceneAnimationClip;
   public
     property Device: TLabDeviceShared read _Device;
     property Root: TLabSceneNode read _Root;
+    property AxisRemap: TLabSwizzle read _AxisRemap;
     property Images: TLabSceneImageList read _Images;
     property Effects: TLabSceneEffectList read _Effects;
     property Materials: TLabSceneMaterialList read _Materials;
     property Geometries: TLabSceneGeometryList read _Geometries;
+    property Animations: TLabSceneAnimationList read _Animations;
+    property AnimationClips: TLabSceneAnimationClipList read _AnimationClips;
+    property DefaultAnimationClip: TLabSceneAnimationClip read _DefaultAnimationClip;
     procedure Add(const FileName: String);
+    function FindAnimationClip(const Name: AnsiString): TLabSceneAnimationClip;
+    function FindNode(const Name: AnsiString): TLabSceneNode;
     function ResolvePath(const Path: String): String;
     constructor Create(const ADevice: TLabDeviceShared);
     destructor Destroy; override;
@@ -935,10 +1016,9 @@ begin
     Offset += Source.DataArray.ItemSize * Source.Accessor.Stride;
   end;
   VertexDescriptor := Triangles.VertexDescriptor;
-  AssetSwizzle.SetIdentity;
+  AssetSwizzle := _Geometry.Scene.AxisRemap;
   SetLength(AttribSwizzles, Length(VertexDescriptor));
   Root := TLabColladaRoot(Triangles.GetRoot);
-  if Assigned(Root.Asset) then AssetSwizzle := Root.Asset.UpAxis;
   for i := 0 to High(VertexDescriptor) do
   begin
     if (VertexDescriptor[i].Semantic in [as_position, as_normal, as_tangent, as_binormal]) then
@@ -1132,37 +1212,257 @@ begin
   inherited Destroy;
 end;
 
-constructor TLabSceneAnimationTrack.Create(const AScene: TLabScene;
-  const ColladaAnimation: TLabColladaAnimationChannel);
+function TLabSceneAnimationTrack.FindKey(
+  const Time: TVkFloat;
+  const Loop: Boolean
+): TVkInt32;
+  var i: TVkInt32;
+  var t: TVkFloat;
 begin
+  t := Time;
+  if Loop and (Time > _MaxTime) then
+  begin
+    t := Time mod _MaxTime;
+  end;
+  Result := High(_Keys);
+  for i := 0 to High(_Keys) do
+  if _Keys[i].Time <= Time then
+  begin
+    Result := i;
+  end
+  else Break;
+end;
 
+procedure TLabSceneAnimationTrack.SampleData(
+  const Output: Pointer;
+  const Time: TVkFloat;
+  const Loop: Boolean
+);
+  var InFloat0, InFloat1: PVkFloat;
+  var OutFloat: PVkFloat;
+  var k0, k1, i: TVkInt32;
+  var t, tgt0, tgt1: TVkFloat;
+begin
+  if not Loop then
+  begin
+    if Time <= _Keys[0].Time then
+    begin
+      Move(_Keys[0].Value^, Output^, _SampleSize * _SampleCount);
+      Exit;
+    end;
+    if Time >= _Keys[High(_Keys)].Time then
+    begin
+      Move(_Keys[High(_Keys)].Value^, Output^, _SampleSize * _SampleCount);
+      Exit;
+    end;
+  end;
+  k0 := FindKey(Time);
+  k1 := (k0 + 1) mod Length(_Keys);
+  OutFloat := PVkFloat(Output);
+  InFloat0 := PVkFloat(_Keys[k0].Value);
+  InFloat1 := PVkFloat(_Keys[k1].Value);
+  if k0 = k1 then
+  for i := 0 to _SampleCount - 1 do
+  begin
+    OutFloat^ := InFloat0^;
+    Inc(OutFloat); Inc(InFloat0);
+    Exit;
+  end;
+  t := Time mod _Keys[High(_Keys)].Time;
+  if k1 < k0 then
+  begin
+    t := t / _Keys[0].Time;
+  end
+  else
+  begin
+    t := (t - _Keys[k0].Time) / (_Keys[k1].Time - _Keys[k0].Time);
+  end;
+  case _Keys[k0].Interpolation of
+    ai_step:
+    begin
+      for i := 0 to _SampleCount - 1 do
+      begin
+        OutFloat^ := InFloat0^;
+        Inc(OutFloat); Inc(InFloat0);
+      end;
+    end;
+    else
+    begin
+      for i := 0 to _SampleCount - 1 do
+      begin
+        OutFloat^ := LabLerpFloat(InFloat0^, InFloat1^, t);
+        Inc(OutFloat); Inc(InFloat0); Inc(InFloat1);
+      end;
+    end;
+  end;
+end;
+
+procedure TLabSceneAnimationTrack.Sample(const Time: TVkFloat; const Loop: Boolean);
+  var Scaling, Rotation, Translation: TLabVec3;
+begin
+  if not Assigned(_Target) then Exit;
+  SampleData(_Sample, Time, Loop);
+  if _SampleType in TSampleSingleFloat then
+  begin
+    LabMatDecompose(@Scaling, nil, @Translation, _Target.Transform);
+    Rotation := LabMatToEuler(_Target.Transform);
+    case _SampleType of
+      st_rotation_x: Rotation.x := LabDegToRad * PLabFloat(_Sample)^;
+      st_rotation_y: Rotation.y := LabDegToRad * PLabFloat(_Sample)^;
+      st_rotation_z: Rotation.z := LabDegToRad * PLabFloat(_Sample)^;
+      st_scale_x: Scaling.x := PLabFloat(_Sample)^;
+      st_scale_y: Scaling.y := PLabFloat(_Sample)^;
+      st_scale_z: Scaling.z := PLabFloat(_Sample)^;
+      st_position_x: Translation.x := PLabFloat(_Sample)^;
+      st_position_y: Translation.y := PLabFloat(_Sample)^;
+      st_position_z: Translation.z := PLabFloat(_Sample)^;
+    end;
+    _Target.Transform := LabMatScaling(Scaling) * LabEulerToMat(Rotation) * LabMatTranslation(Translation);
+    Rotation := LabMatToEuler(_Target.Transform);
+  end
+  else if _SampleType = st_transform then
+  begin
+    _Target.Transform := PLabMat(_Sample)^;
+  end;
+end;
+
+constructor TLabSceneAnimationTrack.Create(
+  const AScene: TLabScene;
+  const ColladaChannel: TLabColladaAnimationChannel
+);
+  const rotation_types: array [0..2] of TSampleType = (st_rotation_x, st_rotation_y, st_rotation_z);
+  const scale_types: array [0..2] of TSampleType = (st_scale_x, st_scale_y, st_scale_z);
+  const position_types: array [0..2] of TSampleType = (st_position_x, st_position_y, st_position_z);
+  var prop_name: AnsiString;
+  var i: TVkInt32;
+begin
+  if (ColladaChannel.Sampler.DataType <> at_float) then Exit;
+  if Assigned(ColladaChannel.Target.UserData)
+  and (ColladaChannel.Target.UserData is TLabSceneNode) then
+  begin
+    _Target := TLabSceneNode(ColladaChannel.Target.UserData);
+  end;
+  prop_name := LowerCase(ColladaChannel.TargetProperty);
+  if prop_name = 'rotationx.angle' then _SampleType := rotation_types[AScene.AxisRemap.Offset[0]]
+  else if prop_name = 'rotationy.angle' then _SampleType := rotation_types[AScene.AxisRemap.Offset[1]]
+  else if prop_name = 'rotationz.angle' then _SampleType := rotation_types[AScene.AxisRemap.Offset[2]]
+  else if prop_name = 'scale.x' then _SampleType := scale_types[AScene.AxisRemap.Offset[0]]
+  else if prop_name = 'scale.y' then _SampleType := scale_types[AScene.AxisRemap.Offset[1]]
+  else if prop_name = 'scale.z' then _SampleType := scale_types[AScene.AxisRemap.Offset[2]]
+  else if (prop_name = 'trans.x') or (prop_name = 'location.x') then _SampleType := position_types[AScene.AxisRemap.Offset[0]]
+  else if (prop_name = 'trans.y') or (prop_name = 'location.y') then _SampleType := position_types[AScene.AxisRemap.Offset[1]]
+  else if (prop_name = 'trans.z') or (prop_name = 'location.z') then _SampleType := position_types[AScene.AxisRemap.Offset[2]]
+  else if prop_name = 'transform' then _SampleType := st_transform;
+  _SampleCount := 1;
+  _SampleSize := ColladaChannel.Sampler.SampleSize;
+  _MaxTime := ColladaChannel.MaxTime;
+  SetLength(_Keys, ColladaChannel.Sampler.KeyCount);
+  _Data := GetMemory(_SampleSize * (ColladaChannel.Sampler.KeyCount + 1));
+  _Sample := _Data + _SampleSize * ColladaChannel.Sampler.KeyCount;
+  for i := 0 to High(_Keys) do
+  begin
+    _Keys[i].Time := ColladaChannel.Sampler.Keys[i]^.Time;
+    _Keys[i].Value := _Data + (_SampleSize * i);
+    _Keys[i].Interpolation := ColladaChannel.Sampler.Keys[i]^.Interpolation;
+    Move(ColladaChannel.Sampler.Keys[i]^.Value^, _Keys[i].Value^, _SampleSize);
+    if _SampleType = st_transform then PLabMat(_Keys[i].Value)^ := PLabMat(_Keys[i].Value)^.Swizzle(AScene.AxisRemap);
+  end;
 end;
 
 destructor TLabSceneAnimationTrack.Destroy;
 begin
+  if Assigned(_Data) then FreeMemory(_Data);
   inherited Destroy;
+end;
+
+function TLabSceneAnimation.GetMaxTime: TVkFloat;
+  var i: TVkInt32;
+begin
+  Result := 0;
+  for i := 0 to _Animations.Count - 1 do
+  if _Animations[i].MaxTime > Result then
+  begin
+    Result := _Animations[i].MaxTime;
+  end;
+  for i := 0 to _Tracks.Count - 1 do
+  if _Tracks[i].MaxTime > Result then
+  begin
+    Result := _Tracks[i].MaxTime;
+  end;
+end;
+
+procedure TLabSceneAnimation.Sample(const Time: TVkFloat; const Loop: Boolean);
+  var i: TVkInt32;
+begin
+  for i := 0 to _Animations.Count - 1 do
+  begin
+    _Animations[i].Sample(Time, Loop);
+  end;
+  for i := 0 to _Tracks.Count - 1 do
+  begin
+    _Tracks[i].Sample(Time, Loop);
+  end;
 end;
 
 constructor TLabSceneAnimation.Create(
   const AScene: TLabScene;
   const ColladaAnimation: TLabColladaAnimation
 );
+  var i: TVkInt32;
 begin
-
+  _Scene := AScene;
+  _Animations := TList.Create;
+  _Tracks := TLabSceneAnimationTrackList.Create;
+  for i := 0 to ColladaAnimation.Channels.Count - 1 do
+  begin
+    _Tracks.Add(TLabSceneAnimationTrack.Create(AScene, ColladaAnimation.Channels[i]));
+  end;
+  for i := 0 to ColladaAnimation.Animations.Count - 1 do
+  begin
+    _Animations.Add(TLabSceneAnimation.Create(AScene, ColladaAnimation.Animations[i]));
+  end;
 end;
 
 destructor TLabSceneAnimation.Destroy;
 begin
+  while _Tracks.Count > 0 do _Tracks.Pop.Free;
+  _Tracks.Free;
+  while _Animations.Count > 0 do _Animations.Pop.Free;
+  _Animations.Free;
   inherited Destroy;
 end;
 
-constructor TLabSceneAnimationClip.Create(const AScene: TLabScene);
+procedure TLabSceneAnimationClip.Sample(const Time: TVkFloat; const Loop: Boolean);
+  var i: TVkInt32;
 begin
+  for i := 0 to _Animations.Count - 1 do
+  begin
+    _Animations[i].Sample(Time, Loop);
+  end;
+end;
 
+procedure TLabSceneAnimationClip.UpdateMaxTime;
+  var i: TVkInt32;
+begin
+  _MaxTime := 0;
+  for i := 0 to _Animations.Count - 1 do
+  if _Animations[i].MaxTime > _MaxTime then
+  begin
+    _MaxTime := _Animations[i].MaxTime;
+  end;
+end;
+
+constructor TLabSceneAnimationClip.Create(const AScene: TLabScene; const AName: AnsiString);
+begin
+  _Scene := AScene;
+  _Name := AName;
+  _Animations := TLabSceneAnimationList.Create;
+  _MaxTime := 0;
 end;
 
 destructor TLabSceneAnimationClip.Destroy;
 begin
+  _Animations.Free;
   inherited Destroy;
 end;
 
@@ -1189,6 +1489,14 @@ begin
   if Assigned(ANode) then
   begin
     ANode.UserData := Self;
+    if Length(ANode.Name) > 0 then
+    begin
+      _Name := AnsiString(ANode.Name);
+    end
+    else
+    begin
+      _Name := AnsiString(ANode.id);
+    end;
     _Transform := ANode.Matrix;
     for i := 0 to ANode.Children.Count - 1 do
     begin
@@ -1201,11 +1509,7 @@ begin
         _Attachments.Add(TLabSceneNodeAttachmentGeometry.Create(_Scene, Self, TLabColladaInstanceGeometry(ANode.Children[i])));
       end;
     end;
-    Root := TLabColladaRoot(ANode.GetRoot);
-    if Assigned(Root.Asset) then
-    begin
-      _Transform := _Transform.Swizzle(Root.Asset.UpAxis);
-    end;
+    _Transform := _Transform.Swizzle(_Scene.AxisRemap);
   end
   else
   begin
@@ -1235,18 +1539,26 @@ begin
     Collada.Free;
     Exit;
   end;
+  if Assigned(Collada.RootNode.Asset) then
+  begin
+    _AxisRemap := Collada.RootNode.Asset.UpAxis;
+  end;
+  if Assigned(Collada.RootNode.LibImages) then
   for i := 0 to Collada.RootNode.LibImages.Images.Count - 1 do
   begin
     _Images.Add(TLabSceneImage.Create(Self, Collada.RootNode.LibImages.Images[i]));
   end;
+  if Assigned(Collada.RootNode.LibEffects) then
   for i := 0 to Collada.RootNode.LibEffects.Effects.Count - 1 do
   begin
     _Effects.Add(TLabSceneEffect.Create(Self, Collada.RootNode.LibEffects.Effects[i]));
   end;
+  if Assigned(Collada.RootNode.LibMaterials) then
   for i := 0 to Collada.RootNode.LibMaterials.Materials.Count - 1 do
   begin
     _Materials.Add(TLabSceneMaterial.Create(Self, Collada.RootNode.LibMaterials.Materials[i]));
   end;
+  if Assigned(Collada.RootNode.LibGeometries) then
   for i := 0 to Collada.RootNode.LibGeometries.Geometries.Count - 1 do
   begin
     _Geometries.Add(TLabSceneGeometry.Create(Self, Collada.RootNode.LibGeometries.Geometries[i]));
@@ -1255,8 +1567,50 @@ begin
   begin
     TLabSceneNode.Create(Self, _Root, Collada.RootNode.Scene.VisualScene.VisualScene.Nodes[i]);
   end;
+  if Assigned(Collada.RootNode.LibAnimations) then
+  for i := 0 to Collada.RootNode.LibAnimations.Animations.Count - 1 do
+  begin
+    _Animations.Add(TLabSceneAnimation.Create(Self, Collada.RootNode.LibAnimations.Animations[i]));
+  end;
+  _DefaultAnimationClip.Animations.Clear;
+  for i := 0 to _Animations.Count - 1 do
+  begin
+    _DefaultAnimationClip.Animations.Add(_Animations[i]);
+  end;
+  _DefaultAnimationClip.UpdateMaxTime;
   Collada.Free;
   _Path := '';
+end;
+
+function TLabScene.FindAnimationClip(const Name: AnsiString): TLabSceneAnimationClip;
+  var i: TVkInt32;
+begin
+  for i := 0 to _AnimationClips.Count - 1 do
+  if _AnimationClips[i].Name = Name then
+  begin
+    Exit(_AnimationClips[i]);
+  end;
+  Exit(nil);
+end;
+
+function TLabScene.FindNode(const Name: AnsiString): TLabSceneNode;
+  function SearchInParent(const Parent: TLabSceneNode): TLabSceneNode;
+    var i: TVkInt32;
+  begin
+    for i := 0 to Parent.Children.Count - 1 do
+    if Parent.Children[i].Name = Name then
+    begin
+      Exit(Parent.Children[i]);
+    end;
+    for i := 0 to Parent.Children.Count - 1 do
+    begin
+      Result := SearchInParent(Parent.Children[i]);
+      if Assigned(Result) then Exit;
+    end;
+    Result := nil;
+  end;
+begin
+  Result := SearchInParent(_Root);
 end;
 
 function TLabScene.ResolvePath(const Path: String): String;
@@ -1275,11 +1629,19 @@ begin
   _Images := TLabSceneImageList.Create;
   _Geometries := TLabSceneGeometryList.Create;
   _Effects := TLabSceneEffectList.Create;
-  _Materials := TLabSceneMaterialList.Create();
+  _Materials := TLabSceneMaterialList.Create;
+  _Animations := TLabSceneAnimationList.Create;
+  _AnimationClips := TLabSceneAnimationClipList.Create;
+  _DefaultAnimationClip := TLabSceneAnimationClip.Create(Self, 'Default');
+  _AnimationClips.Add(_DefaultAnimationClip);
 end;
 
 destructor TLabScene.Destroy;
 begin
+  while _AnimationClips.Count > 0 do _AnimationClips.Pop.Free;
+  _AnimationClips.Free;
+  while _Animations.Count > 0 do _Animations.Pop.Free;
+  _Animations.Free;
   while _Materials.Count > 0 do _Materials.Pop.Free;
   _Materials.Free;
   while _Effects.Count > 0 do _Effects.Pop.Free;

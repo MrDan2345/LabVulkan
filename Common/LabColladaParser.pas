@@ -346,6 +346,7 @@ type
       TangentOut: array of TVkFloat;
       Interpolation: TLabColladaAnimationInterpolation;
     end;
+    PKey = ^TKey;
   private
     _Data: Pointer;
     _Inputs: TLabColladaInputList;
@@ -353,14 +354,20 @@ type
     _DataType: TLabColladaArrayType;
     _DataStride: TVkUInt32;
     _DataSize: TVkUInt32;
+    function GetKey(const Index: TVkInt32): PKey; inline;
+    function GetKeyCount: TVkInt32; inline;
     function FindKey(const Time: TVkFloat): TVkInt32;
     function GetMaxTime: TVkFloat; inline;
     function GetSampleSize: TVkUInt32; inline;
+  protected
+    procedure ResolveLinks; override;
   public
     property Inputs: TLabColladaInputList read _Inputs;
     property MaxTime: TVkFloat read GetMaxTime;
     property SampleSize: TVkUInt32 read GetSampleSize;
     property DataType: TLabColladaArrayType read _DataType;
+    property Keys[const Index: TVkInt32]: PKey read GetKey;
+    property KeyCount: TVkInt32 read GetKeyCount;
     procedure SampleData(const Output: Pointer; const Time: TVkFloat; const Loop: Boolean = False);
     function SampleAsFloat(const Time: TVkFloat; const Loop: Boolean = false): TVkFloat;
     function SampleAsFloat2(const Time: TVkFloat; const Loop: Boolean = false): TLabVec2;
@@ -378,12 +385,14 @@ type
     _TargetRef: DOMString;
     _Sampler: TLabColladaAnimationSampler;
     _Target: TLabColladaObject;
+    _TargetProperty: AnsiString;
     function GetMaxTime: TVkFloat; inline;
   protected
     procedure ResolveLinks; override;
   public
     property Sampler: TLabColladaAnimationSampler read _Sampler;
     property Target: TLabColladaObject read _Target;
+    property TargetProperty: AnsiString read _TargetProperty;
     property MaxTime: TVkFloat read GetMaxTime;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
@@ -569,6 +578,7 @@ type
     property LibEffects: TLabColladaLibraryEffects read _LibEffects;
     property LibImages: TLabColladaLibraryImages read _LibImages;
     property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
+    property LibAnimations: TLabColladaLibraryAnimations read _LibAnimations;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
     property Scene: TLabColladaScene read _Scene;
     constructor Create(const XMLNode: TDOMNode);
@@ -657,11 +667,11 @@ end;
 procedure TLabColladaObject.Resolve;
   var i: TVkInt32;
 begin
-  ResolveLinks;
   for i := 0 to _Children.Count - 1 do
   begin
     _Children[i].Resolve;
   end;
+  ResolveLinks;
 end;
 
 procedure TLabColladaObject.ResolveLinks;
@@ -832,15 +842,25 @@ begin
   inherited Destroy;
 end;
 
+function TLabColladaAnimationSampler.GetKey(const Index: TVkInt32): PKey;
+begin
+  Result := @_Keys[Index];
+end;
+
+function TLabColladaAnimationSampler.GetKeyCount: TVkInt32;
+begin
+  Result := Length(_Keys);
+end;
+
 function TLabColladaAnimationSampler.FindKey(const Time: TVkFloat): TVkInt32;
   var i: TVkInt32;
 begin
+  Result := High(_Keys);
   for i := 0 to High(_Keys) do
   if _Keys[i].Time <= Time then
   begin
-    Exit(i);
+    Result := i;
   end;
-  Exit(High(_Keys));
 end;
 
 function TLabColladaAnimationSampler.GetMaxTime: TVkFloat;
@@ -851,6 +871,87 @@ end;
 function TLabColladaAnimationSampler.GetSampleSize: TVkUInt32;
 begin
   Result := _DataSize * _DataStride;
+end;
+
+procedure TLabColladaAnimationSampler.ResolveLinks;
+  function FindInput(const Semantic: DOMString): TLabColladaInput;
+    var i: TVkInt32;
+  begin
+    for i := 0 to _Inputs.Count - 1 do
+    if _Inputs[i].Semantic = Semantic then
+    begin
+      Exit(_Inputs[i]);
+    end;
+    Exit(nil);
+  end;
+  var InputTime, InputValue, InputInterpolation, InputTangentIn, InputTangentOut: TLabColladaInput;
+  var src: TLabColladaSource;
+  var i, j, n: TVkInt32;
+begin
+  InputTime := FindInput('INPUT');
+  InputValue := FindInput('OUTPUT');
+  InputInterpolation := FindInput('INTERPOLATION');
+  InputTangentIn := FindInput('IN_TANGENT');
+  InputTangentOut := FindInput('OUT_TANGENT');
+  if (Assigned(InputTime))
+  or (Assigned(InputValue)) then
+  begin
+    src := TLabColladaSource(InputValue.Source);
+    GetMemory(_Data, src.Accessor.Count * src.Accessor.Stride * src.DataArray.ItemSize);
+    _DataType := src.DataArray.ArrayType;
+    _DataStride := src.Accessor.Stride;
+    _DataSize := src.DataArray.ItemSize;
+    SetLength(_Keys, TLabColladaSource(InputTime.Source).Accessor.Count);
+    for i := 0 to High(_Keys) do
+    begin
+      src := TLabColladaSource(InputTime.Source);
+      _Keys[i].Time := src.DataArray.AsFloat[src.Accessor.Stride * i]^;
+      src := TLabColladaSource(InputValue.Source);
+      n := i * src.Accessor.Stride * src.DataArray.ItemSize;
+      _Keys[i].Value := _Data + n;
+      Move(src.DataArray.RawData[n]^, _Keys[i].Value^, src.Accessor.Stride * src.DataArray.ItemSize);
+      if Assigned(InputInterpolation) then
+      begin
+        src := TLabColladaSource(InputInterpolation.Source);
+        if src.DataArray.AsString[i] = 'STEP' then
+        begin
+          _Keys[i].Interpolation := ai_step;
+        end
+        else if src.DataArray.AsString[i] = 'BEZIER' then
+        begin
+          if Assigned(InputTangentIn)
+          and Assigned(InputTangentOut) then
+          begin
+            src := TLabColladaSource(InputTangentIn.Source);
+            SetLength(_Keys[i].TangentIn, src.Accessor.Stride);
+            for j := 0 to src.Accessor.Stride - 1 do
+            begin
+              _Keys[i].TangentIn[j] := src.DataArray.AsFloat[i * src.Accessor.Stride + j]^;
+            end;
+            src := TLabColladaSource(InputTangentOut.Source);
+            SetLength(_Keys[i].TangentOut, src.Accessor.Stride);
+            for j := 0 to src.Accessor.Stride - 1 do
+            begin
+              _Keys[i].TangentOut[j] := src.DataArray.AsFloat[i * src.Accessor.Stride + j]^;
+            end;
+            _Keys[i].Interpolation := ai_bezier;
+          end
+          else
+          begin
+            _Keys[i].Interpolation := ai_linear;
+          end;
+        end
+        else
+        begin
+          _Keys[i].Interpolation := ai_linear;
+        end;
+      end
+      else
+      begin
+        _Keys[i].Interpolation := ai_linear;
+      end;
+    end;
+  end;
 end;
 
 procedure TLabColladaAnimationSampler.SampleData(
@@ -968,21 +1069,8 @@ constructor TLabColladaAnimationSampler.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
 );
-  function FindInput(const Semantic: DOMString): TLabColladaInput;
-    var i: TVkInt32;
-  begin
-    for i := 0 to _Inputs.Count - 1 do
-    if _Inputs[i].Semantic = Semantic then
-    begin
-      Exit(_Inputs[i]);
-    end;
-    Exit(nil);
-  end;
   var CurNode: TDOMNode;
   var NodeName: DOMString;
-  var InputTime, InputValue, InputInterpolation, InputTangentIn, InputTangentOut: TLabColladaInput;
-  var src: TLabColladaSource;
-  var i, j, n: TVkInt32;
 begin
   inherited Create(XMLNode, AParent);
   _Inputs := TLabColladaInputList.Create;
@@ -990,74 +1078,11 @@ begin
   while Assigned(CurNode) do
   begin
     NodeName := LowerCase(CurNode.NodeName);
-    if NodeName = 'sampler' then
+    if NodeName = 'input' then
     begin
       _Inputs.Add(TLabColladaInput.Create(CurNode, Self));
     end;
     CurNode := CurNode.NextSibling;
-  end;
-  InputTime := FindInput('INPUT');
-  InputValue := FindInput('OUTPUT');
-  InputInterpolation := FindInput('INTERPOLATION');
-  InputTangentIn := FindInput('IN_TANGENT');
-  InputTangentOut := FindInput('OUT_TANGENT');
-  if (Assigned(InputTime))
-  or (Assigned(InputValue)) then
-  begin
-    src := TLabColladaSource(InputValue);
-    GetMemory(_Data, src.Accessor.Count * src.Accessor.Stride * src.DataArray.ItemSize);
-    _DataType := src.DataArray.ArrayType;
-    _DataStride := src.Accessor.Stride;
-    _DataSize := src.DataArray.ItemSize;
-    SetLength(_Keys, TLabColladaSource(InputTime.Source).Accessor.Count);
-    for i := 0 to High(_Keys) do
-    begin
-      src := TLabColladaSource(InputTime.Source);
-      _Keys[i].Time := src.DataArray.AsFloat[src.Accessor.Stride * i]^;
-      src := TLabColladaSource(InputValue.Source);
-      n := i * src.Accessor.Stride * src.DataArray.ItemSize;
-      _Keys[i].Value := _Data + n;
-      Move(src.DataArray.RawData[n]^, _Keys[i].Value^, src.Accessor.Stride * src.DataArray.ItemSize);
-      if Assigned(InputInterpolation) then
-      begin
-        src := TLabColladaSource(InputInterpolation.Source);
-        if src.DataArray.AsString[i] = 'STEP' then
-        begin
-          _Keys[i].Interpolation := ai_step;
-        end
-        else if src.DataArray.AsString[i] = 'BEZIER' then
-        begin
-          if Assigned(InputTangentIn)
-          and Assigned(InputTangentOut) then
-          begin
-            src := TLabColladaSource(InputTangentIn.Source);
-            SetLength(_Keys[i].TangentIn, src.Accessor.Stride);
-            for j := 0 to src.Accessor.Stride - 1 do
-            begin
-              _Keys[i].TangentIn[j] := src.DataArray.AsFloat[i * src.Accessor.Stride + j]^;
-            end;
-            src := TLabColladaSource(InputTangentOut.Source);
-            SetLength(_Keys[i].TangentOut, src.Accessor.Stride);
-            for j := 0 to src.Accessor.Stride - 1 do
-            begin
-              _Keys[i].TangentOut[j] := src.DataArray.AsFloat[i * src.Accessor.Stride + j]^;
-            end;
-          end
-          else
-          begin
-            _Keys[i].Interpolation := ai_linear;
-          end;
-        end
-        else
-        begin
-          _Keys[i].Interpolation := ai_linear;
-        end;
-      end
-      else
-      begin
-        _Keys[i].Interpolation := ai_linear;
-      end;
-    end;
   end;
 end;
 
@@ -1107,6 +1132,7 @@ begin
   TargetProp := _TargetRef;
   Delete(TargetProp, 1, Length(TargetObject) + 1);
   _TargetRef := TargetObject;
+  _TargetProperty := AnsiString(TargetProp);
 end;
 
 destructor TLabColladaAnimationChannel.Destroy;

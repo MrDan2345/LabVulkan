@@ -691,8 +691,9 @@ procedure TLabApp.UpdateTransforms;
     with Transforms.Ptr.Items[nd.UniformOffset]^ do
     begin
       Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 20);
-      View := LabMatView(LabVec3(0, 3, -14), LabVec3(0, 0.7, 0), LabVec3(0, 1, 0));
-      World := Node.Transform * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+      //View := LabMatView(LabVec3(0, 3, -14), LabVec3(0, 0.7, 0), LabVec3(0, 1, 0));
+      View := LabMatView(LabVec3(0, 5, -15), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+      World := Node.Transform;// * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
       Clip := LabMat(
         1, 0, 0, 0,
         0, -1, 0, 0,
@@ -797,7 +798,7 @@ begin
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/maya/maya.dae');
-  //Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/box.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
@@ -893,6 +894,10 @@ procedure TLabApp.Loop;
   end;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
+  var n: TLabSceneNode;
+  var e: TLabVec3;
+  var m: TLabMat;
+  var t: TLabFloat;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive
@@ -905,6 +910,8 @@ begin
     SwapchainDestroy;
     SwapchainCreate;
   end;
+  t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 8) / 8;
+  Scene.DefaultAnimationClip.Sample(t, True);
   UpdateTransforms;
   CmdBuffer.Ptr.RecordBegin();
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);

@@ -147,6 +147,8 @@ end;
 procedure TLabWindow.SetCaption(const Value: AnsiString);
 begin
   if _Caption = Value then Exit;
+  _Caption := Value;
+  SetWindowTextA(_Handle, PAnsiChar(_Caption));
 end;
 
 procedure TLabWindow.Initialize;

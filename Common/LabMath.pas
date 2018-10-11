@@ -184,6 +184,7 @@ type
   public
     var x, y, z, w: TLabFloat;
     property Arr[const Index: TLabInt32]: TLabFloat read GetArr write SetArr; default;
+    function Norm: TLabQuat;
     procedure SetValue(const qx, qy, qz, qw: TLabFloat); inline;
   end;
 
@@ -502,6 +503,12 @@ function LabMatProj(const FOV, Aspect, ZNear, ZFar: TLabFloat): TLabMat; inline;
 function LabMatTranspose(const m: TLabMat): TLabMat; inline;
 procedure LabMatDecompose(const OutScaling: PLabVec3; const OutRotation: PLabQuat; const OutTranslation: PLabVec3; const m: TLabMat);
 function LabMatCompare(const m0, m1: TLabMat): Boolean; inline;
+function LabMatToEuler(const m: TLabMat): TLabVec3;
+function LabEulerToMat(const e: TLabVec3): TLabMat;
+function LabQuatToEuler(const q: TLabQuat): TLabVec3;
+function LabEulerToQuat(const e: TLabVec3): TLabQuat;
+function LabQuatToMat(const q: TLabQuat): TLabMat;
+function LabMatToQuat(const m: TLabMat): TLabQuat;
 
 function LabMin(const f0, f1: TLabFloat): TLabFloat; inline; overload;
 function LabMin(const v0, v1: TLabInt32): TLabInt32; inline; overload;
@@ -522,8 +529,10 @@ function LabVec2CatmullRom(const v0, v1, v2, v3: TLabVec2; const t: TLabFloat): 
 function LabVec3CatmullRom(const v0, v1, v2, v3: TLabVec3; const t: TLabFloat): TLabVec3; inline;
 function LabVec2Bezier(const v0, v1, v2, v3: TLabVec2; const t: TLabFloat): TLabVec2; inline;
 
+function LabFMod(const x, y: TLabFloat): TLabFloat; inline;
 function LabCoTan(const x: TLabFloat): TLabFloat; inline;
 function LabArcCos(const x: TLabFloat): TLabFloat;
+function LabArcSin(const x: TLabFloat): TLabFloat;
 function LabArcTan2(const y, x: TLabFloat): TLabFloat;
 procedure LabSinCos(const Angle: TLabFloat; var s, c: TLabFloat);
 
@@ -956,6 +965,11 @@ end;
 procedure TLabQuat.SetArr(const Index: TLabInt32; const Value: TLabFloat);
 begin
   PLabFloatArr(@x)^[Index] := Value;
+end;
+
+function TLabQuat.Norm: TLabQuat;
+begin
+  LabVec4Norm(PLabVec4(@Result), PLabVec4(@Self));
 end;
 
 procedure TLabQuat.SetValue(const qx, qy, qz, qw: TLabFloat);
@@ -2556,6 +2570,165 @@ begin
   end;
 end;
 
+function LabMatToEuler(const m: TLabMat): TLabVec3;
+  //var sy: TLabFloat;
+  var s1, c1, c2: TLabFloat;
+begin
+  Result.y := -LabArcTan2(m.e21, m.e22);
+  c2 := sqrt(sqr(m.e00) + sqr(m.e10));
+  Result.x := -LabArcTan2(-m.e20, c2);
+  s1 := sin(-Result.y); c1 := cos(-Result.y);
+  Result.z := -LabArcTan2(s1 * m.e02 - c1 * m.e01, c1 * m.e11 - s1 * m.e12);
+  //sy := sqrt(m.e00 * m.e00 + m.e10 * m.e10);
+  //if sy < LabEPS then
+  //begin
+  //  Result.x := LabArcTan2(-m.e20, sy);
+  //  Result.y := LabArcTan2(-m.e12, m.e11);
+  //  Result.z := 0;
+  //end
+  //else
+  //begin
+  //  Result.x := LabArcTan2(-m.e20, sy);
+  //  Result.y := LabArcTan2(m.e21, m.e22);
+  //  Result.z := LabArcTan2(m.e10, m.e00);
+  //end;
+  //if Abs(Result.x) < LabEPS then Result.x := 0;
+  //if Abs(Result.y) < LabEPS then Result.y := 0;
+  //if Abs(Result.z) < LabEPS then Result.z := 0;
+  //if Result.x < 0 then Result.x := Result.x + LabTwoPi;
+  //if Result.y < 0 then Result.y := Result.y + LabTwoPi;
+  //if Result.z < 0 then Result.z := Result.z + LabTwoPi;
+end;
+
+function LabEulerToMat(const e: TLabVec3): TLabMat;
+  var s1, s2, s3, c1, c2, c3, x: TLabFloat;
+begin
+  x := e.x;
+  if x < -LAbHalfPi then x := -LabHalfPi else if x > LAbHalfPi then x := LabHalfPi;
+  LabSinCos(x, s1, c1);
+  LabSinCos(e.y, s2, c2);
+  LabSinCos(e.z, s3, c3);
+  Result := LabMat(
+    c1 * c3, -c1 * s3, s1, 0,
+    c2 * s3 + c3 * s2 * s1, c2 * c3 - s2 * s1 * s3, -c1 * s2, 0,
+    s2 * s3 - c2 * c3 * s1, c3 * s2 + c2 * s1 * s3, c2 * c1, 0,
+    0, 0, 0, 1
+  );
+end;
+
+function LabQuatToEuler(const q: TLabQuat): TLabVec3;
+  function ClampAngle(const a: TLabFloat): TLabFloat;
+  begin
+    Result := LabFMod(a, LabTwoPi);
+    if Result < 0 then Result += LabTwoPi;
+    if Result > LabPi then Result -= LabTwoPi;
+  end;
+  var t, yaw_x, yaw_y, sqx, sqy, sqz: TLabFloat;
+  const sing_t = 0.4999995;
+begin
+  t := q.z * q.x - q.w * q.y;
+  yaw_y := 2 * (q.w * q.z + q.x * q.y);
+  yaw_x := 1 - 2 * (sqr(q.y) + sqr(q.z));
+  if t < -sing_t then
+  begin
+    Result.x := -LabHalfPi;
+    Result.y := LabArcTan2(yaw_y, yaw_x);
+    Result.z := ClampAngle(-Result.y - (2 * LabArcTan2(q.x, q.w)));
+  end
+  else if (t > sing_t) then
+  begin
+    Result.x := LabHalfPi;
+    Result.y := LabArcTan2(yaw_y, yaw_x);
+    Result.z := ClampAngle(Result.y - (2 * LabArcTan2(q.x, q.w)));
+  end
+  else
+  begin
+    Result.x := LabArcSin(2 * t);
+    Result.y := LabArcTan2(yaw_y, yaw_x);
+    Result.z := LabArcTan2(-2 * (q.w * q.x + q.y * q.z), (1 - 2 * (sqr(q.x) + sqr(q.y))));
+  end;
+  if Abs(Result.x) < LabEPS then Result.x := 0;
+  if Abs(Result.y) < LabEPS then Result.y := 0;
+  if Abs(Result.z) < LabEPS then Result.z := 0;
+  if Result.x < 0 then Result.x := Result.x + LabTwoPi;
+  if Result.y < 0 then Result.y := Result.y + LabTwoPi;
+  if Result.z < 0 then Result.z := Result.z + LabTwoPi;
+end;
+
+function LabEulerToQuat(const e: TLabVec3): TLabQuat;
+  function ClampAngle(const a: TLabFloat): TLabFloat;
+  begin
+    Result := LabFMod(a, LabTwoPi);
+    if Result < 0 then Result += LabTwoPi;
+  end;
+  function NormalizeAngle(const a: TLabFloat): TLabFloat;
+  begin
+    Result := ClampAngle(a);
+    if Result > LabPi then Result -= LabTwoPi;
+  end;
+  var sp, sy, sr, cp, cy, cr: TLabFloat;
+begin
+  LabSinCos(NormalizeAngle(e.x) * 0.5, sp, cp);
+  LabSinCos(NormalizeAngle(e.y) * 0.5, sy, cy);
+  LabSinCos(NormalizeAngle(e.z) * 0.5, sr, cr);
+  Result.x := cr * sp * sy - sr * cp * cy;
+  Result.y := -cr * sp * cy - sr * cp * sy;
+  Result.z := cr * cp * sy - sr * sp * cy;
+  Result.w := cr * cp * cy + sr * sp * sy;
+end;
+
+function LabQuatToMat(const q: TLabQuat): TLabMat;
+  var x2, y2, z2, xx, xy, xz, yy, yz, zz, wx, wy, wz: TLabFloat;
+begin
+  x2 := q.x + q.x; y2 := q.y + q.y; z2 := q.z + q.z;
+  xx := q.x * x2; xy := q.x * y2; xz := q.x * z2;
+  yy := q.y * y2; yz := q.y * z2; zz := q.z * z2;
+  wx := q.w * x2; wy := q.w * y2; wz := q.w * z2;
+  Result := LabMat(
+    1 - (yy + zz), xy - wz, xz + wy, 0,
+    xy + wz, 1 - (xx + zz), yz - wx, 0,
+    xz - wy, yz + wx, 1 - (xx + yy), 0,
+    0, 0, 0, 1
+  );
+end;
+
+function LabMatToQuat(const m: TLabMat): TLabQuat;
+  var s, tr, s_rcp: TLabFloat;
+  var i, j, k: TLabInt32;
+  var qt: array[0..3] of TLabFloat;
+  const nxt: array[0..2] of TLabInt32 = (1, 2, 0);
+begin
+  tr := m.e00 + m.e11 + m.e22;
+  if tr > 0 then
+  begin
+    s_rcp := 1 / sqrt(tr + 1);
+    Result.w := 0.5 * (1 / s_rcp);
+    s := 0.5 * s_rcp;
+    Result.x := (m.e12 - m.e21) * s;
+    Result.Y := (m.e20 - m.e02) * s;
+    Result.Z := (m.e01 - m.e10) * s;
+  end
+  else
+  begin
+    i := 0;
+    if m.e11 > m.e00 then i := 1;
+    if m.e22 > m[i, i] then i := 2;
+    j := nxt[i];
+    k := nxt[j];
+    s := m[i, i] - m[j, j] - m[k, k] + 1;
+    s_rcp := 1 / sqrt(s);
+    qt[i] := 0.5 * (1 / s_rcp);
+    s := 0.5 * s_rcp;
+    qt[3] := (m[j, k] - m[k, j]) * s;
+    qt[j] := (m[i, j] + m[j, i]) * s;
+    qt[k] := (m[i, k] + m[k, i]) * s;
+    Result.x := qt[0];
+    Result.y := qt[1];
+    Result.z := qt[2];
+    Result.w := qt[3];
+  end;
+end;
+
 function LabLerpFloat(const v0, v1, t: TLabFloat): TLabFloat;
 begin
   Result := v0 + (v1 - v0) * t;
@@ -2666,6 +2839,19 @@ begin
   Result := t3 * v3 + (3 * t2 - 3 * t3) * v2 + (3 * t3 - 6 * t2 + 3 * t) * v1 + (3 * t2 - t3 - 3 * t + 1) * v0;
 end;
 
+function LabFMod(const x, y: TLabFloat): TLabFloat;
+  var q, i: TLabFloat;
+begin
+  if Abs(y) <= 1E-8 then
+  begin
+    Exit(0);
+  end;
+  q := TLabFloat(Int(x / y));
+  i := y * q;
+  if Abs(i) > Abs(x) then i := X;
+  Result := x - i;
+end;
+
 function LabCoTan(const x: TLabFloat): TLabFloat;
   var s, c: TLabFloat;
 begin
@@ -2696,6 +2882,11 @@ begin
 end;
 {$endif}
 
+function LabArcSin(const x: TLabFloat): TLabFloat;
+begin
+  Result := LabArcTan2(x, Sqrt((1 - x) * (1 + x)));
+end;
+
 {$ifdef LabCpu386}
 function LabArcTan2(const y, x: TLabFloat): TLabFloat; assembler;
 asm
@@ -2705,6 +2896,7 @@ asm
   fwait
 end;
 {$else}
+
 function LabArcTan2(const y, x: TLabFloat): TLabFloat;
 begin
   if x = 0 then
