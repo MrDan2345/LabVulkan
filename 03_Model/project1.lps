@@ -10,9 +10,20 @@
         <IsPartOfProject Value="True"/>
         <TopLine Value="10"/>
         <CursorPos Y="41"/>
-        <UsageCount Value="159"/>
+        <UsageCount Value="171"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
   </ProjectSession>
+  <Debugging>
+    <BreakPoints Count="1">
+      <Item1>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="main.pas"/>
+        <Line Value="805"/>
+      </Item1>
+    </BreakPoints>
+  </Debugging>
 </CONFIG>

@@ -131,6 +131,44 @@ type
   end;
   TLabSceneGeometryList = specialize TLabList<TLabSceneGeometry>;
 
+  TLabSceneController = class (TLabClass)
+  private
+    _Scene: TLabScene;
+  public
+    property Scene: TLabScene read _Scene;
+    constructor Create(const AScene: TLabScene);
+    destructor Destroy; override;
+  end;
+  TLabSceneControllerList = specialize TLabList<TLabSceneController>;
+
+  TLabSceneControllerSkin = class (TLabSceneController)
+  public
+    type TJoint = record
+      JointName: AnsiString;
+      BindPose: TLabMat;
+    end;
+    type TJoints = array of TJoint;
+    type TWeight = record
+      JointIndex: TVkInt32;
+      JointWeight: TVkFloat;
+    end;
+    type TWeights = array of array of TWeight;
+  private
+    var _Geometry: TLabColladaGeometry;
+    var _BindShapeMatrix: TLabMat;
+    var _Joints: TJoints;
+    var _Weights: TWeights;
+    var _MaxWeightCount: TVkInt32;
+  public
+    property Geometry: TLabColladaGeometry read _Geometry;
+    property BindShapeMatrix: TLabMat read _BindShapeMatrix;
+    property Joints: TJoints read _Joints;
+    property Weights: TWeights read _Weights;
+    property MaxWeightCount: TVkInt32 read _MaxWeightCount;
+    constructor Create(const AScene: TLabScene; const ColladaSkin: TLabColladaSkin);
+    destructor Destroy; override;
+  end;
+
   TLabSceneImage = class (TLabClass)
   private
     var _Scene: TLabScene;
@@ -302,35 +340,50 @@ type
   private
     var _Scene: TLabScene;
     var _Node: TLabSceneNode;
+    var _UserData: TObject;
   public
+    property UserData: TObject read _UserData write _UserData;
     constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode);
     destructor Destroy; override;
   end;
+  TLabSceneNodeAttachmentList = specialize TLabList<TLabSceneNodeAttachment>;
 
-  TLabSceneNodeAttachmentGeometry = class (TLabSceneNodeAttachment)
-  public
-    type TMaterialBinding = class
-    private
-      var _UserData: TObject;
-    public
-      Material: TLabSceneMaterial;
-      Symbol: String;
-      property UserData: TObject read _UserData write _UserData;
-      destructor Destroy; override;
-    end;
-    type TMaterialBindingList = specialize TLabList<TMaterialBinding>;
+  type TLabSceneMaterialBinding = class
   private
-    var _Geometry: TLabSceneGeometry;
-    var _MaterialBindings: TMaterialBindingList;
     var _UserData: TObject;
   public
-    property Geometry: TLabSceneGeometry read _Geometry;
-    property MaterialBindings: TMaterialBindingList read _MaterialBindings;
+    Material: TLabSceneMaterial;
+    Symbol: String;
     property UserData: TObject read _UserData write _UserData;
+    destructor Destroy; override;
+  end;
+  type TLabSceneMaterialBindingList = specialize TLabList<TLabSceneMaterialBinding>;
+
+  TLabSceneNodeAttachmentGeometry = class (TLabSceneNodeAttachment)
+  private
+    var _Geometry: TLabSceneGeometry;
+    var _MaterialBindings: TLabSceneMaterialBindingList;
+  public
+    property Geometry: TLabSceneGeometry read _Geometry;
+    property MaterialBindings: TLabSceneMaterialBindingList read _MaterialBindings;
     constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceGeometry: TLabColladaInstanceGeometry);
     destructor Destroy; override;
   end;
   TLabSceneNodeAttachmentGeometryList = specialize TLabList<TLabSceneNodeAttachmentGeometry>;
+
+  TLabSceneNodeAttachmentController = class (TLabSceneNodeAttachment)
+  private
+    var _Controller: TLabSceneController;
+    var _Skeleton: TLabSceneNode;
+    var _MaterialBindings: TLabSceneMaterialBindingList;
+  public
+    property Controller: TLabSceneController read _Controller;
+    property Skeleton: TLabSceneNode read _Skeleton;
+    property MaterialBindings: TLabSceneMaterialBindingList read _MaterialBindings;
+    constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceController: TLabColladaInstanceController);
+    destructor Destroy; override;
+  end;
+  TLabSceneNodeAttachmentControllerList = specialize TLabList<TLabSceneNodeAttachmentController>;
 
   TLabSceneNode = class (TLabClass)
   public
@@ -341,7 +394,7 @@ type
     var _Name: AnsiString;
     var _Children: TNodeList;
     var _Transform: TLabMat;
-    var _Attachments: TLabSceneNodeAttachmentGeometryList;
+    var _Attachments: TLabSceneNodeAttachmentList;
     var _UserData: TObject;
     procedure SetParent(const Value: TLabSceneNode);
   public
@@ -350,7 +403,7 @@ type
     property Name: AnsiString read _Name;
     property Children: TNodeList read _Children;
     property Transform: TLabMat read _Transform write _Transform;
-    property Attachments: TLabSceneNodeAttachmentGeometryList read _Attachments;
+    property Attachments: TLabSceneNodeAttachmentList read _Attachments;
     property UserData: TObject read _UserData write _UserData;
     constructor Create(
       const AScene: TLabScene;
@@ -368,6 +421,7 @@ type
     var _AxisRemap: TLabSwizzle;
     var _Images: TLabSceneImageList;
     var _Geometries: TLabSceneGeometryList;
+    var _Controllers: TLabSceneControllerList;
     var _Effects: TLabSceneEffectList;
     var _Materials: TLabSceneMaterialList;
     var _Animations: TLabSceneAnimationList;
@@ -381,6 +435,7 @@ type
     property Effects: TLabSceneEffectList read _Effects;
     property Materials: TLabSceneMaterialList read _Materials;
     property Geometries: TLabSceneGeometryList read _Geometries;
+    property Controllers: TLabSceneControllerList read _Controllers;
     property Animations: TLabSceneAnimationList read _Animations;
     property AnimationClips: TLabSceneAnimationClipList read _AnimationClips;
     property DefaultAnimationClip: TLabSceneAnimationClip read _DefaultAnimationClip;
@@ -795,7 +850,7 @@ begin
   _Shader := TLabPixelShader.Create(_Scene.Device, @ShaderData[0], Length(ShaderData));
 end;
 
-destructor TLabSceneNodeAttachmentGeometry.TMaterialBinding.Destroy;
+destructor TLabSceneMaterialBinding.Destroy;
 begin
   FreeAndNil(_UserData);
   inherited Destroy;
@@ -807,7 +862,7 @@ constructor TLabSceneNodeAttachmentGeometry.Create(
   const ColladaInstanceGeometry: TLabColladaInstanceGeometry
 );
   var i: Integer;
-  var mb: TMaterialBinding;
+  var mb: TLabSceneMaterialBinding;
 begin
   inherited Create(AScene, ANode);
   if Assigned(ColladaInstanceGeometry.Geometry)
@@ -816,14 +871,14 @@ begin
   begin
     _Geometry := TLabSceneGeometry(ColladaInstanceGeometry.Geometry.UserData);
   end;
-  _MaterialBindings := TMaterialBindingList.Create;
+  _MaterialBindings := TLabSceneMaterialBindingList.Create;
   for i := 0 to ColladaInstanceGeometry.MaterialBindings.Count - 1 do
   begin
     if Assigned(ColladaInstanceGeometry.MaterialBindings[i].Material)
     and Assigned(ColladaInstanceGeometry.MaterialBindings[i].Material.UserData)
     and (ColladaInstanceGeometry.MaterialBindings[i].Material.UserData is TLabSceneMaterial) then
     begin
-      mb := TMaterialBinding.Create;
+      mb := TLabSceneMaterialBinding.Create;
       mb.Material := TLabSceneMaterial(ColladaInstanceGeometry.MaterialBindings[i].Material.UserData);
       mb.Symbol := AnsiString(ColladaInstanceGeometry.MaterialBindings[i].Symbol);
       _MaterialBindings.Add(mb);
@@ -833,7 +888,38 @@ end;
 
 destructor TLabSceneNodeAttachmentGeometry.Destroy;
 begin
-  FreeAndNil(_UserData);
+  while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
+  _MaterialBindings.Free;
+  inherited Destroy;
+end;
+
+constructor TLabSceneNodeAttachmentController.Create(
+  const AScene: TLabScene;
+  const ANode: TLabSceneNode;
+  const ColladaInstanceController: TLabColladaInstanceController
+);
+  var mb: TLabSceneMaterialBinding;
+  var i: TVkInt32;
+begin
+  _Controller := TLabSceneController(ColladaInstanceController.Controller.UserData);
+  _Skeleton := TLabSceneNode(ColladaInstanceController.Skeleton.UserData);
+  _MaterialBindings := TLabSceneMaterialBindingList.Create;
+  for i := 0 to ColladaInstanceController.MaterialBindings.Count - 1 do
+  begin
+    if Assigned(ColladaInstanceController.MaterialBindings[i].Material)
+    and Assigned(ColladaInstanceController.MaterialBindings[i].Material.UserData)
+    and (ColladaInstanceController.MaterialBindings[i].Material.UserData is TLabSceneMaterial) then
+    begin
+      mb := TLabSceneMaterialBinding.Create;
+      mb.Material := TLabSceneMaterial(ColladaInstanceController.MaterialBindings[i].Material.UserData);
+      mb.Symbol := AnsiString(ColladaInstanceController.MaterialBindings[i].Symbol);
+      _MaterialBindings.Add(mb);
+    end;
+  end;
+end;
+
+destructor TLabSceneNodeAttachmentController.Destroy;
+begin
   while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
   _MaterialBindings.Free;
   inherited Destroy;
@@ -850,6 +936,7 @@ end;
 
 destructor TLabSceneNodeAttachment.Destroy;
 begin
+  FreeAndNil(_UserData);
   inherited Destroy;
 end;
 
@@ -1078,6 +1165,53 @@ begin
   while _Subsets.Count > 0 do _Subsets.Pop.Free;
   _Subsets.Free;
   FreeAndNil(_UserData);
+  inherited Destroy;
+end;
+
+constructor TLabSceneController.Create(
+  const AScene: TLabScene
+);
+begin
+  _Scene := AScene;
+end;
+
+destructor TLabSceneController.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabSceneControllerSkin.Create(
+  const AScene: TLabScene;
+  const ColladaSkin: TLabColladaSkin
+);
+  var i, j: TVkInt32;
+begin
+  inherited Create(AScene);
+  ColladaSkin.UserData := Self;
+  _BindShapeMatrix := ColladaSkin.BindShapeMatrix;
+  _Geometry := TLabColladaGeometry(ColladaSkin.Geometry.UserData);
+  SetLength(_Joints, Length(ColladaSkin.Joints.Joints));
+  for i := 0 to High(_Joints) do
+  begin
+    _Joints[i].JointName := AnsiString(ColladaSkin.Joints.Joints[i].JointName);
+    _Joints[i].BindPose := ColladaSkin.Joints.Joints[i].BindPose;
+  end;
+  _MaxWeightCount := 0;
+  SetLength(_Weights, ColladaSkin.VertexWeights.VCount);
+  for i := 0 to High(_Weights) do
+  begin
+    SetLength(_Weights[i], Length(ColladaSkin.VertexWeights.Weights[i]));
+    if Length(_Weights[i]) > _MaxWeightCount then _MaxWeightCount := Length(_Weights[i]);
+    for j := 0 to High(_Weights[i]) do
+    begin
+      _Weights[i][j].JointIndex := ColladaSkin.VertexWeights.Weights[i][j].JointIndex;
+      _Weights[i][j].JointWeight := ColladaSkin.VertexWeights.Weights[i][j].JointWeight;
+    end;
+  end;
+end;
+
+destructor TLabSceneControllerSkin.Destroy;
+begin
   inherited Destroy;
 end;
 
@@ -1365,7 +1499,10 @@ begin
     _Keys[i].Value := _Data + (_SampleSize * i);
     _Keys[i].Interpolation := ColladaChannel.Sampler.Keys[i]^.Interpolation;
     Move(ColladaChannel.Sampler.Keys[i]^.Value^, _Keys[i].Value^, _SampleSize);
-    if _SampleType = st_transform then PLabMat(_Keys[i].Value)^ := PLabMat(_Keys[i].Value)^.Swizzle(AScene.AxisRemap);
+    if _SampleType = st_transform then
+    begin
+      PLabMat(_Keys[i].Value)^ := PLabMat(_Keys[i].Value)^.Swizzle(AScene.AxisRemap);
+    end;
   end;
 end;
 
@@ -1484,7 +1621,7 @@ constructor TLabSceneNode.Create(
 begin
   _Scene := AScene;
   _Children := TNodeList.Create;
-  _Attachments := TLabSceneNodeAttachmentGeometryList.Create;
+  _Attachments := TLabSceneNodeAttachmentList.Create;
   Parent := AParent;
   if Assigned(ANode) then
   begin
@@ -1507,6 +1644,10 @@ begin
       else if ANode.Children[i] is TLabColladaInstanceGeometry then
       begin
         _Attachments.Add(TLabSceneNodeAttachmentGeometry.Create(_Scene, Self, TLabColladaInstanceGeometry(ANode.Children[i])));
+      end
+      else if ANode.Children[i] is TLabColladaInstanceController then
+      begin
+        _Attachments.Add(TLabSceneNodeAttachmentController.Create(_Scene, Self, TLabColladaInstanceController(ANode.Children[i])));
       end;
     end;
     _Transform := _Transform.Swizzle(_Scene.AxisRemap);
@@ -1515,6 +1656,7 @@ begin
   begin
     _Transform := LabMatIdentity;
   end;
+  if Assigned(_Parent) then _Transform := _Parent.Transform * _Transform;
 end;
 
 destructor TLabSceneNode.Destroy;
@@ -1533,6 +1675,7 @@ procedure TLabScene.Add(const FileName: String);
 begin
   _Path := ExpandFileName(ExtractFileDir(FileName) + PathDelim);
   Collada := TLabColladaParser.Create(FileName);
+  Collada.RootNode.Dump;
   if not Assigned(Collada.RootNode)
   or not Assigned(Collada.RootNode.Scene) then
   begin
@@ -1562,6 +1705,14 @@ begin
   for i := 0 to Collada.RootNode.LibGeometries.Geometries.Count - 1 do
   begin
     _Geometries.Add(TLabSceneGeometry.Create(Self, Collada.RootNode.LibGeometries.Geometries[i]));
+  end;
+  if Assigned(Collada.RootNode.LibControllers) then
+  for i := 0 to Collada.RootNode.LibControllers.Controllers.Count - 1 do
+  begin
+    if Collada.RootNode.LibControllers.Controllers[i].ControllerType = ct_skin then
+    begin
+      _Controllers.Add(TLabSceneControllerSkin.Create(Self, Collada.RootNode.LibControllers.Controllers[i].AsSkin));
+    end;
   end;
   for i := 0 to Collada.RootNode.Scene.VisualScene.VisualScene.Nodes.Count - 1 do
   begin
@@ -1628,6 +1779,7 @@ begin
   _Root := TLabSceneNode.Create(Self, nil, nil);
   _Images := TLabSceneImageList.Create;
   _Geometries := TLabSceneGeometryList.Create;
+  _Controllers := TLabSceneControllerList.Create;
   _Effects := TLabSceneEffectList.Create;
   _Materials := TLabSceneMaterialList.Create;
   _Animations := TLabSceneAnimationList.Create;
@@ -1646,6 +1798,8 @@ begin
   _Materials.Free;
   while _Effects.Count > 0 do _Effects.Pop.Free;
   _Effects.Free;
+  while _Controllers.Count > 0 do _Controllers.Pop.Free;
+  _Controllers.Free;
   while _Geometries.Count > 0 do _Geometries.Pop.Free;
   _Geometries.Free;
   while _Images.Count > 0 do _Images.Pop.Free;

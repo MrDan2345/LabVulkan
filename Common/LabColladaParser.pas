@@ -13,6 +13,7 @@ uses
   XMLRead;
 
 type
+  TLabColladaNode = class;
   TLabListDOMString = specialize TLabList<DOMString>;
   TLabColladaObject = class
   public
@@ -21,6 +22,8 @@ type
   private
     _Tag: DOMString;
     _id: DOMString;
+    _sid: DOMString;
+    _Name: DOMString;
     _Scoped: Boolean;
     _Parent: TLabColladaObject;
     _Children: TObjectList;
@@ -42,6 +45,8 @@ type
   public
     property Tag: DOMString read _Tag;
     property id: DOMString read _id;
+    property sid: DOMString read _sid;
+    property Name: DOMString read _Name;
     property IsScoped: Boolean read _Scoped;
     property Parent: TLabColladaObject read _Parent write SetParent;
     property Children: TObjectList read _Children;
@@ -325,15 +330,98 @@ type
 
   TLabColladaGeometry = class (TLabColladaObject)
   private
-    _Name: DOMString;
     _Meshes: TLabColladaMeshList;
   public
-    property Name: DOMString read _Name;
     property Meshes: TLabColladaMeshList read _Meshes;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
   TLabColladaGeometryList = specialize TLabList<TLabColladaGeometry>;
+
+  TLabColladaMorph = class (TLabColladaObject)
+  public
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaJoints = class (TLabColladaObject)
+  public
+    type TJoint = record
+      JointName: DOMString;
+      BindPose: TLabMat;
+    end;
+    type TJoints = array of TJoint;
+  private
+    _Inputs: TLabColladaInputList;
+    _Joints: TJoints;
+    function FindInput(const Semantic: DOMString): TLabColladaInput;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Inputs: TLabColladaInputList read _Inputs;
+    property Joints: TJoints read _Joints;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaVertexWeights = class (TLabColladaObject)
+  public
+    type TVertexJointReference = record
+      JointIndex: TVkInt32;
+      JointWeight: TVkFloat;
+    end;
+    type TVertexJointReferenceArr = array of array of TVertexJointReference;
+  private
+    _VCount: TVkInt32;
+    _Inputs: TLabColladaInputList;
+    _VertexWeights: TVertexJointReferenceArr;
+    _Indices: array of TVkInt32;
+    function FindInput(const Semantic: DOMString): TLabColladaInput;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property VCount: TVkInt32 read _VCount;
+    property Inputs: TLabColladaInputList read _Inputs;
+    property Weights: TVertexJointReferenceArr read _VertexWeights;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaSkin = class (TLabColladaObject)
+  private
+    _GeometryRef: DOMString;
+    _Geometry: TLabColladaGeometry;
+    _BindShapeMatrix: TLabMat;
+    _Sources: TLabColladaSourceList;
+    _Joints: TLabColladaJoints;
+    _VertexWeights: TLabColladaVertexWeights;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Geometry: TLabColladaGeometry read _Geometry;
+    property BindShapeMatrix: TLabMat read _BindShapeMatrix;
+    property Joints: TLabColladaJoints read _Joints;
+    property VertexWeights: TLabColladaVertexWeights read _VertexWeights;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaControllerType = (ct_invalid, ct_skin, ct_morph);
+
+  TLabColladaController = class (TLabColladaObject)
+  private
+    _ControllerType: TLabColladaControllerType;
+    _Controller: TLabColladaObject;
+    function GetAsSkin: TLabColladaSkin; inline;
+    function GetAsMorph: TLabColladaMorph; inline;
+  public
+    property ControllerType: TLabColladaControllerType read _ControllerType;
+    property AsSkin: TLabColladaSkin read GetAsSkin;
+    property AsMorph: TLabColladaMorph read GetAsMorph;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaControllerList = specialize TLabList<TLabColladaController>;
 
   TLabColladaAnimationInterpolation = (ai_step, ai_linear, ai_bezier);
 
@@ -445,20 +533,34 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaInstanceController = class (TLabColladaInstance)
+  private
+    _SkeletonRef: DOMString;
+    _Skeleton: TLabColladaNode;
+    _Controller: TLabColladaController;
+    _MaterialBindings: TLabColladaInstanceMaterialList;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Skeleton: TLabColladaNode read _Skeleton;
+    property Controller: TLabColladaController read _Controller;
+    property MaterialBindings: TLabColladaInstanceMaterialList read _MaterialBindings;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaNodeType = (nt_invalid, nt_node, nt_joint);
 
   TLabColladaNode = class (TLabColladaObject)
   public
     type TNodeList = specialize TLabList<TLabColladaNode>;
   private
-    _Name: DOMString;
     _NodeType: TLabColladaNodeType;
     _Layers: TLabListDOMString;
     _Nodes: TNodeList;
     _Instances: TLabColladaInstanceList;
   public
     var Matrix: TLabMat;
-    property Name: DOMString read _Name;
     property NodeType: TLabColladaNodeType read _NodeType;
     property Layers: TLabListDOMString read _Layers;
     property Nodes: TNodeList read _Nodes;
@@ -524,6 +626,15 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaLibraryControllers = class (TLabColladaObject)
+  private
+    _Controllers: TLabColladaControllerList;
+  public
+    property Controllers: TLabColladaControllerList read _Controllers;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaLibraryVisualScenes = class (TLabColladaObject)
   private
     _VisualScenes: TLabColladaVisualSceneList;
@@ -569,6 +680,7 @@ type
     _LibEffects: TLabColladaLibraryEffects;
     _LibImages: TLabColladaLibraryImages;
     _LibGeometries: TLabColladaLibraryGeometries;
+    _LibControllers: TLabColladaLibraryControllers;
     _LibAnimations: TLabColladaLibraryAnimations;
     _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
@@ -578,6 +690,7 @@ type
     property LibEffects: TLabColladaLibraryEffects read _LibEffects;
     property LibImages: TLabColladaLibraryImages read _LibImages;
     property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
+    property LibControllers: TLabColladaLibraryControllers read _LibControllers;
     property LibAnimations: TLabColladaLibraryAnimations read _LibAnimations;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
     property Scene: TLabColladaScene read _Scene;
@@ -641,6 +754,284 @@ begin
   end;
 end;
 
+function LoadMatrix(const Src: TLabColladaSource; const Index: TVkInt32): TLabMat;
+  var i, x, y: TVkInt32;
+begin
+  i := Index * Src.Accessor.Stride;
+  for y := 0 to 3 do
+  for x := 0 to 3 do
+  begin
+    Result.Mat[x, y] := Src.DataArray.AsFloat[i]^;
+    Inc(i);
+  end;
+end;
+
+constructor TLabColladaMorph.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+begin
+  inherited Create(XMLNode, AParent);
+end;
+
+destructor TLabColladaMorph.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TLabColladaJoints.FindInput(const Semantic: DOMString): TLabColladaInput;
+  var i: TVkInt32;
+begin
+  for i := 0 to _Inputs.Count - 1 do
+  begin
+    if _Inputs[i].Semantic = Semantic then Exit(_Inputs[i]);
+  end;
+  Result := nil;
+end;
+
+procedure TLabColladaJoints.ResolveLinks;
+  var InputJoints: TLabColladaInput;
+  var InputBinds: TLabColladaInput;
+  var SrcJoints: TLabColladaSource;
+  var SrcBinds: TLabColladaSource;
+  var i, j_count: TVkInt32;
+begin
+  inherited ResolveLinks;
+  InputJoints := FindInput('JOINT');
+  InputBinds := FindInput('INV_BIND_MATRIX');
+  if Assigned(InputJoints) and Assigned(InputBinds) then
+  begin
+    SrcJoints := TLabColladaSource(InputJoints.Source);
+    SrcBinds := TLabColladaSource(InputBinds.Source);
+    j_count := SrcJoints.Accessor.Count;
+    SetLength(_Joints, j_count);
+    for i := 0 to j_count - 1 do
+    begin
+      _Joints[i].JointName := SrcJoints.DataArray.AsString[i];
+      _Joints[i].BindPose := LoadMatrix(SrcBinds, i);
+    end;
+  end;
+end;
+
+constructor TLabColladaJoints.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Inputs := TLabColladaInputList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'input' then
+    begin
+      _Inputs.Add(TLabColladaInput.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaJoints.Destroy;
+begin
+  while _Inputs.Count > 0 do _Inputs.Pop.Free;
+  _Inputs.Free;
+  inherited Destroy;
+end;
+
+function TLabColladaVertexWeights.FindInput(const Semantic: DOMString): TLabColladaInput;
+  var i: TVkInt32;
+begin
+  for i := 0 to _Inputs.Count - 1 do
+  begin
+    if _Inputs[i].Semantic = Semantic then Exit(_Inputs[i]);
+  end;
+  Result := nil;
+end;
+
+procedure TLabColladaVertexWeights.ResolveLinks;
+  var InputIndex, InputWeight: TLabColladaInput;
+  var SrcWeight: TLabColladaSource;
+  var i, j, p: TVkInt32;
+  var tw, w: TVkFloat;
+begin
+  inherited ResolveLinks;
+  InputIndex := FindInput('JOINT');
+  InputWeight := FindInput('WEIGHT');
+  if not Assigned(InputIndex)
+  or not Assigned(InputWeight) then Exit;
+  SrcWeight := TLabColladaSource(InputWeight.Source);
+  p := 0;
+  for i := 0 to High(_VertexWeights) do
+  begin
+    tw := 0;
+    for j := 0 to High(_VertexWeights[i]) do
+    begin
+      w := SrcWeight.DataArray.AsFloat[_Indices[p + InputWeight.Offset]]^;
+      tw += w;
+      _VertexWeights[i][j].JointIndex := _Indices[p + InputIndex.Offset];
+      _VertexWeights[i][j].JointWeight := w;
+      Inc(p, 2);
+    end;
+    tw := 1 / tw;
+    for j := 0 to High(_VertexWeights[i]) do
+    with _VertexWeights[i][j] do
+    begin
+      JointWeight *= tw;
+    end;
+  end;
+end;
+
+constructor TLabColladaVertexWeights.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName, str: DOMString;
+  var i, p, n, ic: TVkInt32;
+begin
+  inherited Create(XMLNode, AParent);
+  _VCount := StrToIntDef(FindAttribute(XMLNode, 'count'), 0);
+  SetLength(_VertexWeights, _VCount);
+  _Inputs := TLabColladaInputList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'input' then
+    begin
+      _Inputs.Add(TLabColladaInput.Create(CurNode, Self));
+    end
+    else if NodeName = 'vcount' then
+    begin
+      ic := 0;
+      str := CurNode.TextContent;
+      p := 1;
+      for i := 0 to _VCount - 1 do
+      begin
+        n := StrToIntDef(AnsiString(FindNextValue(str, p)), 0);
+        SetLength(_VertexWeights[i], n);
+        Inc(ic, n * 2);
+      end;
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+  CurNode := XMLNode.FindNode('v');
+  if Assigned(CurNode) then
+  begin
+    SetLength(_Indices, ic);
+    str := CurNode.TextContent;
+    for i := 0 to ic - 1 do
+    begin
+      _Indices[i] := StrToIntDef(AnsiString(FindNextValue(str, p)), 0);
+    end;
+  end;
+end;
+
+destructor TLabColladaVertexWeights.Destroy;
+begin
+  while _Inputs.Count > 0 do _Inputs.Pop.Free;
+  _Inputs.Free;
+  inherited Destroy;
+end;
+
+procedure TLabColladaSkin.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(_GeometryRef);
+  if Assigned(Obj) and (Obj is TLabColladaGeometry) then
+  begin
+    _Geometry := TLabColladaGeometry(Obj);
+  end;
+end;
+
+constructor TLabColladaSkin.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _GeometryRef := FindAttribute(XMLNode, 'source');
+  _BindShapeMatrix := LabMatIdentity;
+  _Sources := TLabColladaSourceList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'bind_shape_matrix' then
+    begin
+      _BindShapeMatrix := LoadMatrix(CurNode);
+    end
+    else if NodeName = 'source' then
+    begin
+      _Sources.Add(TLabColladaSource.Create(CurNode, Self));
+    end
+    else if NodeName = 'joints' then
+    begin
+      _Joints := TLabColladaJoints.Create(CurNode, Self);
+    end
+    else if NodeName = 'vertex_weights' then
+    begin
+      _VertexWeights := TLabColladaVertexWeights.Create(CurNode, Self);
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaSkin.Destroy;
+begin
+  FreeAndNil(_VertexWeights);
+  FreeAndNil(_Joints);
+  while _Sources.Count > 0 do _Sources.Pop.Free;
+  _Sources.Free;
+  inherited Destroy;
+end;
+
+function TLabColladaController.GetAsSkin: TLabColladaSkin;
+begin
+  Result := TLabColladaSkin(_Controller);
+end;
+
+function TLabColladaController.GetAsMorph: TLabColladaMorph;
+begin
+  Result := TLabColladaMorph(_Controller);
+end;
+
+constructor TLabColladaController.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var Node: TDOMNode;
+begin
+  inherited Create(XMLNode, AParent);
+  _ControllerType := ct_invalid;
+  Node := XMLNode.FindNode('skin');
+  if Assigned(Node) then
+  begin
+    _ControllerType := ct_skin;
+    _Controller := TLabColladaSkin.Create(Node, Self);
+  end
+  else
+  begin
+    Node := XMLNode.FindNode('morph');
+    if Assigned(Node) then
+    begin
+      _ControllerType := ct_morph;
+      _Controller := TLabColladaMorph.Create(Node, Self);
+    end;
+  end;
+end;
+
+destructor TLabColladaController.Destroy;
+begin
+  inherited Destroy;
+end;
+
 procedure TLabColladaObject.SetParent(const Value: TLabColladaObject);
 begin
   if _Parent = Value then Exit;
@@ -662,6 +1053,8 @@ end;
 procedure TLabColladaObject.DumpData;
 begin
   if Length(_id) > 0 then LabLog('id: ' + AnsiString(_id));
+  if Length(_sid) > 0 then LabLog('sid: ' + AnsiString(_sid));
+  if Length(_Name) > 0 then LabLog('name: ' + AnsiString(_Name));
 end;
 
 procedure TLabColladaObject.Resolve;
@@ -716,11 +1109,9 @@ begin
   _id := FindAttribute(XMLNode, 'id');
   _UserData := nil;
   _AutoFreeUserData := False;
-  if Length(_id) = 0 then
-  begin
-    _id := FindAttribute(XMLNode, 'sid');
-    if Length(_id) > 0 then _Scoped := True;
-  end;
+  _sid := FindAttribute(XMLNode, 'sid');
+  if Length(_id) > 0 then _Scoped := True;
+  _Name := FindAttribute(XMLNode, 'name');
   Parent := AParent;
 end;
 
@@ -774,7 +1165,8 @@ function TLabColladaObject.FindChild(const NodeID: DOMString): TLabColladaObject
   var i: TVkInt32;
 begin
   for i := 0 to _Children.Count - 1 do
-  if TLabColladaObject(_Children[i]).id = NodeID then
+  if (TLabColladaObject(_Children[i]).id = NodeID)
+  or (TLabColladaObject(_Children[i]).sid = NodeID) then
   begin
     Result := TLabColladaObject(_Children[i]);
     Exit;
@@ -787,7 +1179,8 @@ function TLabColladaObject.FindChildRecursive(const NodeID: DOMString): TLabColl
 begin
   for i := 0 to _Children.Count - 1 do
   begin
-    if TLabColladaObject(_Children[i]).id = NodeID then
+    if (TLabColladaObject(_Children[i]).id = NodeID)
+    or (TLabColladaObject(_Children[i]).sid = NodeID) then
     begin
       Result := TLabColladaObject(_Children[i]);
       Exit;
@@ -821,7 +1214,6 @@ constructor TLabColladaGeometry.Create(
   var NodeName: DOMString;
 begin
   inherited Create(XMLNode, AParent);
-  _Name := FindAttribute(XMLNode, 'name');
   _Meshes := TLabColladaMeshList.Create;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
@@ -2030,7 +2422,6 @@ constructor TLabColladaInstanceGeometry.Create(
   var NodeName: DOMString;
 begin
   inherited Create(XMLNode, AParent);
-  _Geometry := nil;
   _MaterialBindings := TLabColladaInstanceMaterialList.Create;
   CurNode := XMLNode.FindNode('bind_material');
   if Assigned(CurNode) then
@@ -2059,6 +2450,67 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaInstanceController.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  inherited ResolveLinks;
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaController) then
+  begin
+    _Controller := TLabColladaController(Obj);
+  end;
+  Obj := Find(_SkeletonRef);
+  if Assigned(Obj) and (Obj is TLabColladaNode) then
+  begin
+    _Skeleton := TLabColladaNode(Obj);
+  end;
+end;
+
+constructor TLabColladaInstanceController.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode, Node: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _MaterialBindings := TLabColladaInstanceMaterialList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'skeleton' then
+    begin
+      _SkeletonRef := CurNode.TextContent;
+    end
+    else if NodeName = 'bind_material' then
+    begin
+      Node := CurNode.FindNode('technique_common');
+      if Assigned(Node) then
+      begin
+        Node := Node.FirstChild;
+        while Assigned(Node) do
+        begin
+          NodeName := LowerCase(Node.NodeName);
+          if NodeName = 'instance_material' then
+          begin
+            _MaterialBindings.Add(TLabColladaInstanceMaterial.Create(Node, Self));
+          end;
+          Node := Node.NextSibling;
+        end;
+      end;
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaInstanceController.Destroy;
+begin
+  while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
+  _MaterialBindings.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaNode.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -2074,7 +2526,6 @@ constructor TLabColladaNode.Create(
   var XfSkew: array [0..6] of TVkFloat;
 begin
   inherited Create(XMLNode, AParent);
-  _Name := FindAttribute(XMLNode, 'name');
   _NodeType := StringToNodeType(FindAttribute(XMLNode, 'type'));
   _Layers := TLabListDOMString.Create;
   _Nodes := TLabColladaNodeList.Create;
@@ -2172,6 +2623,10 @@ begin
     else if NodeName = 'instance_geometry' then
     begin
       _Instances.Add(TLabColladaInstanceGeometry.Create(CurNode, Self));
+    end
+    else if NodeName = 'instance_controller' then
+    begin
+      _Instances.Add(TLabColladaInstanceController.Create(CurNode, Self));
     end;
     CurNode := CurNode.NextSibling;
   end;
@@ -2364,6 +2819,34 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaLibraryControllers.Create(
+  const XMLNode: TDOMNode;
+  const AParent: TLabColladaObject
+);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Controllers := TLabColladaControllerList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'controller' then
+    begin
+      _Controllers.Add(TLabColladaController.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryControllers.Destroy;
+begin
+  while _Controllers.Count > 0 do _Controllers.Pop.Free;
+  _Controllers.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaLibraryVisualScenes.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -2508,6 +2991,7 @@ begin
     end
     else if NodeName = 'library_controllers' then
     begin
+      _LibControllers := TLabColladaLibraryControllers.Create(CurNode, Self);
     end
     else if NodeName = 'library_animations' then
     begin
@@ -2532,6 +3016,7 @@ begin
   FreeAndNil(_LibImages);
   FreeAndNil(_LibVisualScenes);
   FreeAndNil(_LibAnimations);
+  FreeAndNil(_LibControllers);
   FreeAndNil(_LibGeometries);
   FreeAndNil(_Scene);
   FreeAndNil(_Asset);

@@ -638,8 +638,9 @@ procedure TLabApp.ProcessScene;
     var i: Integer;
   begin
     for i := 0 to Node.Attachments.Count - 1 do
+    if Node.Attachments[i] is TLabSceneNodeAttachmentGeometry then
     begin
-      Node.Attachments[i].UserData := TInstanceData.Create(Node.Attachments[i]);
+      Node.Attachments[i].UserData := TInstanceData.Create(TLabSceneNodeAttachmentGeometry(Node.Attachments[i]));
     end;
     for i := 0 to Node.Children.Count - 1 do
     begin
@@ -798,8 +799,9 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/maya/maya.dae');
-  Scene.Add('../Models/box.dae');
+  //Scene.Add('../Models/maya/maya.dae');
+  //Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/skin.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
@@ -838,8 +840,9 @@ procedure TLabApp.Loop;
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
     for i_a := 0 to Node.Attachments.Count - 1 do
+    if Node.Attachments[i_a] is TLabSceneNodeAttachmentGeometry then
     begin
-      r_a := Node.Attachments[i_a];
+      r_a := TLabSceneNodeAttachmentGeometry(Node.Attachments[i_a]);
       inst_data := TInstanceData(r_a.UserData);
       for i_p := 0 to inst_data.Passes.Count - 1 do
       begin
