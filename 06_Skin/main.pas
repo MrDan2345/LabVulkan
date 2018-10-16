@@ -200,7 +200,12 @@ procedure TLabApp.UpdateTransforms;
   var Clip: TLabMat;
 begin
   SkinUniform^.Bones[0] := LabMatIdentity;
-  SkinUniform^.Bones[1] := LabMatTranslation(0, -2, 0) * LabMatRotationX(sin(LabTimeLoopSec(LabTwoPi))) * LabMatTranslation(0, 2, 0);
+  SkinUniform^.Bones[1] := (
+    LabMatTranslation(0, -2, 0) *
+    LabMatRotationY(1.8 * sin(4 * LabTimeLoopSec(2 * LabTwoPi))) *
+    LabMatRotationX(1.5 * sin(LabTimeLoopSec(LabTwoPi))) *
+    LabMatTranslation(0, 2, 0)
+  );
   fov := LabDegToRad * 20;
   with Transforms do
   begin
@@ -829,11 +834,6 @@ begin
     VertexStream1[i].Color.y := VertexStream1[i].Color.x;
     VertexStream1[i].Color.z := VertexStream1[i].Color.x;
   end;
-  //for i := 0 to High(VertexStream2) do
-  //begin
-  //  VertexStream2[i].BoneWeight[0] := 1;
-  //  VertexStream2[i].BoneWeight[1] := 1;
-  //end;
 end;
 
 end.
