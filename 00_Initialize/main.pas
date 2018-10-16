@@ -273,7 +273,9 @@ begin
     [VertexShader.Ptr, PixelShader.Ptr],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
-    LabPipelineInputAssemblyState(),
+    LabPipelineInputAssemblyState(
+      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+    ),
     LabPipelineVertexInputState(
       [VertexBuffer.Ptr.MakeBindingDesc(0)],
       [

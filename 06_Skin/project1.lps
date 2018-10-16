@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="10"/>
+    <BuildModes Active="Default"/>
+    <Units Count="1">
+      <Unit0>
+        <Filename Value="project1.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <TopLine Value="10"/>
+        <CursorPos X="30" Y="27"/>
+        <UsageCount Value="59"/>
+        <Loaded Value="True"/>
+      </Unit0>
+    </Units>
+  </ProjectSession>
+  <Debugging>
+    <Watches Count="1">
+      <Item1 RepeatCount="16">
+        <Expression Value="VertexStream0"/>
+      </Item1>
+    </Watches>
+  </Debugging>
+</CONFIG>
