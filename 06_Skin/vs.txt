@@ -7,7 +7,7 @@ layout (std140, binding = 0) uniform t_data {
 	mat4 p;
 	mat4 wvp;
 } data;
-layout (std140, binding = 2) uniform t_skin {
+layout (std140, binding = 1) uniform t_skin {
 	mat4 b[2];
 } skin;
 layout (location = 0) in vec3 in_pos;

@@ -509,8 +509,8 @@ begin
     Device,
     [
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
     ]
   );
   DescriptorPool := TLabDescriptorPool.Create(
@@ -535,12 +535,12 @@ begin
       ),
       LabWriteDescriptorSetUniformBuffer(
         DescriptorSets.Ptr.VkHandle[0],
-        2,
+        1,
         [LabDescriptorBufferInfo(UniformBufferSkin.Ptr.VkHandle)]
       ),
       LabWriteDescriptorSetImageSampler(
         DescriptorSets.Ptr.VkHandle[0],
-        1,
+        2,
         [
           LabDescriptorImageInfo(
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
