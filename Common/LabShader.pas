@@ -32,12 +32,14 @@ type
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
     constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
   end;
+  TLabVertexShaderShared = specialize TLabSharedRef<TLabVertexShader>;
 
   TLabPixelShader = class (TLabShader)
   public
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
     constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
   end;
+  TLabPixelShaderShared = specialize TLabSharedRef<TLabPixelShader>;
 
   TLabShaderStages = array of TVkPipelineShaderStageCreateInfo;
 function LabShaderStages(const Shaders: array of TLabShader): TLabShaderStages;

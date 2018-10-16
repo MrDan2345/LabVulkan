@@ -8,22 +8,10 @@
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="10"/>
-        <CursorPos Y="41"/>
-        <UsageCount Value="171"/>
+        <CursorPos X="30" Y="21"/>
+        <UsageCount Value="175"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints Count="1">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="main.pas"/>
-        <Line Value="805"/>
-      </Item1>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>

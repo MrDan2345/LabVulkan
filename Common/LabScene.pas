@@ -21,9 +21,9 @@ type
   TLabSceneMaterial = class;
   TLabSceneNode = class;
 
-  TLabSceneShader = class (TLabClass)
+  TLabSceneShaderBase = class (TLabClass)
   private
-    type TShaderList = specialize TLabList<TLabSceneShader>;
+    type TShaderList = specialize TLabList<TLabSceneShaderBase>;
     class var _List: TShaderList;
     class var _ListSort: Boolean;
     var _Scene: TLabScene;
@@ -33,9 +33,9 @@ type
     type TShaderType = (st_vs, st_ps);
     var _Shader: TLabShaderShared;
     class function MakeHash(const ShaderCode: String): TVkUInt32;
-    class function CmpShaders(const a, b: TLabSceneShader): Boolean;
+    class function CmpShaders(const a, b: TLabSceneShaderBase): Boolean;
     class procedure SortList;
-    class function Find(const AHash: TVkUInt32): TLabSceneShader;
+    class function Find(const AHash: TVkUInt32): TLabSceneShaderBase;
     class function FindCache(const AHash: TVkUInt32): TLabByteArr;
     class function CompileShader(const ShaderCode: String; const ShaderType: TShaderType; const ShaderHash: TVkUInt32 = 0): TLabByteArr;
   public
@@ -48,9 +48,9 @@ type
     constructor Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32); virtual;
     destructor Destroy; override;
   end;
-  TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
+  TLabSceneShaderBaseShared = specialize TLabSharedRef<TLabSceneShaderBase>;
 
-  TLabSceneVertexShader = class (TLabSceneShader)
+  TLabSceneVertexShader = class (TLabSceneShaderBase)
   public
     class function FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabSceneVertexShader;
     constructor Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
@@ -58,13 +58,20 @@ type
   end;
   TLabSceneVertexShaderShared = specialize TLabSharedRef<TLabSceneVertexShader>;
 
-  TLabScenePixelShader = class (TLabSceneShader)
+  TLabScenePixelShader = class (TLabSceneShaderBase)
   public
     class function FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabScenePixelShader;
     constructor Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
     constructor Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32); override;
   end;
   TLabScenePixelShaderShared = specialize TLabSharedRef<TLabScenePixelShader>;
+
+  TLabSceneShader = class (TLabClass)
+  public
+    VertexShader: TLabSceneVertexShaderShared;
+    PixelShader: TLabScenePixelShaderShared;
+  end;
+  TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
 
   TLabSceneShaderFactory = class (TLabClass)
   public
@@ -81,16 +88,11 @@ type
     );
     class function GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
     class function GetSemanticValue(const SemanticName: String): TLabColladaVertexAttributeSemantic;
-    class function MakeVertexShader(
+    class function MakeShader(
       const AScene: TLabScene;
       const Desc: TLabColladaVertexDescriptor;
       const Material: TLabSceneMaterial
-    ): TLabSceneVertexShader;
-    class function MakePixelShader(
-      const AScene: TLabScene;
-      const Desc: TLabColladaVertexDescriptor;
-      const Material: TLabSceneMaterial
-    ): TLabScenePixelShader;
+    ): TLabSceneShader;
   end;
 
   TLabSceneGeometry = class (TLabClass)
@@ -110,6 +112,7 @@ type
       IndexStride: TVkUInt8;
       IndexType: TVkIndexType;
       Material: String;
+      Remap: array of TVkInt32;
       property Geometry: TLabSceneGeometry read _Geometry;
       property UserData: TObject read _UserData write _UserData;
       procedure FreeVertexData;
@@ -154,13 +157,13 @@ type
     end;
     type TWeights = array of array of TWeight;
   private
-    var _Geometry: TLabColladaGeometry;
+    var _Geometry: TLabSceneGeometry;
     var _BindShapeMatrix: TLabMat;
     var _Joints: TJoints;
     var _Weights: TWeights;
     var _MaxWeightCount: TVkInt32;
   public
-    property Geometry: TLabColladaGeometry read _Geometry;
+    property Geometry: TLabSceneGeometry read _Geometry;
     property BindShapeMatrix: TLabMat read _BindShapeMatrix;
     property Joints: TJoints read _Joints;
     property Weights: TWeights read _Weights;
@@ -471,20 +474,15 @@ begin
   Result := as_invalid;
 end;
 
-class function TLabSceneShaderFactory.MakeVertexShader(
+class function TLabSceneShaderFactory.MakeShader(
   const AScene: TLabScene;
   const Desc: TLabColladaVertexDescriptor;
   const Material: TLabSceneMaterial
-): TLabSceneVertexShader;
-  var ShaderCode: String = '#version 400'#$D#$A +
+): TLabSceneShader;
+  var ShaderCodeVS: String = '#version 400'#$D#$A +
     '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
     '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
-    'layout (std140, binding = 0) uniform t_xf {'#$D#$A +
-    '  mat4 w;'#$D#$A +
-    '  mat4 v;'#$D#$A +
-    '  mat4 p;'#$D#$A +
-    '  mat4 wvp;'#$D#$A +
-    '} xf;'#$D#$A +
+    '<$uniforms$>' +
     '<$attribs$>' +
     'out gl_PerVertex {'#$D#$A +
     '  vec4 gl_Position;'#$D#$A +
@@ -493,18 +491,39 @@ class function TLabSceneShaderFactory.MakeVertexShader(
     '<$code$>' +
     '}'
   ;
+  var ShaderCodePS: String = '#version 400'#$D#$A +
+    '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
+    '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
+    '<$attribs$>' +
+    'void main() {'#$D#$A +
+    '<$code$>' +
+    '}'
+  ;
   var StrAttrIn: String;
   var StrAttrOut: String;
+  var StrAttr: String;
+  var StrUniforms: String;
   var StrCode: String;
   var Code: String;
   var Sem: String;
-  var i, loc_in, loc_out: Integer;
+  var binding, i, loc, loc_in, loc_out: Integer;
+  var Texture: String;
+  var TexCoord: String;
 begin
+  Result := TLabSceneShader.Create;
+  binding := 0;
   StrAttrIn := '';
   StrAttrOut := '';
   StrCode := '';
   loc_in := 0;
   loc_out := 0;
+  StrUniforms := 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_xf {'#$D#$A;
+  StrUniforms += '  mat4 w;'#$D#$A;
+  StrUniforms += '  mat4 v;'#$D#$A;
+  StrUniforms += '  mat4 p;'#$D#$A;
+  StrUniforms += '  mat4 wvp;'#$D#$A;
+  StrUniforms += '} xf;'#$D#$A;
+  Inc(binding);
   for i := 0 to High(Desc) do
   begin
     Sem := GetSemanticName(Desc[i].Semantic) + IntToStr(Desc[i].SetNumber);
@@ -538,32 +557,10 @@ begin
       StrCode += '  out_' + Sem + ' = in_' + Sem + ';'#$D#$A;
     end;
   end;
-  Code := LabStrReplace(ShaderCode, '<$attribs$>', StrAttrIn + StrAttrOut);
+  Code := LabStrReplace(ShaderCodeVS, '<$uniforms$>', StrUniforms);
+  Code := LabStrReplace(Code, '<$attribs$>', StrAttrIn + StrAttrOut);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
-  Result := TLabSceneVertexShader.FindOrCreate(AScene, Code);
-end;
-
-class function TLabSceneShaderFactory.MakePixelShader(
-  const AScene: TLabScene;
-  const Desc: TLabColladaVertexDescriptor;
-  const Material: TLabSceneMaterial
-): TLabScenePixelShader;
-  var ShaderCode: String = '#version 400'#$D#$A +
-    '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
-    '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
-    '<$attribs$>' +
-    'void main() {'#$D#$A +
-    '<$code$>' +
-    '}'
-  ;
-  var StrAttr: String;
-  var StrCode: String;
-  var Code: String;
-  var Sem: String;
-  var i, loc: TVkInt32;
-  var Texture: String;
-  var TexCoord: String;
-begin
+  Result.VertexShader := TLabSceneVertexShader.FindOrCreate(AScene, Code);
   StrAttr := '';
   Texture := '';
   TexCoord := '';
@@ -575,7 +572,8 @@ begin
   end;
   if Length(Texture) > 0 then
   begin
-    StrAttr += 'layout (binding = 1) uniform sampler2D ' + Texture + ';'#$D#$A;
+    StrAttr += 'layout (binding = ' + IntToStr(binding) + ') uniform sampler2D ' + Texture + ';'#$D#$A;
+    Inc(binding);
   end;
   loc := 0;
   StrCode := '  vec4 color = vec4(1, 1, 1, 1);'#$D#$A;
@@ -619,34 +617,34 @@ begin
   end;
   StrCode += '  out_color = color;'#$D#$A;
   //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
-  Code := LabStrReplace(ShaderCode, '<$attribs$>', StrAttr);
+  Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
-  Result := TLabScenePixelShader.FindOrCreate(ASCene, Code);
+  Result.PixelShader := TLabScenePixelShader.FindOrCreate(ASCene, Code);
 end;
 
-function TLabSceneShader.GetShader: TLabShader;
+function TLabSceneShaderBase.GetShader: TLabShader;
 begin
   Result := _Shader.Ptr;
 end;
 
-class function TLabSceneShader.MakeHash(const ShaderCode: String): TVkUInt32;
+class function TLabSceneShaderBase.MakeHash(const ShaderCode: String): TVkUInt32;
 begin
   Result := LabCRC32(0, @ShaderCode[1], Length(ShaderCode));
 end;
 
-class function TLabSceneShader.CmpShaders(const a, b: TLabSceneShader): Boolean;
+class function TLabSceneShaderBase.CmpShaders(const a, b: TLabSceneShaderBase): Boolean;
 begin
   Result := a.Hash > b.Hash;
 end;
 
-class procedure TLabSceneShader.SortList;
+class procedure TLabSceneShaderBase.SortList;
 begin
   if (not _ListSort) then Exit;
   _List.Sort(@CmpShaders);
   _ListSort := False;
 end;
 
-class function TLabSceneShader.Find(const AHash: TVkUInt32): TLabSceneShader;
+class function TLabSceneShaderBase.Find(const AHash: TVkUInt32): TLabSceneShaderBase;
   var l, h, m: Integer;
 begin
   SortList;
@@ -666,7 +664,7 @@ begin
   then Exit(_List[l]) else Exit(nil);
 end;
 
-class function TLabSceneShader.FindCache(const AHash: TVkUInt32): TLabByteArr;
+class function TLabSceneShaderBase.FindCache(const AHash: TVkUInt32): TLabByteArr;
   var f: String;
   var fs: TFileStream;
 begin
@@ -687,7 +685,7 @@ begin
   end;
 end;
 
-class function TLabSceneShader.CompileShader(const ShaderCode: String; const ShaderType: TShaderType; const ShaderHash: TVkUInt32): TLabByteArr;
+class function TLabSceneShaderBase.CompileShader(const ShaderCode: String; const ShaderType: TShaderType; const ShaderHash: TVkUInt32): TLabByteArr;
   var fs: TFileStream;
   var shader_hash: TVkUInt32;
   var f, fp, vk_dir, st, cl_out: String;
@@ -749,18 +747,18 @@ begin
   end;
 end;
 
-class constructor TLabSceneShader.CreateClass;
+class constructor TLabSceneShaderBase.CreateClass;
 begin
   _List := TShaderList.Create;
   _ListSort := False;
 end;
 
-class destructor TLabSceneShader.DestroyClass;
+class destructor TLabSceneShaderBase.DestroyClass;
 begin
   _List.Free;
 end;
 
-constructor TLabSceneShader.Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32);
+constructor TLabSceneShaderBase.Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32);
 begin
   _Scene := AScene;
   if (AHash = 0) then
@@ -775,7 +773,7 @@ begin
   _ListSort := True;
 end;
 
-constructor TLabSceneShader.Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
+constructor TLabSceneShaderBase.Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
 begin
   _Scene := AScene;
   _Hash := AHash;
@@ -783,7 +781,7 @@ begin
   _ListSort := True;
 end;
 
-destructor TLabSceneShader.Destroy;
+destructor TLabSceneShaderBase.Destroy;
 begin
   _Shader := nil;
   _List.Remove(Self);
@@ -901,7 +899,8 @@ constructor TLabSceneNodeAttachmentController.Create(
   var mb: TLabSceneMaterialBinding;
   var i: TVkInt32;
 begin
-  _Controller := TLabSceneController(ColladaInstanceController.Controller.UserData);
+  inherited Create(AScene, ANode);
+  _Controller := TLabSceneController(ColladaInstanceController.Controller.Controller.UserData);
   _Skeleton := TLabSceneNode(ColladaInstanceController.Skeleton.UserData);
   _MaterialBindings := TLabSceneMaterialBindingList.Create;
   for i := 0 to ColladaInstanceController.MaterialBindings.Count - 1 do
@@ -1032,7 +1031,7 @@ constructor TLabSceneGeometry.TSubset.Create(
   var AttribIndices: array of TVkInt32;
   var AttribSwizzles: array of TLabSwizzle;
   var Source: TLabColladaSource;
-  var i, j, Offset, ind: TVkInt32;
+  var i, j, Offset, ind, v_attr: TVkInt32;
   var crc, max_offset: TVkUInt32;
   var AssetSwizzle: TLabSwizzle;
   var Root: TLabColladaRoot;
@@ -1055,14 +1054,19 @@ begin
   end;
   VertexData := GetMemory(VertexStride * Triangles.Count * 3);
   IndexData := GetMemory(IndexStride * Triangles.Count * 3);
-  VertexRemap := PVertexRemapArr(GetMemory(VertexStride * Triangles.Count * 3));
+  SetLength(Remap, Triangles.Count * 3);
+  VertexRemap := PVertexRemapArr(GetMemory(SizeOf(TVertexRemap) * Triangles.Count * 3));
   BufferPtrVert := VertexData;
   BufferPtrInd := IndexData;
   max_offset := 0;
+  v_attr := -1;
   for i := 0 to Triangles.Inputs.Count - 1 do
-  if Triangles.Inputs[i].Offset > max_offset then
   begin
-    max_offset := Triangles.Inputs[i].Offset;
+    if Triangles.Inputs[i].Semantic = 'VERTEX' then v_attr := i;
+    if Triangles.Inputs[i].Offset > max_offset then
+    begin
+      max_offset := Triangles.Inputs[i].Offset;
+    end;
   end;
   SetLength(AttribIndices, Triangles.Inputs.Count);
   for i := 0 to Triangles.Count * 3 - 1 do
@@ -1085,12 +1089,15 @@ begin
       begin
         BufferPtrVert := Triangles.CopyInputData(BufferPtrVert, Triangles.Inputs[j], AttribIndices[j]);
       end;
+      ind := VertexCount;
       VertexRemap^[VertexCount].crc := crc;
       VertexRemap^[VertexCount].VertexIndex := VertexCount;
       AddIndex(VertexCount);
       Inc(VertexCount);
     end;
+    Remap[ind] := AttribIndices[v_attr];
   end;
+  if Length(Remap) > VertexCount then SetLength(Remap, VertexCount);
   Freememory(VertexRemap);
   SetLength(VertexAttributes, Triangles.VertexLayout.Count);
   Offset := 0;
@@ -1173,6 +1180,7 @@ constructor TLabSceneController.Create(
 );
 begin
   _Scene := AScene;
+
 end;
 
 destructor TLabSceneController.Destroy;
@@ -1189,7 +1197,7 @@ begin
   inherited Create(AScene);
   ColladaSkin.UserData := Self;
   _BindShapeMatrix := ColladaSkin.BindShapeMatrix;
-  _Geometry := TLabColladaGeometry(ColladaSkin.Geometry.UserData);
+  _Geometry := TLabSceneGeometry(ColladaSkin.Geometry.UserData);
   SetLength(_Joints, Length(ColladaSkin.Joints.Joints));
   for i := 0 to High(_Joints) do
   begin
@@ -1675,7 +1683,6 @@ procedure TLabScene.Add(const FileName: String);
 begin
   _Path := ExpandFileName(ExtractFileDir(FileName) + PathDelim);
   Collada := TLabColladaParser.Create(FileName);
-  Collada.RootNode.Dump;
   if not Assigned(Collada.RootNode)
   or not Assigned(Collada.RootNode.Scene) then
   begin

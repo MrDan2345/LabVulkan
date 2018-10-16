@@ -118,8 +118,7 @@ type
     type TPass = class
       Subset: TLabSceneGeometry.TSubset;
       Material: TLabSceneMaterial;
-      VertexShader: TLabSceneVertexShaderShared;
-      PixelShader: TLabScenePixelShaderShared;
+      Shader: TLabSceneShaderShared;
       DescriptorSetLayout: TLabDescriptorSetLayoutShared;
       PipelineLayout: TLabPipelineLayoutShared;
       DescriptorPool: TLabDescriptorPoolShared;
@@ -129,10 +128,12 @@ type
     end;
     type TPassList = specialize TLabList<TPass>;
   private
-    var _Attachment: TLabSceneNodeAttachmentGeometry;
+    var _Attachment: TLabSceneNodeAttachment;
+    procedure SetupGeometry(const Geom: TLabSceneGeometry; const MaterialBindings: TLabSceneMaterialBindingList);
   public
     Passes: TPassList;
     constructor Create(const Attachment: TLabSceneNodeAttachmentGeometry);
+    constructor Create(const Attachment: TLabSceneNodeAttachmentController);
     destructor Destroy; override;
   end;
 
@@ -368,21 +369,22 @@ begin
   );
 end;
 
-constructor TInstanceData.Create(const Attachment: TLabSceneNodeAttachmentGeometry);
+procedure TInstanceData.SetupGeometry(
+  const Geom: TLabSceneGeometry;
+  const MaterialBindings: TLabSceneMaterialBindingList
+);
   var i, j: Integer;
   var r_s: TLabSceneGeometry.TSubset;
   var Pass: TPass;
 begin
-  _Attachment := Attachment;
-  Passes := TPassList.Create;
-  for i := 0 to Attachment.Geometry.Subsets.Count - 1 do
+  for i := 0 to Geom.Subsets.Count - 1 do
   begin
-    r_s := Attachment.Geometry.Subsets[i];
+    r_s := Geom.Subsets[i];
     Pass := TPass.Create;
-    for j := 0 to Attachment.MaterialBindings.Count - 1 do
-    if r_s.Material = Attachment.MaterialBindings[j].Symbol then
+    for j := 0 to MaterialBindings.Count - 1 do
+    if r_s.Material = MaterialBindings[j].Symbol then
     begin
-      Pass.Material := Attachment.MaterialBindings[j].Material;
+      Pass.Material := MaterialBindings[j].Material;
       Break;
     end;
     if Assigned(Pass.Material) then
@@ -395,8 +397,7 @@ begin
       end;
     end;
     Pass.Subset := r_s;
-    Pass.VertexShader := TLabSceneShaderFactory.MakeVertexShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
-    Pass.PixelShader := TLabSceneShaderFactory.MakePixelShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
+    Pass.Shader := TLabSceneShaderFactory.MakeShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
     if Assigned(Pass.Image) then
     begin
       Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
@@ -471,6 +472,25 @@ begin
     end;
     Passes.Add(Pass);
   end;
+end;
+
+constructor TInstanceData.Create(const Attachment: TLabSceneNodeAttachmentGeometry);
+begin
+  _Attachment := Attachment;
+  Passes := TPassList.Create;
+  SetupGeometry(Attachment.Geometry, Attachment.MaterialBindings);
+end;
+
+constructor TInstanceData.Create(
+  const Attachment: TLabSceneNodeAttachmentController
+);
+  var Skin: TLabSceneControllerSkin;
+begin
+  _Attachment := Attachment;
+  Passes := TPassList.Create;
+  if not (Attachment.Controller is TLabSceneControllerSkin) then Exit;
+  Skin := TLabSceneControllerSkin(Attachment.Controller);
+  SetupGeometry(Skin.Geometry, Attachment.MaterialBindings);
 end;
 
 destructor TInstanceData.Destroy;
@@ -638,9 +658,15 @@ procedure TLabApp.ProcessScene;
     var i: Integer;
   begin
     for i := 0 to Node.Attachments.Count - 1 do
-    if Node.Attachments[i] is TLabSceneNodeAttachmentGeometry then
     begin
-      Node.Attachments[i].UserData := TInstanceData.Create(TLabSceneNodeAttachmentGeometry(Node.Attachments[i]));
+      if Node.Attachments[i] is TLabSceneNodeAttachmentGeometry then
+      begin
+        Node.Attachments[i].UserData := TInstanceData.Create(TLabSceneNodeAttachmentGeometry(Node.Attachments[i]));
+      end
+      else if Node.Attachments[i] is TLabSceneNodeAttachmentController then
+      begin
+        Node.Attachments[i].UserData := TInstanceData.Create(TLabSceneNodeAttachmentController(Node.Attachments[i]));
+      end;
     end;
     for i := 0 to Node.Children.Count - 1 do
     begin
@@ -840,10 +866,10 @@ procedure TLabApp.Loop;
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
     for i_a := 0 to Node.Attachments.Count - 1 do
-    if Node.Attachments[i_a] is TLabSceneNodeAttachmentGeometry then
+    if Assigned(Node.Attachments[i_a].UserData)
+    and (Node.Attachments[i_a].UserData is TInstanceData) then
     begin
-      r_a := TLabSceneNodeAttachmentGeometry(Node.Attachments[i_a]);
-      inst_data := TInstanceData(r_a.UserData);
+      inst_data := TInstanceData(Node.Attachments[i_a].UserData);
       for i_p := 0 to inst_data.Passes.Count - 1 do
       begin
         r_p := inst_data.Passes[i_p];
@@ -854,7 +880,7 @@ procedure TLabApp.Loop;
           r_p.Pipeline := TLabGraphicsPipeline.FindOrCreate(
             Device, PipelineCache, r_p.PipelineLayout.Ptr,
             [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-            [r_p.VertexShader.Ptr.Shader, r_p.PixelShader.Ptr.Shader],
+            [r_p.Shader.Ptr.VertexShader.Ptr.Shader, r_p.Shader.Ptr.PixelShader.Ptr.Shader],
             RenderPass.Ptr, 0,
             LabPipelineViewportState(),
             LabPipelineInputAssemblyState(),

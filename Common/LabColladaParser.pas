@@ -415,6 +415,7 @@ type
     function GetAsSkin: TLabColladaSkin; inline;
     function GetAsMorph: TLabColladaMorph; inline;
   public
+    property Controller: TLabColladaObject read _Controller;
     property ControllerType: TLabColladaControllerType read _ControllerType;
     property AsSkin: TLabColladaSkin read GetAsSkin;
     property AsMorph: TLabColladaMorph read GetAsMorph;
