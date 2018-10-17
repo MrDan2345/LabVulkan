@@ -4119,6 +4119,38 @@ begin
 end;
 
 procedure LabMatInv(const OutM, InM: PLabMat);
+  var det: TLabFloat;
+  var mr: TLabMat;
+begin
+  det := (InM^.e00 * InM^.e11 * InM^.e22 * InM^.e33) + (InM^.e00 * InM^.e12 * InM^.e23 * InM^.e31) + (InM^.e00 * InM^.e13 * InM^.e21 * InM^.e32)
+  - (InM^.e00 * InM^.e13 * InM^.e22 * InM^.e31) - (InM^.e00 * InM^.e12 * InM^.e21 * InM^.e33) - (InM^.e00 * InM^.e11 * InM^.e23 * InM^.e32)
+  - (InM^.e01 * InM^.e10 * InM^.e22 * InM^.e33) - (InM^.e02 * InM^.e10 * InM^.e23 * InM^.e31) - (InM^.e03 * InM^.e10 * InM^.e21 * InM^.e32)
+  + (InM^.e03 * InM^.e10 * InM^.e22 * InM^.e31) + (InM^.e02 * InM^.e10 * InM^.e21 * InM^.e33) + (InM^.e01 * InM^.e10 * InM^.e23 * InM^.e32)
+  + (InM^.e01 * InM^.e12 * InM^.e20 * InM^.e33) + (InM^.e02 * InM^.e13 * InM^.e20 * InM^.e31) + (InM^.e03 * InM^.e11 * InM^.e20 * InM^.e32)
+  - (InM^.e03 * InM^.e12 * InM^.e20 * InM^.e31) - (InM^.e02 * InM^.e11 * InM^.e20 * InM^.e33) - (InM^.e01 * InM^.e13 * InM^.e20 * InM^.e32)
+  - (InM^.e01 * InM^.e12 * InM^.e23 * InM^.e30) - (InM^.e02 * InM^.e13 * InM^.e21 * InM^.e30) - (InM^.e03 * InM^.e11 * InM^.e22 * InM^.e30)
+  + (InM^.e03 * InM^.e12 * InM^.e21 * InM^.e30) + (InM^.e02 * InM^.e11 * InM^.e23 * InM^.e30) + (InM^.e01 * InM^.e13 * InM^.e22 * InM^.e30);
+  det := 1 / det;
+  mr.e00 := (InM^.e11*InM^.e22*InM^.e33 + InM^.e12*InM^.e23*InM^.e31 + InM^.e13*InM^.e21*InM^.e32 - InM^.e13*InM^.e22*InM^.e31 - InM^.e12*InM^.e21*InM^.e33 - InM^.e11*InM^.e23*InM^.e32) * det;
+  mr.e01 := (-InM^.e01*InM^.e22*InM^.e33 - InM^.e02*InM^.e23*InM^.e31 - InM^.e03*InM^.e21*InM^.e32 + InM^.e03*InM^.e22*InM^.e31 + InM^.e02*InM^.e21*InM^.e33 + InM^.e01*InM^.e23*InM^.e32) * det;
+  mr.e02 := (InM^.e01*InM^.e12*InM^.e33 + InM^.e02*InM^.e13*InM^.e31 + InM^.e03*InM^.e11*InM^.e32 - InM^.e03*InM^.e12*InM^.e31 - InM^.e02*InM^.e11*InM^.e33 - InM^.e01*InM^.e13*InM^.e32) * det;
+  mr.e03 := (-InM^.e01*InM^.e12*InM^.e23 - InM^.e02*InM^.e13*InM^.e21 - InM^.e03*InM^.e11*InM^.e22 + InM^.e03*InM^.e12*InM^.e21 + InM^.e02*InM^.e11*InM^.e23 + InM^.e01*InM^.e13*InM^.e22) * det;
+  mr.e10 := (-InM^.e10*InM^.e22*InM^.e33 - InM^.e12*InM^.e23*InM^.e30 - InM^.e13*InM^.e20*InM^.e32 + InM^.e13*InM^.e22*InM^.e30 + InM^.e12*InM^.e20*InM^.e33 + InM^.e10*InM^.e23*InM^.e32) * det;
+  mr.e11 := (InM^.e00*InM^.e22*InM^.e33 + InM^.e02*InM^.e23*InM^.e30 + InM^.e03*InM^.e20*InM^.e32 - InM^.e03*InM^.e22*InM^.e30 - InM^.e02*InM^.e20*InM^.e33 - InM^.e00*InM^.e23*InM^.e32) * det;
+  mr.e12 := (-InM^.e00*InM^.e12*InM^.e33 - InM^.e02*InM^.e13*InM^.e30 - InM^.e03*InM^.e10*InM^.e32 + InM^.e03*InM^.e12*InM^.e30 + InM^.e02*InM^.e10*InM^.e33 + InM^.e00*InM^.e13*InM^.e32) * det;
+  mr.e13 := (InM^.e00*InM^.e12*InM^.e23 + InM^.e02*InM^.e13*InM^.e20 + InM^.e03*InM^.e10*InM^.e22 - InM^.e03*InM^.e12*InM^.e20 - InM^.e02*InM^.e10*InM^.e23 - InM^.e00*InM^.e13*InM^.e22) * det;
+  mr.e20 := (InM^.e10*InM^.e21*InM^.e33 + InM^.e11*InM^.e23*InM^.e30 + InM^.e13*InM^.e20*InM^.e31 - InM^.e13*InM^.e21*InM^.e30 - InM^.e11*InM^.e20*InM^.e33 - InM^.e10*InM^.e23*InM^.e31) * det;
+  mr.e21 := (-InM^.e00*InM^.e21*InM^.e33 - InM^.e01*InM^.e23*InM^.e30 - InM^.e03*InM^.e20*InM^.e31 + InM^.e03*InM^.e21*InM^.e30 + InM^.e01*InM^.e20*InM^.e33 + InM^.e00*InM^.e23*InM^.e31) * det;
+  mr.e22 := (InM^.e00*InM^.e11*InM^.e33 + InM^.e01*InM^.e13*InM^.e30 + InM^.e03*InM^.e10*InM^.e31 - InM^.e03*InM^.e11*InM^.e30 - InM^.e01*InM^.e10*InM^.e33 - InM^.e00*InM^.e13*InM^.e31) * det;
+  mr.e23 := (-InM^.e00*InM^.e11*InM^.e23 - InM^.e01*InM^.e13*InM^.e20 - InM^.e03*InM^.e10*InM^.e21 + InM^.e03*InM^.e11*InM^.e20 + InM^.e01*InM^.e10*InM^.e23 + InM^.e00*InM^.e13*InM^.e21) * det;
+  mr.e30 := (-InM^.e10*InM^.e21*InM^.e32 - InM^.e11*InM^.e22*InM^.e30 - InM^.e12*InM^.e20*InM^.e31 + InM^.e12*InM^.e21*InM^.e30 + InM^.e11*InM^.e20*InM^.e32 + InM^.e10*InM^.e22*InM^.e31) * det;
+  mr.e31 := (InM^.e00*InM^.e21*InM^.e32 + InM^.e01*InM^.e22*InM^.e30 + InM^.e02*InM^.e20*InM^.e31 - InM^.e02*InM^.e21*InM^.e30 - InM^.e01*InM^.e20*InM^.e32 - InM^.e00*InM^.e22*InM^.e31) * det;
+  mr.e32 := (-InM^.e00*InM^.e11*InM^.e32 - InM^.e01*InM^.e12*InM^.e30 - InM^.e02*InM^.e10*InM^.e31 + InM^.e02*InM^.e11*InM^.e30 + InM^.e01*InM^.e10*InM^.e32 + InM^.e00*InM^.e12*InM^.e31) * det;
+  mr.e33 := (InM^.e00*InM^.e11*InM^.e22 + InM^.e01*InM^.e12*InM^.e20 + InM^.e02*InM^.e10*InM^.e21 - InM^.e02*InM^.e11*InM^.e20 - InM^.e01*InM^.e10*InM^.e22 - InM^.e00*InM^.e12*InM^.e21) * det;
+  OutM^ := mr;
+end;
+
+{procedure LabMatInv(const OutM, InM: PLabMat);
   var d, di: TLabFloat;
 begin
   di := InM^.e00;
@@ -4196,7 +4228,7 @@ begin
     e21 := e21 + e23 * e31 * di;
     e22 := e22 + e23 * e32 * di;
   end;
-end;
+end;}
 
 procedure LabVec2MatMul3x3(const OutV, InV: PLabVec2; const InM: PLabMat);
   var vr: TLabVec2;

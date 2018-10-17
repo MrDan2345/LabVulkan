@@ -450,6 +450,7 @@ type
     function GetSampleSize: TVkUInt32; inline;
   protected
     procedure ResolveLinks; override;
+    procedure DumpData; override;
   public
     property Inputs: TLabColladaInputList read _Inputs;
     property MaxTime: TVkFloat read GetMaxTime;
@@ -894,7 +895,7 @@ constructor TLabColladaVertexWeights.Create(
   var i, p, n, ic: TVkInt32;
 begin
   inherited Create(XMLNode, AParent);
-  _VCount := StrToIntDef(FindAttribute(XMLNode, 'count'), 0);
+  _VCount := StrToIntDef(AnsiString(FindAttribute(XMLNode, 'count')), 0);
   SetLength(_VertexWeights, _VCount);
   _Inputs := TLabColladaInputList.Create;
   CurNode := XMLNode.FirstChild;
@@ -924,6 +925,7 @@ begin
   begin
     SetLength(_Indices, ic);
     str := CurNode.TextContent;
+    p := 1;
     for i := 0 to ic - 1 do
     begin
       _Indices[i] := StrToIntDef(AnsiString(FindNextValue(str, p)), 0);
@@ -1345,6 +1347,27 @@ begin
       end;
     end;
   end;
+end;
+
+procedure TLabColladaAnimationSampler.DumpData;
+  var i, j: TVkInt32;
+  var val_str: AnsiString;
+begin
+  inherited DumpData;
+  if _DataType <> at_float then Exit;
+  LabLog('Keys[' + IntToStr(Length(_Keys)) + '] {', 2);
+  for i := 0 to High(_Keys) do
+  begin
+    val_str := '{';
+    for j := 0 to _DataStride - 1 do
+    begin
+      val_str += ' ' + FormatFloat('0.###', PLabFloatArr(_Keys[i].Value)^[j]);
+      if j < _DataStride - 1 then val_str += ',';
+    end;
+    val_str += ' }';
+    LabLog('Time = ' + FormatFloat('0.###', _Keys[i].Time) + '; Value = ' + val_str);
+  end;
+  LabLog('}', -2);
 end;
 
 procedure TLabColladaAnimationSampler.SampleData(
@@ -2946,6 +2969,7 @@ begin
       _UpAxis.SetValue(0, 2, 1);
     end;
   end;
+  _UpAxis.SetIdentity;
 end;
 
 destructor TLabColladaAsset.Destroy;

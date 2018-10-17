@@ -14,6 +14,8 @@ uses
   LabDevice,
   LabBuffer,
   LabShader,
+  LabDescriptorSet,
+  LabDescriptorPool,
   LabImageData;
 
 type
@@ -70,8 +72,35 @@ type
   public
     VertexShader: TLabSceneVertexShaderShared;
     PixelShader: TLabScenePixelShaderShared;
+    DescriptorSetLayout: TLabDescriptorSetLayoutShared;
+    DescriptorPool: TLabDescriptorPoolShared;
+    DescriptorSets: TLabDescriptorSetsShared;
+    SkinLocation: TVkUInt32;
+    constructor Create;
+    destructor Destroy; override;
   end;
   TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
+
+  TLabSceneShaderParameterType = (spt_uniform = 0, spt_uniform_dynamic, spt_image);
+  TLabSceneShaderParameter = record
+    ShaderStage: TVkShaderStageFlags;
+    case ParamType: TLabSceneShaderParameterType of
+    spt_uniform, spt_uniform_dynamic: (
+       UniformBufferHandle: TVkBuffer;
+    );
+    spt_image: (
+       ImageViewHandle: TVkImageView;
+       SamplerHandle: TVkSampler;
+       Layout: TVkImageLayout;
+    );
+  end;
+  TLabSceneShaderParameters = array of TLabSceneShaderParameter;
+
+  TLabSceneShaderSkinInfo = record
+    MaxJointWeights: TVkInt32;
+    JointCount: TVkInt32;
+  end;
+  PLabSceneShaderSkinInfo = ^TLabSceneShaderSkinInfo;
 
   TLabSceneShaderFactory = class (TLabClass)
   public
@@ -82,7 +111,7 @@ type
       (Name: 'position'; Value: as_position),
       (Name: 'normal'; Value: as_normal),
       (Name: 'tangent'; Value: as_tangent),
-      (Name: 'binorman'; Value: as_binormal),
+      (Name: 'binormal'; Value: as_binormal),
       (Name: 'color'; Value: as_color),
       (Name: 'texcoord'; Value: as_texcoord)
     );
@@ -91,7 +120,8 @@ type
     class function MakeShader(
       const AScene: TLabScene;
       const Desc: TLabColladaVertexDescriptor;
-      const Material: TLabSceneMaterial
+      const Parameters: TLabSceneShaderParameters;
+      const SkinInfo: PLabSceneShaderSkinInfo = nil
     ): TLabSceneShader;
   end;
 
@@ -146,6 +176,18 @@ type
 
   TLabSceneControllerSkin = class (TLabSceneController)
   public
+    type TSubset = class
+    private
+      _UserData: TObject;
+    public
+      Skin: TLabSceneControllerSkin;
+      WeightData: Pointer;
+      GeometrySubset: TLabSceneGeometry.TSubset;
+      property UserData: TObject read _UserData write _UserData;
+      procedure FreeWeightData;
+      destructor Destroy; override;
+    end;
+    type TSubsetList = specialize TLabList<TSubset>;
     type TJoint = record
       JointName: AnsiString;
       BindPose: TLabMat;
@@ -162,12 +204,16 @@ type
     var _Joints: TJoints;
     var _Weights: TWeights;
     var _MaxWeightCount: TVkInt32;
+    var _Subsets: TSubsetList;
+    var _VertexStride: TVkUInt32;
   public
     property Geometry: TLabSceneGeometry read _Geometry;
     property BindShapeMatrix: TLabMat read _BindShapeMatrix;
     property Joints: TJoints read _Joints;
     property Weights: TWeights read _Weights;
     property MaxWeightCount: TVkInt32 read _MaxWeightCount;
+    property VertexStride: TVkUInt32 read _VertexStride;
+    property Subsets: TSubsetList read _Subsets;
     constructor Create(const AScene: TLabScene; const ColladaSkin: TLabColladaSkin);
     destructor Destroy; override;
   end;
@@ -395,19 +441,31 @@ type
     var _Scene: TLabScene;
     var _Parent: TLabSceneNode;
     var _Name: AnsiString;
+    var _ID: AnsiString;
+    var _SID: AnsiString;
     var _Children: TNodeList;
     var _Transform: TLabMat;
     var _Attachments: TLabSceneNodeAttachmentList;
     var _UserData: TObject;
     procedure SetParent(const Value: TLabSceneNode);
+    function GetTransformLocal: TLabMat;
+    procedure SetTransformLocal(const Value: TLabMat);
+    procedure SetTransform(const Value: TLabMat);
   public
     property Scene: TLabScene read _Scene;
     property Parent: TLabSceneNode read _Parent write SetParent;
     property Name: AnsiString read _Name;
+    property ID: AnsiString read _ID;
+    property SID: AnsiString read _SID;
     property Children: TNodeList read _Children;
-    property Transform: TLabMat read _Transform write _Transform;
+    property Transform: TLabMat read _Transform write SetTransform;
+    property TransformLocal: TLabMat read GetTransformLocal write SetTransformLocal;
     property Attachments: TLabSceneNodeAttachmentList read _Attachments;
     property UserData: TObject read _UserData write _UserData;
+    function FindByName(const NodeName: AnsiString): TLabSceneNode;
+    function FindByID(const NodeID: AnsiString): TLabSceneNode;
+    function FindBySID(const NodeSID: AnsiString): TLabSceneNode;
+    procedure ApplyTransform(const xf: TLabMat); inline;
     constructor Create(
       const AScene: TLabScene;
       const AParent: TLabSceneNode;
@@ -415,6 +473,7 @@ type
     );
     destructor Destroy; override;
   end;
+  TLabSceneNodeList = TLabSceneNode.TNodeList;
 
   TLabScene = class (TLabClass)
   private
@@ -450,7 +509,62 @@ type
     destructor Destroy; override;
   end;
 
+function LabSceneShaderParameterUniform(
+  const UniformBuffer: TVkBuffer;
+  const ShaderStage: TVkShaderStageFlags = (
+    TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+  )
+): TLabSceneShaderParameter; inline;
+function LabSceneShaderParameterUniformDynamic(
+  const UniformBuffer: TVkBuffer;
+  const ShaderStage: TVkShaderStageFlags = (
+    TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+  )
+): TLabSceneShaderParameter; inline;
+function LabSceneShaderParameterImage(
+  const ImageView: TVkImageView;
+  const Sampler: TVkSampler;
+  const ShaderStage: TVkShaderStageFlags = (
+    TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+  );
+  const Layout: TVkImageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+): TLabSceneShaderParameter; inline;
+
 implementation
+
+function LabSceneShaderParameterUniform(
+  const UniformBuffer: TVkBuffer;
+  const ShaderStage: TVkShaderStageFlags
+): TLabSceneShaderParameter;
+begin
+  Result.ParamType := spt_uniform;
+  Result.ShaderStage := ShaderStage;
+  Result.UniformBufferHandle := UniformBuffer;
+end;
+
+function LabSceneShaderParameterUniformDynamic(
+  const UniformBuffer: TVkBuffer;
+  const ShaderStage: TVkShaderStageFlags
+): TLabSceneShaderParameter;
+begin
+  Result.ParamType := spt_uniform_dynamic;
+  Result.ShaderStage := ShaderStage;
+  Result.UniformBufferHandle := UniformBuffer;
+end;
+
+function LabSceneShaderParameterImage(
+  const ImageView: TVkImageView;
+  const Sampler: TVkSampler;
+  const ShaderStage: TVkShaderStageFlags;
+  const Layout: TVkImageLayout
+): TLabSceneShaderParameter;
+begin
+  Result.ParamType := spt_image;
+  Result.ShaderStage := ShaderStage;
+  Result.ImageViewHandle := ImageView;
+  Result.SamplerHandle := Sampler;
+  Result.Layout := Layout;
+end;
 
 class function TLabSceneShaderFactory.GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
   var i: TVkInt32;
@@ -477,8 +591,14 @@ end;
 class function TLabSceneShaderFactory.MakeShader(
   const AScene: TLabScene;
   const Desc: TLabColladaVertexDescriptor;
-  const Material: TLabSceneMaterial
+  const Parameters: TLabSceneShaderParameters;
+  const SkinInfo: PLabSceneShaderSkinInfo
 ): TLabSceneShader;
+  const ParameterDescriptorRemap: array[0..2] of TVkDescriptorType = (
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+  );
   var ShaderCodeVS: String = '#version 400'#$D#$A +
     '#extension GL_ARB_separate_shader_objects : enable'#$D#$A +
     '#extension GL_ARB_shading_language_420pack : enable'#$D#$A +
@@ -506,9 +626,12 @@ class function TLabSceneShaderFactory.MakeShader(
   var StrCode: String;
   var Code: String;
   var Sem: String;
-  var binding, i, loc, loc_in, loc_out: Integer;
+  var binding, i, loc, loc_in, loc_out, samp: Integer;
   var Texture: String;
   var TexCoord: String;
+  var Bindings: array of TVkDescriptorSetLayoutBinding;
+  var DescPoolSizes: array of TVkDescriptorPoolSize;
+  var DescWrites: array of TLabWriteDescriptorSet;
 begin
   Result := TLabSceneShader.Create;
   binding := 0;
@@ -524,6 +647,23 @@ begin
   StrUniforms += '  mat4 wvp;'#$D#$A;
   StrUniforms += '} xf;'#$D#$A;
   Inc(binding);
+  if Assigned(SkinInfo) then
+  begin
+    StrUniforms += 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_skin {'#$D#$A;
+    StrUniforms += '  mat4 joint[' + IntToStr(SkinInfo^.JointCount) + '];'#$D#$A;
+    StrUniforms += '} skin;'#$D#$A;
+    Inc(binding);
+    for i := 0 to SkinInfo^.MaxJointWeights - 1 do
+    begin
+      StrCode += '  mat4 joint' + IntToStr(i) + ' = skin.joint[in_joint_index[' + IntToStr(i) + ']] * in_joint_weight[' + IntToStr(i) + '];'#$D#$A;
+    end;
+    StrCode += '  mat4 joint = ';
+    for i := 0 to SkinInfo^.MaxJointWeights - 1 do
+    begin
+      StrCode += 'joint' + IntToStr(i);
+      if i < SkinInfo^.MaxJointWeights - 1 then StrCode += ' + ' else StrCode += ';'#$D#$A;
+    end;
+  end;
   for i := 0 to High(Desc) do
   begin
     Sem := GetSemanticName(Desc[i].Semantic) + IntToStr(Desc[i].SetNumber);
@@ -532,21 +672,31 @@ begin
     if (Desc[i].Semantic = as_position) then
     begin
       case Desc[i].DataCount of
-        0: StrCode += '  gl_Position = vec4(0, 0, 0, 1);'#$D#$A;
-        1: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 0, 0, 1);'#$D#$A;
-        2: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 0, 1);'#$D#$A;
-        3: StrCode += '  gl_Position = xf.wvp * vec4(in_position0, 1);'#$D#$A;
-        4: StrCode += '  gl_Position = xf.wvp * in_position0;'#$D#$A;
+        1: StrCode += '  vec4 position = vec4(in_position0, 0, 0, 1);'#$D#$A;
+        2: StrCode += '  vec4 position = vec4(in_position0, 0, 1);'#$D#$A;
+        3: StrCode += '  vec4 position = vec4(in_position0, 1);'#$D#$A;
+        4: StrCode += '  vec4 position = in_position0;'#$D#$A;
+        else StrCode += '  vec4 position = vec4(0, 0, 0, 1);'#$D#$A;
       end;
+      if Assigned(SkinInfo) then
+      begin
+        StrCode += '  position = vec4((joint * position).xyz, 1);'#$D#$A;
+      end;
+      StrCode += '  gl_Position = xf.wvp * position;'#$D#$A;
     end
     else if (Desc[i].Semantic = as_normal) then
     begin
       case Desc[i].DataCount of
-        1: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + ', 0, 0);'#$D#$A;
-        2: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + ', 0);'#$D#$A;
-        3: StrCode += '  out_' + Sem + ' = mat3(xf.w) * in_' + Sem + ';'#$D#$A;
-        4: StrCode += '  out_' + Sem + ' = mat3(xf.w) * vec3(in_' + Sem + '.xyz);'#$D#$A;
+        1: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0, 0);'#$D#$A;
+        2: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0);'#$D#$A;
+        3: StrCode += '  vec3 ' + Sem + ' = in_' + Sem + ';'#$D#$A;
+        4: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + '.xyz);'#$D#$A;
       end;
+      if Assigned(SkinInfo) then
+      begin
+        StrCode += '  ' + Sem + ' = mat3(joint) * ' + Sem + ';'#$D#$A;
+      end;
+      StrCode += '  out_' + Sem + ' = mat3(xf.w) * ' + Sem + ';'#$D#$A;
       StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec3 out_' + Sem + ';'#$D#$A;
       Inc(loc_out);
     end
@@ -557,23 +707,36 @@ begin
       StrCode += '  out_' + Sem + ' = in_' + Sem + ';'#$D#$A;
     end;
   end;
+  if Assigned(SkinInfo) then
+  begin
+    Result.SkinLocation := loc_in;
+    StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in uvec' + IntToStr(SkinInfo^.MaxJointWeights) + ' in_joint_index;'#$D#$A;
+    Inc(loc_in);
+    StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in vec' + IntToStr(SkinInfo^.MaxJointWeights) + ' in_joint_weight;'#$D#$A;
+    Inc(loc_in);
+  end;
+
+ // StrAttrOut += 'layout (location = 10) out vec4 tmp_color;';
+ // StrCode += '  tmp_color = vec4(in_joint_weight, 1);'#$D#$A;
+
   Code := LabStrReplace(ShaderCodeVS, '<$uniforms$>', StrUniforms);
   Code := LabStrReplace(Code, '<$attribs$>', StrAttrIn + StrAttrOut);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
   Result.VertexShader := TLabSceneVertexShader.FindOrCreate(AScene, Code);
   StrAttr := '';
+
+//  StrAttr += 'layout (location = 10) in vec4 tmp_color;';
+
   Texture := '';
   TexCoord := '';
-  for i := 0 to Material.Effect.Params.Count - 1 do
-  if Material.Effect.Params[i].ParameterType = pt_sampler then
+  samp := 0;
+  for i := 0 to High(Parameters) do
+  if Parameters[i].ParamType = spt_image then
   begin
-    Texture := 'tex_sampler0';
-    Break;
-  end;
-  if Length(Texture) > 0 then
-  begin
-    StrAttr += 'layout (binding = ' + IntToStr(binding) + ') uniform sampler2D ' + Texture + ';'#$D#$A;
+    if Length(Texture) = 0 then Texture := 'tex_sampler' + IntToStr(samp);
+    StrAttr += 'layout (binding = ' + IntToStr(binding) + ') uniform sampler2D tex_sampler' + IntToStr(samp) + ';'#$D#$A;
     Inc(binding);
+    Inc(samp);
   end;
   loc := 0;
   StrCode := '  vec4 color = vec4(1, 1, 1, 1);'#$D#$A;
@@ -616,10 +779,57 @@ begin
     StrCode += '  color *= texture(' + Texture + ', vec2(' + TexCoord + '.x, -' + TexCoord + '.y));'#$D#$A;
   end;
   StrCode += '  out_color = color;'#$D#$A;
+
+  //StrCode += '  out_color = tmp_color;'#$D#$A;
+
   //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
   Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
-  Result.PixelShader := TLabScenePixelShader.FindOrCreate(ASCene, Code);
+  Result.PixelShader := TLabScenePixelShader.FindOrCreate(AScene, Code);
+  SetLength(Bindings, Length(Parameters));
+  SetLength(DescPoolSizes, Length(Parameters));
+  SetLength(DescWrites, Length(Parameters));
+  binding := 0;
+  for i := 0 to High(Parameters) do
+  begin
+    Bindings[i] := LabDescriptorBinding(
+      binding, ParameterDescriptorRemap[TVkUInt8(Parameters[i].ParamType)], 1, Parameters[i].ShaderStage
+    );
+    DescPoolSizes[i] := LabDescriptorPoolSize(Bindings[i].descriptorType, 1);
+    Inc(binding);
+  end;
+  Result.DescriptorSetLayout := TLabDescriptorSetLayout.Create(AScene.Device, Bindings);
+  Result.DescriptorPool := TLabDescriptorPool.Create(AScene.Device, DescPoolSizes, 1);
+  Result.DescriptorSets := TLabDescriptorSets.Create(
+    AScene.Device, Result.DescriptorPool,
+    [Result.DescriptorSetLayout.Ptr.VkHandle]
+  );
+  binding := 0;
+  for i := 0 to High(Parameters) do
+  begin
+    case Parameters[i].ParamType of
+      spt_uniform: DescWrites[i] := LabWriteDescriptorSetUniformBuffer(
+        Result.DescriptorSets.Ptr.VkHandle[0], binding,
+        [LabDescriptorBufferInfo(Parameters[i].UniformBufferHandle)]
+      );
+      spt_uniform_dynamic: DescWrites[i] := LabWriteDescriptorSetUniformBufferDynamic(
+        Result.DescriptorSets.Ptr.VkHandle[0], binding,
+        [LabDescriptorBufferInfo(Parameters[i].UniformBufferHandle)]
+      );
+      spt_image: DescWrites[i] := LabWriteDescriptorSetImageSampler(
+        Result.DescriptorSets.Ptr.VkHandle[0], binding,
+        [
+          LabDescriptorImageInfo(
+            Parameters[i].Layout,
+            Parameters[i].ImageViewHandle,
+            Parameters[i].SamplerHandle
+          )
+        ]
+      );
+    end;
+    Inc(binding);
+  end;
+  Result.DescriptorSets.Ptr.UpdateSets(DescWrites, []);
 end;
 
 function TLabSceneShaderBase.GetShader: TLabShader;
@@ -846,6 +1056,16 @@ constructor TLabScenePixelShader.Create(const AScene: TLabScene; const ShaderDat
 begin
   inherited Create(AScene, ShaderData, AHash);
   _Shader := TLabPixelShader.Create(_Scene.Device, @ShaderData[0], Length(ShaderData));
+end;
+
+constructor TLabSceneShader.Create;
+begin
+  SkinLocation := -1;
+end;
+
+destructor TLabSceneShader.Destroy;
+begin
+  inherited Destroy;
 end;
 
 destructor TLabSceneMaterialBinding.Destroy;
@@ -1188,21 +1408,46 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabSceneControllerSkin.TSubset.FreeWeightData;
+begin
+  if Assigned(WeightData) then
+  begin
+    FreeMemory(WeightData);
+    WeightData := nil;
+  end;
+end;
+
+destructor TLabSceneControllerSkin.TSubset.Destroy;
+begin
+  FreeAndNil(_UserData);
+  FreeWeightData;
+  inherited Destroy;
+end;
+
 constructor TLabSceneControllerSkin.Create(
   const AScene: TLabScene;
   const ColladaSkin: TLabColladaSkin
 );
-  var i, j: TVkInt32;
+  type TDataIndices = array[0..3] of TVkUInt32;
+  type PDataIndices = ^TDataIndices;
+  type TDataWeights = array[0..3] of TVkFloat;
+  type PDataWeights = ^TDataWeights;
+  var WeightsOffset: TVkUInt32;
+  var Subset: TSubset;
+  var i, j, n, w: TVkInt32;
+  var pi: PDataIndices;
+  var pw: PDataWeights;
 begin
   inherited Create(AScene);
   ColladaSkin.UserData := Self;
-  _BindShapeMatrix := ColladaSkin.BindShapeMatrix;
+  _Subsets := TSubsetList.Create;
+  _BindShapeMatrix := ColladaSkin.BindShapeMatrix;//Swizzle(AScene.AxisRemap);
   _Geometry := TLabSceneGeometry(ColladaSkin.Geometry.UserData);
   SetLength(_Joints, Length(ColladaSkin.Joints.Joints));
   for i := 0 to High(_Joints) do
   begin
     _Joints[i].JointName := AnsiString(ColladaSkin.Joints.Joints[i].JointName);
-    _Joints[i].BindPose := ColladaSkin.Joints.Joints[i].BindPose;
+    _Joints[i].BindPose := ColladaSkin.Joints.Joints[i].BindPose// Swizzle(AScene.AxisRemap);
   end;
   _MaxWeightCount := 0;
   SetLength(_Weights, ColladaSkin.VertexWeights.VCount);
@@ -1216,10 +1461,42 @@ begin
       _Weights[i][j].JointWeight := ColladaSkin.VertexWeights.Weights[i][j].JointWeight;
     end;
   end;
+  if _MaxWeightCount > 4 then _MaxWeightCount := 4;
+  _VertexStride := _MaxWeightCount * (SizeOf(TVkUInt32) + SizeOf(TVkFloat));
+  WeightsOffset := _MaxWeightCount * SizeOf(TVkUInt32);
+  for i := 0 to _Geometry.Subsets.Count - 1 do
+  begin
+    Subset := TSubset.Create;
+    _Subsets.Add(Subset);
+    Subset.Skin := Self;
+    Subset.GeometrySubset := _Geometry.Subsets[i];
+    Subset.WeightData := GetMemory(_Geometry.Subsets[i].VertexCount * _VertexStride);
+    for j := 0 to _Geometry.Subsets[i].VertexCount - 1 do
+    begin
+      n := _Geometry.Subsets[i].Remap[j];
+      pi := Subset.WeightData + _VertexStride * j;
+      pw := PDataWeights(Pointer(pi) + WeightsOffset);
+      for w := 0 to _MaxWeightCount - 1 do
+      begin
+        if Length(_Weights[n]) > w then
+        begin
+          pi^[w] := TVkUInt32(_Weights[n][w].JointIndex);
+          pw^[w] := _Weights[n][w].JointWeight;
+        end
+        else
+        begin
+          pi^[w] := 0;
+          pw^[w] := 0;
+        end;
+      end;
+    end;
+  end;
 end;
 
 destructor TLabSceneControllerSkin.Destroy;
 begin
+  while _Subsets.Count > 0 do _Subsets.Pop.Free;
+  _Subsets.Free;
   inherited Destroy;
 end;
 
@@ -1382,7 +1659,23 @@ procedure TLabSceneAnimationTrack.SampleData(
 );
   var InFloat0, InFloat1: PVkFloat;
   var OutFloat: PVkFloat;
-  var k0, k1, i: TVkInt32;
+  procedure LerpTransforms(const t: TVkFloat);
+    var OutMat, InMat0, InMat1: PLabMat;
+    var r0, r1, out_r: TLabQuat;
+    var t0, t1, out_t: TLabVec3;
+    var s0, s1, out_s: TLabVec3;
+  begin
+    OutMat := PLabMat(OutFloat);
+    InMat0 := PLabMat(InFloat0);
+    InMat1 := PLabMat(InFloat1);
+    LabMatDecompose(@s0, @r0, @t0, InMat0^);
+    LabMatDecompose(@s1, @r1, @t1, InMat1^);
+    out_s := LabLerpVec3(s0, s1, t);
+    out_t := LabLerpVec3(t0, t1, t);
+    out_r := LabQuatSlerp(r0, r1, t);
+    OutMat^ := LabMatScaling(out_s) * LabMatRotation(out_r) * LabMatTranslation(out_t);
+  end;
+  var k0, k1, i, j: TVkInt32;
   var t, tgt0, tgt1: TVkFloat;
 begin
   if not Loop then
@@ -1404,10 +1697,8 @@ begin
   InFloat0 := PVkFloat(_Keys[k0].Value);
   InFloat1 := PVkFloat(_Keys[k1].Value);
   if k0 = k1 then
-  for i := 0 to _SampleCount - 1 do
   begin
-    OutFloat^ := InFloat0^;
-    Inc(OutFloat); Inc(InFloat0);
+    Move(InFloat0^, OutFloat^, _SampleSize * _SampleCount);
     Exit;
   end;
   t := Time mod _Keys[High(_Keys)].Time;
@@ -1422,18 +1713,25 @@ begin
   case _Keys[k0].Interpolation of
     ai_step:
     begin
-      for i := 0 to _SampleCount - 1 do
       begin
-        OutFloat^ := InFloat0^;
-        Inc(OutFloat); Inc(InFloat0);
+        Move(InFloat0^, OutFloat^, _SampleSize * _SampleCount);
+        Exit;
       end;
     end;
     else
     begin
       for i := 0 to _SampleCount - 1 do
       begin
-        OutFloat^ := LabLerpFloat(InFloat0^, InFloat1^, t);
-        Inc(OutFloat); Inc(InFloat0); Inc(InFloat1);
+        if _SampleType = st_transform then
+        begin
+          LerpTransforms(t);
+          Inc(OutFloat, 16); Inc(InFloat0, 16); Inc(InFloat1, 16);
+        end
+        else
+        begin
+          OutFloat^ := LabLerpFloat(InFloat0^, InFloat1^, t);
+          Inc(OutFloat); Inc(InFloat0); Inc(InFloat1);
+        end;
       end;
     end;
   end;
@@ -1441,6 +1739,7 @@ end;
 
 procedure TLabSceneAnimationTrack.Sample(const Time: TVkFloat; const Loop: Boolean);
   var Scaling, Rotation, Translation: TLabVec3;
+  var p: TLabSceneNode;
 begin
   if not Assigned(_Target) then Exit;
   SampleData(_Sample, Time, Loop);
@@ -1460,11 +1759,10 @@ begin
       st_position_z: Translation.z := PLabFloat(_Sample)^;
     end;
     _Target.Transform := LabMatScaling(Scaling) * LabEulerToMat(Rotation) * LabMatTranslation(Translation);
-    Rotation := LabMatToEuler(_Target.Transform);
   end
   else if _SampleType = st_transform then
   begin
-    _Target.Transform := PLabMat(_Sample)^;
+    _Target.TransformLocal := PLabMat(_Sample)^;
   end;
 end;
 
@@ -1477,6 +1775,7 @@ constructor TLabSceneAnimationTrack.Create(
   const position_types: array [0..2] of TSampleType = (st_position_x, st_position_y, st_position_z);
   var prop_name: AnsiString;
   var i: TVkInt32;
+  var m: TLabMat;
 begin
   if (ColladaChannel.Sampler.DataType <> at_float) then Exit;
   if Assigned(ColladaChannel.Target.UserData)
@@ -1506,10 +1805,15 @@ begin
     _Keys[i].Time := ColladaChannel.Sampler.Keys[i]^.Time;
     _Keys[i].Value := _Data + (_SampleSize * i);
     _Keys[i].Interpolation := ColladaChannel.Sampler.Keys[i]^.Interpolation;
-    Move(ColladaChannel.Sampler.Keys[i]^.Value^, _Keys[i].Value^, _SampleSize);
     if _SampleType = st_transform then
     begin
-      PLabMat(_Keys[i].Value)^ := PLabMat(_Keys[i].Value)^.Swizzle(AScene.AxisRemap);
+      m := PLabMat(ColladaChannel.Sampler.Keys[i]^.Value)^;
+      m := m.Transpose;//.Swizzle(AScene.AxisRemap);
+      PLabMat(_Keys[i].Value)^ := m;
+    end
+    else
+    begin
+      Move(ColladaChannel.Sampler.Keys[i]^.Value^, _Keys[i].Value^, _SampleSize);
     end;
   end;
 end;
@@ -1619,6 +1923,86 @@ begin
   if Assigned(_Parent) then _Parent.Children.Add(Self);
 end;
 
+function TLabSceneNode.GetTransformLocal: TLabMat;
+  var xf_i: TLabMat;
+begin
+  if not Assigned(_Parent) then Exit(_Transform);
+  xf_i := _Parent.Transform.Inverse;
+  Result := xf_i * _Transform;
+end;
+
+procedure TLabSceneNode.SetTransformLocal(const Value: TLabMat);
+begin
+  if Assigned(_Parent) then
+  begin
+    Transform := _Parent.Transform * Value;
+  end
+  else
+  begin
+    Transform := Value;
+  end;
+end;
+
+procedure TLabSceneNode.SetTransform(const Value: TLabMat);
+  var xf_d: TLabMat;
+begin
+  if _Children.Count > 0 then
+  begin
+    xf_d := _Transform.Inverse * Value;
+    ApplyTransform(xf_d);
+  end
+  else
+  begin
+    _Transform := Value;
+  end;
+end;
+
+function TLabSceneNode.FindByName(const NodeName: AnsiString): TLabSceneNode;
+  var i: TVkInt32;
+begin
+  if Name = NodeName then Exit(Self);
+  for i := 0 to Children.Count - 1 do
+  begin
+    Result := Children[i].FindByName(NodeName);
+    if Assigned(Result) then Exit;
+  end;
+  Result := nil;
+end;
+
+function TLabSceneNode.FindByID(const NodeID: AnsiString): TLabSceneNode;
+  var i: TVkInt32;
+begin
+  if _ID = NodeID then Exit(Self);
+  for i := 0 to Children.Count - 1 do
+  begin
+    Result := Children[i].FindByID(NodeID);
+    if Assigned(Result) then Exit;
+  end;
+  Result := nil;
+end;
+
+function TLabSceneNode.FindBySID(const NodeSID: AnsiString): TLabSceneNode;
+  var i: TVkInt32;
+begin
+  if _SID = NodeSID then Exit(Self);
+  for i := 0 to Children.Count - 1 do
+  begin
+    Result := Children[i].FindBySID(NodeSID);
+    if Assigned(Result) then Exit;
+  end;
+  Result := nil;
+end;
+
+procedure TLabSceneNode.ApplyTransform(const xf: TLabMat);
+  var i: TVkInt32;
+begin
+  _Transform := _Transform * xf;
+  for i := 0 to _Children.Count - 1 do
+  begin
+    _Children[i].ApplyTransform(xf);
+  end;
+end;
+
 constructor TLabSceneNode.Create(
   const AScene: TLabScene;
   const AParent: TLabSceneNode;
@@ -1629,6 +2013,7 @@ constructor TLabSceneNode.Create(
 begin
   _Scene := AScene;
   _Children := TNodeList.Create;
+  _Transform := LabMatIdentity;
   _Attachments := TLabSceneNodeAttachmentList.Create;
   Parent := AParent;
   if Assigned(ANode) then
@@ -1642,7 +2027,9 @@ begin
     begin
       _Name := AnsiString(ANode.id);
     end;
-    _Transform := ANode.Matrix;
+    _ID := AnsiString(ANode.id);
+    _SID := AnsiString(ANode.sid);
+    TransformLocal := ANode.Matrix.Swizzle(_Scene.AxisRemap);
     for i := 0 to ANode.Children.Count - 1 do
     begin
       if ANode.Children[i] is TLabColladaNode then
@@ -1658,13 +2045,7 @@ begin
         _Attachments.Add(TLabSceneNodeAttachmentController.Create(_Scene, Self, TLabColladaInstanceController(ANode.Children[i])));
       end;
     end;
-    _Transform := _Transform.Swizzle(_Scene.AxisRemap);
-  end
-  else
-  begin
-    _Transform := LabMatIdentity;
   end;
-  if Assigned(_Parent) then _Transform := _Parent.Transform * _Transform;
 end;
 
 destructor TLabSceneNode.Destroy;
@@ -1683,6 +2064,7 @@ procedure TLabScene.Add(const FileName: String);
 begin
   _Path := ExpandFileName(ExtractFileDir(FileName) + PathDelim);
   Collada := TLabColladaParser.Create(FileName);
+  Collada.RootNode.Dump;
   if not Assigned(Collada.RootNode)
   or not Assigned(Collada.RootNode.Scene) then
   begin

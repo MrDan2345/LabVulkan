@@ -99,6 +99,16 @@ type
   end;
   TGeometrySubsetDataWeak = specialize TLabWeakRef<TGeometrySubsetData>;
 
+  TSkinSubsetData = class (TLabClass)
+  private
+    var _Subset: TLabSceneControllerSkin.TSubset;
+  public
+    VertexBufferStaging: TLabBuffer;
+    VertexBuffer: TLabVertexBuffer;
+    constructor Create(const Subset: TLabSceneControllerSkin.TSubset);
+    destructor Destroy; override;
+  end;
+
   TImageData = class (TLabClass)
   private
     var _Image: TLabSceneImage;
@@ -112,26 +122,35 @@ type
     destructor Destroy; override;
     procedure Stage(const Cmd: TLabCommandBuffer);
   end;
+  TImageDataList = specialize TLabList<TImageData>;
 
   TInstanceData = class (TLabClass)
   public
     type TPass = class
-      Subset: TLabSceneGeometry.TSubset;
+      GeomSubset: TLabSceneGeometry.TSubset;
+      SkinSubset: TLabSceneControllerSkin.TSubset;
       Material: TLabSceneMaterial;
       Shader: TLabSceneShaderShared;
-      DescriptorSetLayout: TLabDescriptorSetLayoutShared;
       PipelineLayout: TLabPipelineLayoutShared;
-      DescriptorPool: TLabDescriptorPoolShared;
-      DescriptorSets: TLabDescriptorSetsShared;
-      Image: TImageData;
+      Images: TImageDataList;
       Pipeline: TLabPipelineShared;
+      constructor Create;
+      destructor Destroy; override;
     end;
     type TPassList = specialize TLabList<TPass>;
   private
     var _Attachment: TLabSceneNodeAttachment;
-    procedure SetupGeometry(const Geom: TLabSceneGeometry; const MaterialBindings: TLabSceneMaterialBindingList);
+    procedure SetupGeometry(
+      const Geom: TLabSceneGeometry;
+      const Skin: TLabSceneControllerSkin;
+      const MaterialBindings: TLabSceneMaterialBindingList
+    );
   public
     Passes: TPassList;
+    JointUniformBuffer: TLabUniformBuffer;
+    JointUniforms: PLabMatArr;
+    Joints: TLabSceneNodeList;
+    procedure UpdateSkinTransforms;
     constructor Create(const Attachment: TLabSceneNodeAttachmentGeometry);
     constructor Create(const Attachment: TLabSceneNodeAttachmentController);
     destructor Destroy; override;
@@ -207,6 +226,45 @@ begin
   FreeAndNil(VertexBuffer);
   FreeAndNil(IndexBufferStaging);
   FreeAndNil(IndexBuffer);
+  inherited Destroy;
+end;
+
+constructor TSkinSubsetData.Create(const Subset: TLabSceneControllerSkin.TSubset);
+  const FormatMap: array[1..4] of array[0..1] of TVkFormat = (
+    (VK_FORMAT_R32_UINT, VK_FORMAT_R32_SFLOAT),
+    (VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32_SFLOAT),
+    (VK_FORMAT_R32G32B32_UINT, VK_FORMAT_R32G32B32_SFLOAT),
+    (VK_FORMAT_R32G32B32A32_UINT, VK_FORMAT_R32G32B32A32_SFLOAT)
+  );
+  var Attribs: array[0..1] of TLabVertexBufferAttributeFormat;
+  var map: Pointer;
+begin
+  _Subset := Subset;
+  Attribs[0] := LabVertexBufferAttributeFormat(FormatMap[Subset.Skin.MaxWeightCount][0], 0);
+  Attribs[1] := LabVertexBufferAttributeFormat(FormatMap[Subset.Skin.MaxWeightCount][1], Subset.Skin.MaxWeightCount * SizeOf(TVkUInt32));
+  VertexBuffer := TLabVertexBuffer.Create(
+    App.Device,
+    Subset.Skin.VertexStride * Subset.GeometrySubset.VertexCount, Subset.Skin.VertexStride, Attribs,
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexBufferStaging := TLabBuffer.Create(
+    App.Device, VertexBuffer.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  if VertexBufferStaging.Map(map) then
+  begin
+    Move(Subset.WeightData^, map^, VertexBuffer.Size);
+    VertexBufferStaging.Unmap;
+  end;
+  Subset.FreeWeightData;
+end;
+
+destructor TSkinSubsetData.Destroy;
+begin
+  FreeAndNil(VertexBufferStaging);
+  FreeAndNil(VertexBuffer);
   inherited Destroy;
 end;
 
@@ -369,18 +427,46 @@ begin
   );
 end;
 
+constructor TInstanceData.TPass.Create;
+begin
+  Images := TImageDataList.Create;
+end;
+
+destructor TInstanceData.TPass.Destroy;
+begin
+  Images.Free;
+  inherited Destroy;
+end;
+
 procedure TInstanceData.SetupGeometry(
   const Geom: TLabSceneGeometry;
+  const Skin: TLabSceneControllerSkin;
   const MaterialBindings: TLabSceneMaterialBindingList
 );
-  var i, j: Integer;
+  var i, j, pc: Integer;
   var r_s: TLabSceneGeometry.TSubset;
   var Pass: TPass;
+  var Image: TImageData;
+  var Params: TLabSceneShaderParameters;
+  var SkinInfo: TLabSceneShaderSkinInfo;
+  var si_ptr: PLabSceneShaderSkinInfo;
 begin
+  if Assigned(Skin) then
+  begin
+    si_ptr := @SkinInfo;
+    SkinInfo.JointCount := Length(Skin.Joints);
+    SkinInfo.MaxJointWeights := Skin.MaxWeightCount;
+  end
+  else
+  begin
+    si_ptr := nil;
+  end;
   for i := 0 to Geom.Subsets.Count - 1 do
   begin
     r_s := Geom.Subsets[i];
     Pass := TPass.Create;
+    pc := 1;
+    if Assigned(Skin) then Inc(pc);
     for j := 0 to MaterialBindings.Count - 1 do
     if r_s.Material = MaterialBindings[j].Symbol then
     begin
@@ -392,85 +478,62 @@ begin
       for j := 0 to Pass.Material.Effect.Params.Count - 1 do
       if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
       begin
-        Pass.Image := TImageData(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
-        Break;
+        Inc(pc);
       end;
     end;
-    Pass.Subset := r_s;
-    Pass.Shader := TLabSceneShaderFactory.MakeShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Pass.Material);
-    if Assigned(Pass.Image) then
+    SetLength(Params, pc);
+    pc := 0;
+    Params[pc] := LabSceneShaderParameterUniformDynamic(
+      App.UniformBuffer.Ptr.VkHandle, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    );
+    Inc(pc);
+    if Assigned(Skin) then
     begin
-      Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-        App.Device,
-        [
-          LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-          LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
-        ]
+      Params[pc] := LabSceneShaderParameterUniform(
+        JointUniformBuffer.VkHandle, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
       );
-      Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
-      Pass.DescriptorPool := TLabDescriptorPool.Create(
-        App.Device,
-        [
-          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1),
-          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
-        ],
-        1
-      );
-      Pass.DescriptorSets := TLabDescriptorSets.Create(
-        App.Device, Pass.DescriptorPool,
-        [Pass.DescriptorSetLayout.Ptr.VkHandle]
-      );
-      Pass.DescriptorSets.Ptr.UpdateSets(
-        [
-          LabWriteDescriptorSetUniformBufferDynamic(
-            Pass.DescriptorSets.Ptr.VkHandle[0], 0,
-            [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
-          ),
-          LabWriteDescriptorSetImageSampler(
-            Pass.DescriptorSets.Ptr.VkHandle[0], 1,
-            [
-              LabDescriptorImageInfo(
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                Pass.Image.TextureView.Ptr.VkHandle,
-                Pass.Image.TextureSampler.Ptr.VkHandle
-              )
-            ]
-          )
-        ],
-        []
-      );
+      Inc(pc);
+    end;
+    if Assigned(Pass.Material) then
+    begin
+      for j := 0 to Pass.Material.Effect.Params.Count - 1 do
+      if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
+      begin
+        Image := TImageData(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
+        Pass.Images.Add(Image);
+        Params[pc] := LabSceneShaderParameterImage(
+          Image.TextureView.Ptr.VkHandle,
+          Image.TextureSampler.Ptr.VkHandle,
+          TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+        );
+      end;
+    end;
+    Pass.GeomSubset := r_s;
+    if Assigned(Skin) then
+    begin
+      Pass.SkinSubset := Skin.Subsets[i];
     end
     else
     begin
-      Pass.DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-        App.Device,
-        [
-          LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))
-        ]
-      );
-      Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.DescriptorSetLayout]);
-      Pass.DescriptorPool := TLabDescriptorPool.Create(
-        App.Device,
-        [
-          LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
-        ],
-        1
-      );
-      Pass.DescriptorSets := TLabDescriptorSets.Create(
-        App.Device, Pass.DescriptorPool,
-        [Pass.DescriptorSetLayout.Ptr.VkHandle]
-      );
-      Pass.DescriptorSets.Ptr.UpdateSets(
-        [
-          LabWriteDescriptorSetUniformBufferDynamic(
-            Pass.DescriptorSets.Ptr.VkHandle[0], 0,
-            [LabDescriptorBufferInfo(App.UniformBuffer.Ptr.VkHandle)]
-          )
-        ],
-        []
-      );
+      Pass.SkinSubset := nil;
     end;
+    Pass.Shader := TLabSceneShaderFactory.MakeShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Params, si_ptr);
+    Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.Shader.Ptr.DescriptorSetLayout]);
     Passes.Add(Pass);
+  end;
+end;
+
+procedure TInstanceData.UpdateSkinTransforms;
+  var Skin: TLabSceneControllerSkin;
+  var i: TVkInt32;
+begin
+  if not (_Attachment is TLabSceneNodeAttachmentController)
+  or not (TLabSceneNodeAttachmentController(_Attachment).Controller is TLabSceneControllerSkin) then Exit;
+  Skin := TLabSceneControllerSkin(TLabSceneNodeAttachmentController(_Attachment).Controller);
+  for i := 0 to Joints.Count - 1 do
+  begin
+    //JointUniforms^[i] := Joints[i].Transform * Skin.Joints[i].BindPose * Skin.BindShapeMatrix;
+    JointUniforms^[i] := Skin.BindShapeMatrix * Skin.Joints[i].BindPose;// * Joints[i].Transform.Transpose;
   end;
 end;
 
@@ -478,23 +541,49 @@ constructor TInstanceData.Create(const Attachment: TLabSceneNodeAttachmentGeomet
 begin
   _Attachment := Attachment;
   Passes := TPassList.Create;
-  SetupGeometry(Attachment.Geometry, Attachment.MaterialBindings);
+  SetupGeometry(Attachment.Geometry, nil, Attachment.MaterialBindings);
 end;
 
 constructor TInstanceData.Create(
   const Attachment: TLabSceneNodeAttachmentController
 );
   var Skin: TLabSceneControllerSkin;
+  var i: TVkInt32;
 begin
   _Attachment := Attachment;
   Passes := TPassList.Create;
   if not (Attachment.Controller is TLabSceneControllerSkin) then Exit;
   Skin := TLabSceneControllerSkin(Attachment.Controller);
-  SetupGeometry(Skin.Geometry, Attachment.MaterialBindings);
+  JointUniformBuffer := TLabUniformBuffer.Create(
+    App.Device, SizeOf(TLabMat) * Length(Skin.Joints)
+  );
+  JointUniformBuffer.Map(JointUniforms);
+  Joints := TLabSceneNodeList.Create;
+  Joints.Allocate(Length(Skin.Joints));
+  for i := 0 to Joints.Count - 1 do
+  begin
+    Joints[i] := Attachment.Skeleton.FindBySID(Skin.Joints[i].JointName);
+    if not Assigned(Joints[i]) then
+    begin
+      Joints[i] := Attachment.Skeleton.FindByID(Skin.Joints[i].JointName);
+      if not Assigned(Joints[i]) then
+      begin
+        Joints[i] := Attachment.Skeleton.FindByName(Skin.Joints[i].JointName);
+      end;
+    end;
+    JointUniforms^[i] := LabMatIdentity;
+  end;
+  SetupGeometry(Skin.Geometry, Skin, Attachment.MaterialBindings);
 end;
 
 destructor TInstanceData.Destroy;
 begin
+  FreeAndNil(Joints);
+  if Assigned(JointUniformBuffer) then
+  begin
+    JointUniformBuffer.Unmap;
+    FreeAndNil(JointUniformBuffer);
+  end;
   while Passes.Count > 0 do Passes.Pop.Free;
   Passes.Free;
   inherited Destroy;
@@ -676,7 +765,8 @@ procedure TLabApp.ProcessScene;
   var r_g: TLabSceneGeometry;
   var r_s: TLabSceneGeometry.TSubset;
   var r_i: TLabSceneImage;
-  var i_i, i_g, i_s: Integer;
+  var r_c: TLabSceneControllerSkin;
+  var i_i, i_g, i_s, i_c: Integer;
 begin
   for i_g := 0 to Scene.Geometries.Count - 1 do
   begin
@@ -685,6 +775,15 @@ begin
     begin
       r_s := r_g.Subsets[i_s];
       r_s.UserData := TGeometrySubsetData.Create(r_s);
+    end;
+  end;
+  for i_c := 0 to Scene.Controllers.Count - 1 do
+  if Scene.Controllers[i_c] is TLabSceneControllerSkin then
+  begin
+    r_c := TLabSceneControllerSkin(Scene.Controllers[i_c]);
+    for i_s := 0 to r_c.Subsets.Count - 1 do
+    begin
+      r_c.Subsets[i_s].UserData := TSkinSubsetData.Create(r_c.Subsets[i_s]);
     end;
   end;
   for i_i := 0 to Scene.Images.Count - 1 do
@@ -708,8 +807,9 @@ end;
 
 procedure TLabApp.UpdateTransforms;
   procedure UpdateNode(const Node: TLabSceneNode);
-    var i_n: Integer;
+    var i_n, i: Integer;
     var nd: TNodeData;
+    var id: TInstanceData;
     var Clip: TLabMat;
     var fov: TVkFloat;
   begin
@@ -721,7 +821,7 @@ procedure TLabApp.UpdateTransforms;
       Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 20);
       //View := LabMatView(LabVec3(0, 3, -14), LabVec3(0, 0.7, 0), LabVec3(0, 1, 0));
       View := LabMatView(LabVec3(0, 5, -15), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
-      World := Node.Transform;// * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+      World := Node.Transform{ * LabMatRotationZ(LabPi)} * LabMatRotationX(LabHalfPi);// * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
       Clip := LabMat(
         1, 0, 0, 0,
         0, -1, 0, 0,
@@ -733,6 +833,13 @@ procedure TLabApp.UpdateTransforms;
     for i_n := 0 to Node.Children.Count - 1 do
     begin
       UpdateNode(Node.Children[i_n]);
+    end;
+    for i := 0 to Node.Attachments.Count - 1 do
+    if (Node.Attachments[i] is TLabSceneNodeAttachmentController)
+    and Assigned(Node.Attachments[i].UserData)
+    and (Node.Attachments[i].UserData is TInstanceData) then
+    begin
+      TInstanceData(Node.Attachments[i].UserData).UpdateSkinTransforms;
     end;
   end;
 begin
@@ -747,11 +854,12 @@ begin
 end;
 
 procedure TLabApp.TransferBuffers;
-  var i_g, i_s, i_i: Integer;
+  var i_g, i_s, i_i, i_c: Integer;
   var r_g: TLabSceneGeometry;
-  var r_s: TLabSceneGeometry.TSubset;
+  var r_c: TLabSceneControllerSkin;
   var r_i: TLabSceneImage;
-  var subset_data: TGeometrySubsetData;
+  var gsd: TGeometrySubsetData;
+  var ssd: TSkinSubsetData;
   var image_data: TImageData;
 begin
   CmdBuffer.Ptr.RecordBegin;
@@ -760,17 +868,30 @@ begin
     r_g := Scene.Geometries[i_g];
     for i_s := 0 to r_g.Subsets.Count - 1 do
     begin
-      r_s := r_g.Subsets[i_s];
-      subset_data := TGeometrySubsetData(r_s.UserData);
+      gsd := TGeometrySubsetData(r_g.Subsets[i_s].UserData);
       CmdBuffer.Ptr.CopyBuffer(
-        subset_data.VertexBufferStaging.VkHandle,
-        subset_data.VertexBuffer.VkHandle,
-        LabBufferCopy(subset_data.VertexBufferStaging.Size)
+        gsd.VertexBufferStaging.VkHandle,
+        gsd.VertexBuffer.VkHandle,
+        LabBufferCopy(gsd.VertexBufferStaging.Size)
       );
       CmdBuffer.Ptr.CopyBuffer(
-        subset_data.IndexBufferStaging.VkHandle,
-        subset_data.IndexBuffer.VkHandle,
-        LabBufferCopy(subset_data.IndexBufferStaging.Size)
+        gsd.IndexBufferStaging.VkHandle,
+        gsd.IndexBuffer.VkHandle,
+        LabBufferCopy(gsd.IndexBufferStaging.Size)
+      );
+    end;
+  end;
+  for i_c := 0 to Scene.Controllers.Count - 1 do
+  if Scene.Controllers[i_c] is TLabSceneControllerSkin then
+  begin
+    r_c := TLabSceneControllerSkin(Scene.Controllers[i_c]);
+    for i_s := 0 to r_c.Subsets.Count - 1 do
+    begin
+      ssd := TSkinSubsetData(r_c.Subsets[i_s].UserData);
+      CmdBuffer.Ptr.CopyBuffer(
+        ssd.VertexBufferStaging.VkHandle,
+        ssd.VertexBuffer.VkHandle,
+        LabBufferCopy(ssd.VertexBufferStaging.Size)
       );
     end;
   end;
@@ -788,10 +909,19 @@ begin
     r_g := Scene.Geometries[i_g];
     for i_s := 0 to r_g.Subsets.Count - 1 do
     begin
-      r_s := r_g.Subsets[i_s];
-      subset_data := TGeometrySubsetData(r_s.UserData);
-      FreeAndNil(subset_data.VertexBufferStaging);
-      FreeAndNil(subset_data.IndexBufferStaging);
+      gsd := TGeometrySubsetData(r_g.Subsets[i_s].UserData);
+      FreeAndNil(gsd.VertexBufferStaging);
+      FreeAndNil(gsd.IndexBufferStaging);
+    end;
+  end;
+  for i_c := 0 to Scene.Controllers.Count - 1 do
+  if Scene.Controllers[i_c] is TLabSceneControllerSkin then
+  begin
+    r_c := TLabSceneControllerSkin(Scene.Controllers[i_c]);
+    for i_s := 0 to r_c.Subsets.Count - 1 do
+    begin
+      ssd := TSkinSubsetData(r_c.Subsets[i_s].UserData);
+      FreeAndNil(ssd.VertexBufferStaging);
     end;
   end;
   for i_i := 0 to Scene.Images.Count - 1 do
@@ -856,12 +986,15 @@ procedure TLabApp.Loop;
   var cur_pipeline: TLabGraphicsPipeline;
   procedure RenderNode(const Node: TLabSceneNode);
     var nd: TNodeData;
-    var i, i_a, i_s, i_p: Integer;
-    var r_a: TLabSceneNodeAttachmentGeometry;
-    var r_s: TLabSceneGeometry.TSubset;
+    var i, i_a, i_p: Integer;
+    var r_sg: TLabSceneGeometry.TSubset;
+    var r_ss: TLabSceneControllerSkin.TSubset;
     var r_p: TInstanceData.TPass;
     var inst_data: TInstanceData;
-    var subset_data: TGeometrySubsetData;
+    var geom_data: TGeometrySubsetData;
+    var skin_data: TSkinSubsetData;
+    var vertex_state: TLabPipelineVertexInputState;
+    var attrib_desc: TLabVertexInputAttributeDescriptionArr;
   begin
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
@@ -873,10 +1006,40 @@ procedure TLabApp.Loop;
       for i_p := 0 to inst_data.Passes.Count - 1 do
       begin
         r_p := inst_data.Passes[i_p];
-        r_s := r_p.Subset;
-        subset_data := TGeometrySubsetData(r_s.UserData);
+        r_sg := r_p.GeomSubset;
+        r_ss := r_p.SkinSubset;
+        geom_data := TGeometrySubsetData(r_sg.UserData);
+        if Assigned(r_ss) then skin_data := TSkinSubsetData(r_ss.UserData);
         if not r_p.Pipeline.IsValid then
         begin
+          if Assigned(r_ss) then
+          begin
+            SetLength(attrib_desc, geom_data.VertexBuffer.AttributeCount + skin_data.VertexBuffer.AttributeCount);
+            for i := 0 to geom_data.VertexBuffer.AttributeCount - 1 do
+            begin
+              attrib_desc[i] := geom_data.VertexBuffer.MakeAttributeDesc(i, i, 0);
+            end;
+            for i := 0 to skin_data.VertexBuffer.AttributeCount - 1 do
+            begin
+              attrib_desc[geom_data.VertexBuffer.AttributeCount + i] := (
+                skin_data.VertexBuffer.MakeAttributeDesc(i, geom_data.VertexBuffer.AttributeCount + i, 1)
+              );
+            end;
+            vertex_state := LabPipelineVertexInputState(
+              [
+                geom_data.VertexBuffer.MakeBindingDesc(0),
+                skin_data.VertexBuffer.MakeBindingDesc(1)
+              ],
+              attrib_desc
+            );
+          end
+          else
+          begin
+            vertex_state := LabPipelineVertexInputState(
+              [geom_data.VertexBuffer.MakeBindingDesc(0)],
+              geom_data.VertexBuffer.MakeAttributeDescArr(0, 0)
+            );
+          end;
           r_p.Pipeline := TLabGraphicsPipeline.FindOrCreate(
             Device, PipelineCache, r_p.PipelineLayout.Ptr,
             [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
@@ -884,15 +1047,12 @@ procedure TLabApp.Loop;
             RenderPass.Ptr, 0,
             LabPipelineViewportState(),
             LabPipelineInputAssemblyState(),
-            LabPipelineVertexInputState(
-              [subset_data.VertexBuffer.MakeBindingDesc(0)],
-              subset_data.VertexBuffer.MakeAttributeDescArr(0, 0)
-            ),
+            vertex_state,
             LabPipelineRasterizationState(
               VK_FALSE, VK_FALSE,
               VK_POLYGON_MODE_FILL,
               TVkFlags(VK_CULL_MODE_BACK_BIT),
-              VK_FRONT_FACE_COUNTER_CLOCKWISE
+              VK_FRONT_FACE_CLOCKWISE
             ),
             LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
             LabPipelineMultisampleState(SampleCount),
@@ -910,11 +1070,24 @@ procedure TLabApp.Loop;
         CmdBuffer.Ptr.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
           r_p.PipelineLayout.Ptr,
-          0, 1, r_p.DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
+          0, 1, r_p.Shader.Ptr.DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
         );
-        CmdBuffer.Ptr.BindVertexBuffers(0, [subset_data.VertexBuffer.VkHandle], [0]);
-        CmdBuffer.Ptr.BindIndexBuffer(subset_data.IndexBuffer.VkHandle, 0, subset_data.IndexBuffer.IndexType);
-        CmdBuffer.Ptr.DrawIndexed(subset_data.IndexBuffer.IndexCount);
+        if Assigned(r_ss) then
+        begin
+          CmdBuffer.Ptr.BindVertexBuffers(
+            0,
+            [
+              geom_data.VertexBuffer.VkHandle,
+              skin_data.VertexBuffer.VkHandle
+            ], [0, 0]
+          );
+        end
+        else
+        begin
+          CmdBuffer.Ptr.BindVertexBuffers(0, [geom_data.VertexBuffer.VkHandle], [0]);
+        end;
+        CmdBuffer.Ptr.BindIndexBuffer(geom_data.IndexBuffer.VkHandle, 0, geom_data.IndexBuffer.IndexType);
+        CmdBuffer.Ptr.DrawIndexed(geom_data.IndexBuffer.IndexCount);
       end;
     end;
     for i := 0 to Node.Children.Count - 1 do
@@ -940,8 +1113,11 @@ begin
     SwapchainDestroy;
     SwapchainCreate;
   end;
-  t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 8) / 8;
-  Scene.DefaultAnimationClip.Sample(t, True);
+  if Scene.DefaultAnimationClip.MaxTime > LabEPS then
+  begin
+    t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 8) / 8;
+    Scene.DefaultAnimationClip.Sample(t, True);
+  end;
   UpdateTransforms;
   CmdBuffer.Ptr.RecordBegin();
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
