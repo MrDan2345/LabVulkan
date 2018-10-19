@@ -464,6 +464,8 @@ function LabVec3(const x, y, z: TLabFloat): TLabVec3; inline; overload;
 function LabVec3(const v2: TLabVec2; const z: TLabFloat): TLabVec3; inline; overload;
 function LabVec4: TLabVec4; inline;
 function LabVec4(const x, y, z, w: TLabFloat): TLabVec4; inline;
+function LabVec4(const v2: TLabVec2; const z, w: TLabFloat): TLabVec4; inline;
+function LabVec4(const v3: TLabVec3; const w: TLabFloat): TLabVec4; inline;
 function LabRotation2: TLabRotation2; inline; overload;
 function LabRotation2(const s, c: TLabFloat): TLabRotation2; inline; overload;
 function LabRotation2(const Angle: TLabFloat): TLabRotation2; inline; overload;
@@ -2063,6 +2065,16 @@ end;
 function LabVec4(const x, y, z, w: TLabFloat): TLabVec4;
 begin
   Result.x := x; Result.y := y; Result.z := z; Result.w := w;
+end;
+
+function LabVec4(const v2: TLabVec2; const z, w: TLabFloat): TLabVec4;
+begin
+  Result.x := v2.x; Result.y := v2.y; Result.z := z; Result.w := w;
+end;
+
+function LabVec4(const v3: TLabVec3; const w: TLabFloat): TLabVec4;
+begin
+  Result.x := v3.x; Result.y := v3.y; Result.z := v3.z; Result.w := w;
 end;
 
 function LabRotation2: TLabRotation2;

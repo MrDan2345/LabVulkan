@@ -100,7 +100,8 @@ type
       const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
     ): TVkUInt32;
     class function Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
-    class function FindOrCreate(const ADevice: TLabDeviceShared;
+    class function FindOrCreate(
+      const ADevice: TLabDeviceShared;
       const APipelineCache: TLabPipelineCacheShared;
       const APipelineLayout: TLabPipelineLayout;
       const ADynamicStates: array of TVkDynamicState;

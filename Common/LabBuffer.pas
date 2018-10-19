@@ -114,7 +114,8 @@ type
   public
     constructor Create(
       const ADevice: TLabDeviceShared;
-      const ABufferSize: TVkDeviceSize
+      const ABufferSize: TVkDeviceSize;
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
     );
   end;
   TLabUniformBufferShared = specialize TLabSharedRef<TLabUniformBuffer>;
@@ -360,10 +361,14 @@ end;
 
 constructor TLabUniformBuffer.Create(
   const ADevice: TLabDeviceShared;
-  const ABufferSize: TVkDeviceSize
+  const ABufferSize: TVkDeviceSize;
+  const AMemoryFlags: TVkFlags
 );
 begin
-  inherited Create(ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), []);
+  inherited Create(
+    ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), [],
+    VK_SHARING_MODE_EXCLUSIVE, AMemoryFlags
+  );
 end;
 
 function LabVertexBufferAttributeFormat(

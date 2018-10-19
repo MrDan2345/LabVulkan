@@ -28,7 +28,7 @@ type
     type TShaderList = specialize TLabList<TLabSceneShaderBase>;
     class var _List: TShaderList;
     class var _ListSort: Boolean;
-    var _Scene: TLabScene;
+    var _Device: TLabDeviceShared;
     var _Hash: TVkUInt32;
     function GetShader: TLabShader; inline;
   protected
@@ -43,28 +43,28 @@ type
   public
     class constructor CreateClass;
     class destructor DestroyClass;
-    property Scene: TLabScene read _Scene;
+    property Device: TLabDeviceShared read _Device;
     property Hash: TVkUInt32 read _Hash;
     property Shader: TLabShader read GetShader;
-    constructor Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32 = 0); virtual;
-    constructor Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32); virtual;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32 = 0); virtual;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32); virtual;
     destructor Destroy; override;
   end;
   TLabSceneShaderBaseShared = specialize TLabSharedRef<TLabSceneShaderBase>;
 
   TLabSceneVertexShader = class (TLabSceneShaderBase)
   public
-    class function FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabSceneVertexShader;
-    constructor Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
-    constructor Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32); override;
+    class function FindOrCreate(const ADevice: TLabDeviceShared; const ShaderCode: String): TLabSceneVertexShader;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32); override;
   end;
   TLabSceneVertexShaderShared = specialize TLabSharedRef<TLabSceneVertexShader>;
 
   TLabScenePixelShader = class (TLabSceneShaderBase)
   public
-    class function FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabScenePixelShader;
-    constructor Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
-    constructor Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32); override;
+    class function FindOrCreate(const ADevice: TLabDeviceShared; const ShaderCode: String): TLabScenePixelShader;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32 = 0); override;
+    constructor Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32); override;
   end;
   TLabScenePixelShaderShared = specialize TLabSharedRef<TLabScenePixelShader>;
 
@@ -118,9 +118,9 @@ type
     class function GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
     class function GetSemanticValue(const SemanticName: String): TLabColladaVertexAttributeSemantic;
     class function MakeShader(
-      const AScene: TLabScene;
-      const Desc: TLabColladaVertexDescriptor;
-      const Parameters: TLabSceneShaderParameters;
+      const ADevice: TLabDeviceShared;
+      const Desc: array of TLabColladaVertexAttribute;
+      const Parameters: array of TLabSceneShaderParameter;
       const SkinInfo: PLabSceneShaderSkinInfo = nil
     ): TLabSceneShader;
   end;
@@ -466,6 +466,7 @@ type
     function FindByID(const NodeID: AnsiString): TLabSceneNode;
     function FindBySID(const NodeSID: AnsiString): TLabSceneNode;
     procedure ApplyTransform(const xf: TLabMat); inline;
+    procedure OverrideTransform(const xf: TLabMat); inline;
     constructor Create(
       const AScene: TLabScene;
       const AParent: TLabSceneNode;
@@ -589,9 +590,9 @@ begin
 end;
 
 class function TLabSceneShaderFactory.MakeShader(
-  const AScene: TLabScene;
-  const Desc: TLabColladaVertexDescriptor;
-  const Parameters: TLabSceneShaderParameters;
+  const ADevice: TLabDeviceShared;
+  const Desc: array of TLabColladaVertexAttribute;
+  const Parameters: array of TLabSceneShaderParameter;
   const SkinInfo: PLabSceneShaderSkinInfo
 ): TLabSceneShader;
   const ParameterDescriptorRemap: array[0..2] of TVkDescriptorType = (
@@ -722,7 +723,7 @@ begin
   Code := LabStrReplace(ShaderCodeVS, '<$uniforms$>', StrUniforms);
   Code := LabStrReplace(Code, '<$attribs$>', StrAttrIn + StrAttrOut);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
-  Result.VertexShader := TLabSceneVertexShader.FindOrCreate(AScene, Code);
+  Result.VertexShader := TLabSceneVertexShader.FindOrCreate(ADevice, Code);
   StrAttr := '';
 
 //  StrAttr += 'layout (location = 10) in vec4 tmp_color;';
@@ -785,7 +786,7 @@ begin
   //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
   Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
-  Result.PixelShader := TLabScenePixelShader.FindOrCreate(AScene, Code);
+  Result.PixelShader := TLabScenePixelShader.FindOrCreate(ADevice, Code);
   SetLength(Bindings, Length(Parameters));
   SetLength(DescPoolSizes, Length(Parameters));
   SetLength(DescWrites, Length(Parameters));
@@ -798,10 +799,10 @@ begin
     DescPoolSizes[i] := LabDescriptorPoolSize(Bindings[i].descriptorType, 1);
     Inc(binding);
   end;
-  Result.DescriptorSetLayout := TLabDescriptorSetLayout.Create(AScene.Device, Bindings);
-  Result.DescriptorPool := TLabDescriptorPool.Create(AScene.Device, DescPoolSizes, 1);
+  Result.DescriptorSetLayout := TLabDescriptorSetLayout.Create(ADevice, Bindings);
+  Result.DescriptorPool := TLabDescriptorPool.Create(ADevice, DescPoolSizes, 1);
   Result.DescriptorSets := TLabDescriptorSets.Create(
-    AScene.Device, Result.DescriptorPool,
+    ADevice, Result.DescriptorPool,
     [Result.DescriptorSetLayout.Ptr.VkHandle]
   );
   binding := 0;
@@ -968,9 +969,9 @@ begin
   _List.Free;
 end;
 
-constructor TLabSceneShaderBase.Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32);
+constructor TLabSceneShaderBase.Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32);
 begin
-  _Scene := AScene;
+  _Device := ADevice;
   if (AHash = 0) then
   begin
     _Hash := MakeHash(ShaderCode)
@@ -983,9 +984,9 @@ begin
   _ListSort := True;
 end;
 
-constructor TLabSceneShaderBase.Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
+constructor TLabSceneShaderBase.Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
 begin
-  _Scene := AScene;
+  _Device := ADevice;
   _Hash := AHash;
   _List.Add(Self);
   _ListSort := True;
@@ -998,7 +999,7 @@ begin
   inherited Destroy;
 end;
 
-class function TLabSceneVertexShader.FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabSceneVertexShader;
+class function TLabSceneVertexShader.FindOrCreate(const ADevice: TLabDeviceShared; const ShaderCode: String): TLabSceneVertexShader;
   var shader_hash: TVkUInt32;
   var shader_data: TLabByteArr;
 begin
@@ -1008,27 +1009,27 @@ begin
   shader_data := FindCache(shader_hash);
   if Length(shader_data) > 0 then
   begin
-    Result := TLabSceneVertexShader.Create(AScene, shader_data, shader_hash);
+    Result := TLabSceneVertexShader.Create(ADevice, shader_data, shader_hash);
     Exit;
   end;
-  Result := TLabSceneVertexShader.Create(AScene, ShaderCode, shader_hash);
+  Result := TLabSceneVertexShader.Create(ADevice, ShaderCode, shader_hash);
 end;
 
-constructor TLabSceneVertexShader.Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32);
+constructor TLabSceneVertexShader.Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32);
   var shader_data: TLabByteArr;
 begin
-  inherited Create(AScene, ShaderCode, AHash);
+  inherited Create(ADevice, ShaderCode, AHash);
   shader_data := CompileShader(ShaderCode, st_vs, _Hash);
-  _Shader := TLabVertexShader.Create(_Scene.Device, @shader_data[0], Length(shader_data));
+  _Shader := TLabVertexShader.Create(_Device, @shader_data[0], Length(shader_data));
 end;
 
-constructor TLabSceneVertexShader.Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
+constructor TLabSceneVertexShader.Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
 begin
-  inherited Create(AScene, ShaderData, AHash);
-  _Shader := TLabVertexShader.Create(_Scene.Device, @ShaderData[0], Length(ShaderData));
+  inherited Create(ADevice, ShaderData, AHash);
+  _Shader := TLabVertexShader.Create(_Device, @ShaderData[0], Length(ShaderData));
 end;
 
-class function TLabScenePixelShader.FindOrCreate(const AScene: TLabScene; const ShaderCode: String): TLabScenePixelShader;
+class function TLabScenePixelShader.FindOrCreate(const ADevice: TLabDeviceShared; const ShaderCode: String): TLabScenePixelShader;
   var shader_hash: TVkUInt32;
   var shader_data: TLabByteArr;
 begin
@@ -1038,24 +1039,24 @@ begin
   shader_data := FindCache(shader_hash);
   if Length(shader_data) > 0 then
   begin
-    Result := TLabScenePixelShader.Create(AScene, shader_data, shader_hash);
+    Result := TLabScenePixelShader.Create(ADevice, shader_data, shader_hash);
     Exit;
   end;
-  Result := TLabScenePixelShader.Create(AScene, ShaderCode, shader_hash);
+  Result := TLabScenePixelShader.Create(ADevice, ShaderCode, shader_hash);
 end;
 
-constructor TLabScenePixelShader.Create(const AScene: TLabScene; const ShaderCode: String; const AHash: TVkUInt32);
+constructor TLabScenePixelShader.Create(const ADevice: TLabDeviceShared; const ShaderCode: String; const AHash: TVkUInt32);
   var shader_data: TLabByteArr;
 begin
-  inherited Create(AScene, ShaderCode, AHash);
+  inherited Create(ADevice, ShaderCode, AHash);
   shader_data := CompileShader(ShaderCode, st_ps, _Hash);
-  _Shader := TLabPixelShader.Create(_Scene.Device, @shader_data[0], Length(shader_data));
+  _Shader := TLabPixelShader.Create(_Device, @shader_data[0], Length(shader_data));
 end;
 
-constructor TLabScenePixelShader.Create(const AScene: TLabScene; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
+constructor TLabScenePixelShader.Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
 begin
-  inherited Create(AScene, ShaderData, AHash);
-  _Shader := TLabPixelShader.Create(_Scene.Device, @ShaderData[0], Length(ShaderData));
+  inherited Create(ADevice, ShaderData, AHash);
+  _Shader := TLabPixelShader.Create(_Device, @ShaderData[0], Length(ShaderData));
 end;
 
 constructor TLabSceneShader.Create;
@@ -1762,7 +1763,8 @@ begin
   end
   else if _SampleType = st_transform then
   begin
-    _Target.TransformLocal := PLabMat(_Sample)^;
+    //_Target.TransformLocal := PLabMat(_Sample)^;
+    _Target.OverrideTransform(PLabMat(_Sample)^);
   end;
 end;
 
@@ -2003,6 +2005,11 @@ begin
   end;
 end;
 
+procedure TLabSceneNode.OverrideTransform(const xf: TLabMat);
+begin
+  _Transform := xf;
+end;
+
 constructor TLabSceneNode.Create(
   const AScene: TLabScene;
   const AParent: TLabSceneNode;
@@ -2029,7 +2036,8 @@ begin
     end;
     _ID := AnsiString(ANode.id);
     _SID := AnsiString(ANode.sid);
-    TransformLocal := ANode.Matrix.Swizzle(_Scene.AxisRemap);
+    _Transform := ANode.Matrix;
+    //TransformLocal := ANode.Matrix.Swizzle(_Scene.AxisRemap);
     for i := 0 to ANode.Children.Count - 1 do
     begin
       if ANode.Children[i] is TLabColladaNode then

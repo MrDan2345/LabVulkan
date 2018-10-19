@@ -29,6 +29,7 @@ uses
   LabColladaParser,
   LabScene,
   LabImageData,
+  LabDebugDraw,
   Classes,
   sysutils;
 
@@ -65,6 +66,7 @@ type
     var Scene: TLabScene;
     var Transforms: TUniformArrayShared;
     var UniformBufferMap: Pointer;
+    var DebugDraw: TLabDebugDraw;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -517,23 +519,31 @@ begin
     begin
       Pass.SkinSubset := nil;
     end;
-    Pass.Shader := TLabSceneShaderFactory.MakeShader(r_s.Geometry.Scene, r_s.VertexDescriptor, Params, si_ptr);
+    Pass.Shader := TLabSceneShaderFactory.MakeShader(App.Device, r_s.VertexDescriptor, Params, si_ptr);
     Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.Shader.Ptr.DescriptorSetLayout]);
     Passes.Add(Pass);
   end;
 end;
 
 procedure TInstanceData.UpdateSkinTransforms;
+  function CombinedTransform(const n: TLabSceneNode): TLabMat;
+    var i: TVkInt32;
+  begin
+    Result := n.Transform;
+    if Assigned(n.Parent) then Result := Result * CombinedTransform(n.Parent);
+  end;
   var Skin: TLabSceneControllerSkin;
   var i: TVkInt32;
+  var m: TLabMat;
 begin
   if not (_Attachment is TLabSceneNodeAttachmentController)
   or not (TLabSceneNodeAttachmentController(_Attachment).Controller is TLabSceneControllerSkin) then Exit;
   Skin := TLabSceneControllerSkin(TLabSceneNodeAttachmentController(_Attachment).Controller);
   for i := 0 to Joints.Count - 1 do
   begin
-    //JointUniforms^[i] := Joints[i].Transform * Skin.Joints[i].BindPose * Skin.BindShapeMatrix;
-    JointUniforms^[i] := Skin.BindShapeMatrix * Skin.Joints[i].BindPose;// * Joints[i].Transform.Transpose;
+    m := CombinedTransform(Joints[i]);
+    m := (Skin.BindShapeMatrix * Skin.Joints[i].BindPose) * m;
+    JointUniforms^[i] := m;
   end;
 end;
 
@@ -548,6 +558,23 @@ constructor TInstanceData.Create(
   const Attachment: TLabSceneNodeAttachmentController
 );
   var Skin: TLabSceneControllerSkin;
+  procedure PropagateBinds(const Node: TLabSceneNode; const xf: TLabMat);
+    var i: TVkInt32;
+    var bp: TLabMat;
+  begin
+    bp := xf;
+    for i := 0 to Joints.Count - 1 do
+    if Joints[i] = Node then
+    begin
+      bp := bp * Skin.Joints[i].BindPose;
+      Skin.Joints[i].BindPose := bp;
+      Break;
+    end;
+    for i := 0 to Node.Children.Count - 1 do
+    begin
+      PropagateBinds(Node.Children[i], bp);
+    end;
+  end;
   var i: TVkInt32;
 begin
   _Attachment := Attachment;
@@ -573,6 +600,7 @@ begin
     end;
     JointUniforms^[i] := LabMatIdentity;
   end;
+  //PropagateBinds(Attachment.Skeleton, LabMatIdentity);
   SetupGeometry(Skin.Geometry, Skin, Attachment.MaterialBindings);
 end;
 
@@ -806,29 +834,23 @@ begin
 end;
 
 procedure TLabApp.UpdateTransforms;
+  var GlobalWorld: TLabMat;
+  var GlobalView: TLabMat;
+  var GlobalProjection: TLabMat;
+  var GlobalClip: TLabMat;
   procedure UpdateNode(const Node: TLabSceneNode);
     var i_n, i: Integer;
     var nd: TNodeData;
     var id: TInstanceData;
-    var Clip: TLabMat;
-    var fov: TVkFloat;
   begin
-    fov := LabDegToRad * 45;
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
     with Transforms.Ptr.Items[nd.UniformOffset]^ do
     begin
-      Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 20);
-      //View := LabMatView(LabVec3(0, 3, -14), LabVec3(0, 0.7, 0), LabVec3(0, 1, 0));
-      View := LabMatView(LabVec3(0, 5, -15), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
-      World := Node.Transform{ * LabMatRotationZ(LabPi)} * LabMatRotationX(LabHalfPi);// * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-      Clip := LabMat(
-        1, 0, 0, 0,
-        0, -1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1
-      );
-      WVP := World * View * Projection * Clip;
+      Projection := GlobalProjection;
+      View := GlobalView;
+      World := Node.Transform * GlobalWorld;
+      WVP := World * View * Projection * GlobalClip;
     end;
     for i_n := 0 to Node.Children.Count - 1 do
     begin
@@ -842,7 +864,18 @@ procedure TLabApp.UpdateTransforms;
       TInstanceData(Node.Attachments[i].UserData).UpdateSkinTransforms;
     end;
   end;
+  var fov: TVkFloat;
 begin
+  fov := LabDegToRad * 45;
+  GlobalWorld := LabMatRotationX(-LabHalfPi) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);//LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+  GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+  GlobalView := LabMatView(LabVec3(0, 5, -15), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+  GlobalClip := LabMat(
+    1, 0, 0, 0,
+    0, -1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1
+  );
   UpdateNode(Scene.Root);
   if Assigned(UniformBufferMap) then
   begin
@@ -850,6 +883,13 @@ begin
     UniformBuffer.Ptr.FlushMappedMemoryRanges(
       [LabMappedMemoryRange(UniformBuffer.Ptr.Memory, 0, UniformBuffer.Ptr.Size)]
     );
+  end;
+  with DebugDraw.Transforms^ do
+  begin
+    World := GlobalWorld;
+    Projection := GlobalProjection;
+    View := GlobalView;
+    WVP := World * View * Projection * GlobalClip;
   end;
 end;
 
@@ -963,6 +1003,7 @@ begin
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
+  DebugDraw := TLabDebugDraw.Create(Device);
   if UniformBuffer.IsValid then UniformBuffer.Ptr.Map(UniformBufferMap);
 end;
 
@@ -970,6 +1011,7 @@ procedure TLabApp.Finalize;
 begin
   if UniformBuffer.IsValid then UniformBuffer.Ptr.Unmap;
   Device.Ptr.WaitIdle;
+  DebugDraw.Free;
   SwapchainDestroy;
   Scene.Free;
   Fence := nil;
@@ -983,6 +1025,8 @@ begin
 end;
 
 procedure TLabApp.Loop;
+  var Viewport: TVkViewport;
+  var Scissor: TVkRect2D;
   var cur_pipeline: TLabGraphicsPipeline;
   procedure RenderNode(const Node: TLabSceneNode);
     var nd: TNodeData;
@@ -1064,8 +1108,8 @@ procedure TLabApp.Loop;
         begin
           cur_pipeline := TLabGraphicsPipeline(r_p.Pipeline.Ptr);
           CmdBuffer.Ptr.BindPipeline(cur_pipeline);
-          CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-          CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+          CmdBuffer.Ptr.SetViewport([Viewport]);
+          CmdBuffer.Ptr.SetScissor([Scissor]);
         end;
         CmdBuffer.Ptr.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1118,7 +1162,10 @@ begin
     t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 8) / 8;
     Scene.DefaultAnimationClip.Sample(t, True);
   end;
+  Viewport := LabViewport(0, 0, Window.Width, Window.Height);
+  Scissor := LabRect2D(0, 0, Window.Width, Window.Height);
   UpdateTransforms;
+  DebugDraw.Flush;
   CmdBuffer.Ptr.RecordBegin();
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
@@ -1143,6 +1190,7 @@ begin
   );
   cur_pipeline := nil;
   RenderNode(Scene.Root);
+  DebugDraw.Draw(CmdBuffer.Ptr, PipelineCache.Ptr, RenderPass.Ptr, Viewport, SampleCount);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(

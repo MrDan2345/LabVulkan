@@ -711,6 +711,13 @@ type
     destructor Destroy; override;
   end;
 
+function LabColladaVertexAttribute(
+  const Semantic: TLabColladaVertexAttributeSemantic;
+  const DataType: TLabColladaArrayType = at_float;
+  const DataCount: TVkUInt8 = 4;
+  const SetNumber: TVkUInt8 = 0
+): TLabColladaVertexAttribute; inline;
+
 implementation
 
 function FindAttribute(const Node: TDOMNode; const AttribName: DOMString): DOMString;
@@ -3082,6 +3089,19 @@ destructor TLabColladaParser.Destroy;
 begin
   if Assigned(_RootNode) then _RootNode.Free;
   inherited Destroy;
+end;
+
+function LabColladaVertexAttribute(
+  const Semantic: TLabColladaVertexAttributeSemantic;
+  const DataType: TLabColladaArrayType;
+  const DataCount: TVkUInt8;
+  const SetNumber: TVkUInt8
+): TLabColladaVertexAttribute;
+begin
+  Result.Semantic := Semantic;
+  Result.DataType := DataType;
+  Result.DataCount := DataCount;
+  Result.SetNumber := SetNumber;
 end;
 
 end.
