@@ -541,7 +541,7 @@ begin
   Skin := TLabSceneControllerSkin(TLabSceneNodeAttachmentController(_Attachment).Controller);
   for i := 0 to Joints.Count - 1 do
   begin
-    m := CombinedTransform(Joints[i]);
+    m := Joints[i].Transform;//CombinedTransform(Joints[i]);
     m := (Skin.BindShapeMatrix * Skin.Joints[i].BindPose) * m;
     JointUniforms^[i] := m;
   end;
@@ -869,7 +869,7 @@ begin
   fov := LabDegToRad * 45;
   GlobalWorld := LabMatRotationX(-LabHalfPi) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);//LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
   GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-  GlobalView := LabMatView(LabVec3(0, 5, -15), LabVec3(0, 1, 0), LabVec3(0, 1, 0));
+  GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
     1, 0, 0, 0,
     0, -1, 0, 0,
@@ -995,9 +995,9 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  //Scene.Add('../Models/maya/maya.dae');
+  Scene.Add('../Models/maya/maya_anim.dae');
   //Scene.Add('../Models/box.dae');
-  Scene.Add('../Models/skin.dae');
+  //Scene.Add('../Models/skin.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
@@ -1159,7 +1159,7 @@ begin
   end;
   if Scene.DefaultAnimationClip.MaxTime > LabEPS then
   begin
-    t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 8) / 8;
+    t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 2) / 2;
     Scene.DefaultAnimationClip.Sample(t, True);
   end;
   Viewport := LabViewport(0, 0, Window.Width, Window.Height);

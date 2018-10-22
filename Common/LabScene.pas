@@ -445,6 +445,8 @@ type
     var _SID: AnsiString;
     var _Children: TNodeList;
     var _Transform: TLabMat;
+    var _CachedTransform: TLabMat;
+    var _IsTransformCached: Boolean;
     var _Attachments: TLabSceneNodeAttachmentList;
     var _UserData: TObject;
     procedure SetParent(const Value: TLabSceneNode);
@@ -467,6 +469,8 @@ type
     function FindBySID(const NodeSID: AnsiString): TLabSceneNode;
     procedure ApplyTransform(const xf: TLabMat); inline;
     procedure OverrideTransform(const xf: TLabMat); inline;
+    procedure CacheTransform(const xf: TLabMat); inline;
+    procedure ApplyCachedTransform(const Force: Boolean = False);
     constructor Create(
       const AScene: TLabScene;
       const AParent: TLabSceneNode;
@@ -1764,7 +1768,7 @@ begin
   else if _SampleType = st_transform then
   begin
     //_Target.TransformLocal := PLabMat(_Sample)^;
-    _Target.OverrideTransform(PLabMat(_Sample)^);
+    _Target.CacheTransform(PLabMat(_Sample)^);
   end;
 end;
 
@@ -1890,6 +1894,7 @@ begin
   begin
     _Animations[i].Sample(Time, Loop);
   end;
+  _Scene.Root.ApplyCachedTransform();
 end;
 
 procedure TLabSceneAnimationClip.UpdateMaxTime;
@@ -2010,6 +2015,29 @@ begin
   _Transform := xf;
 end;
 
+procedure TLabSceneNode.CacheTransform(const xf: TLabMat);
+begin
+  _CachedTransform := xf;
+  _IsTransformCached := True;
+end;
+
+procedure TLabSceneNode.ApplyCachedTransform(const Force: Boolean);
+  var i: TVkInt32;
+  var f: Boolean;
+begin
+  f := Force or _IsTransformCached;
+  if f then
+  begin
+    _Transform := _CachedTransform;
+    if Assigned(_Parent) then _Transform := _Transform * _Parent.Transform;
+  end;
+  for i := 0 to _Children.Count - 1 do
+  begin
+    _Children[i].ApplyCachedTransform(f);
+  end;
+  _IsTransformCached := False;
+end;
+
 constructor TLabSceneNode.Create(
   const AScene: TLabScene;
   const AParent: TLabSceneNode;
@@ -2021,6 +2049,8 @@ begin
   _Scene := AScene;
   _Children := TNodeList.Create;
   _Transform := LabMatIdentity;
+  _CachedTransform := LabMatIdentity;
+  _IsTransformCached := False;
   _Attachments := TLabSceneNodeAttachmentList.Create;
   Parent := AParent;
   if Assigned(ANode) then
@@ -2036,7 +2066,7 @@ begin
     end;
     _ID := AnsiString(ANode.id);
     _SID := AnsiString(ANode.sid);
-    _Transform := ANode.Matrix;
+    CacheTransform(ANode.Matrix);
     //TransformLocal := ANode.Matrix.Swizzle(_Scene.AxisRemap);
     for i := 0 to ANode.Children.Count - 1 do
     begin
@@ -2127,6 +2157,7 @@ begin
   end;
   _DefaultAnimationClip.UpdateMaxTime;
   Collada.Free;
+  _Root.ApplyCachedTransform(True);
   _Path := '';
 end;
 
