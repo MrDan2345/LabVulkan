@@ -413,18 +413,22 @@ type
   operator - (v: TLabVec3; f: TLabFloat): TLabVec3; inline;
   operator - (v: TLabVec4; f: TLabFloat): TLabVec4; inline;
   operator - (v: TLabVec2; p: TPoint): TLabVec2; inline;
+  operator - (q0, q1: TLabQuat): TLabQuat; inline;
   operator - (p: TPoint; v: TLabVec2): TLabVec2; inline;
+  operator - (m0, m1: TLabMat): TLabMat; inline;
   operator + (v0, v1: TLabVec2): TLabVec2; inline;
   operator + (v0, v1: TLabVec3): TLabVec3; inline;
   operator + (v: TLabVec2; f: TLabFloat): TLabVec2; inline;
   operator + (v: TLabVec3; f: TLabFloat): TLabVec3; inline;
   operator + (v: TLabVec4; f: TLabFloat): TLabVec4; inline;
+  operator + (q0, q1: TLabQuat): TLabQuat; inline;
   operator + (f: TLabFloat; v: TLabVec2): TLabVec2; inline;
   operator + (f: TLabFloat; v: TLabVec3): TLabVec3; inline;
   operator + (f: TLabFloat; v: TLabVec4): TLabVec4; inline;
   operator + (b: TLabAABox; v: TLabVec3): TLabAABox; inline;
   operator + (v: TLabVec2; p: TPoint): TLabVec2; inline;
   operator + (p: TPoint; v: TLabVec2): TLabVec2; inline;
+  operator + (m0, m1: TLabMat): TLabMat; inline;
   operator * (v: TLabVec2; f: TLabFloat): TLabVec2; inline;
   operator * (v: TLabVec3; f: TLabFloat): TLabVec3; inline;
   operator * (v: TLabVec4; f: TLabFloat): TLabVec4; inline;
@@ -436,7 +440,9 @@ type
   operator * (v0: TLabVec4; v1: TLabVec4): TLabVec4; inline;
   operator * (v: TLabVec2; m: TLabMat): TLabVec2; inline;
   operator * (v: TLabVec3; m: TLabMat): TLabVec3; inline;
+  operator * (q: TLabQuat; f: TLabFloat): TLabQuat; inline;
   operator * (m0, m1: TLabMat): TLabMat; inline;
+  operator * (m: TLabMat; f: TLabFloat): TLabMat; inline;
   operator / (v: TLabVec2; f: TLabFloat): TLabVec2; inline;
   operator / (v: TLabVec3; f: TLabFloat): TLabVec3; inline;
   operator = (v0, v1: TLabVec2): Boolean; inline;
@@ -476,6 +482,7 @@ function LabQuat(const x, y, z, w: TLabFloat): TLabQuat; inline;
 function LabQuat(const Axis: TLabVec3; const Angle: TLabFloat): TLabQuat; inline;
 function LabQuat(const m: TLabMat): TLabQuat; inline;
 function LabQuatDot(const q0, q1: TLabQuat): TLabFloat; inline;
+function LabQuatNlerp(const q0, q1: TLabQuat; const s: TLabFloat): TLabQuat;
 function LabQuatSlerp(const q0, q1: TLabQuat; const s: TLabFloat): TLabQuat;
 function LabMat(
   const m00, m10, m20, m30: TLabFloat;
@@ -504,6 +511,7 @@ function LabMatOrth2D(const Width, Height, ZNear, ZFar: TLabFloat; const FlipH: 
 function LabMatProj(const FOV, Aspect, ZNear, ZFar: TLabFloat): TLabMat; inline;
 function LabMatTranspose(const m: TLabMat): TLabMat; inline;
 procedure LabMatDecompose(const OutScaling: PLabVec3; const OutRotation: PLabQuat; const OutTranslation: PLabVec3; const m: TLabMat);
+function LabMatCompose(const Scaling: TLabVec3; const Rotation: TLabQuat; const Translation: TLabVec3): TLabMat;
 function LabMatCompare(const m0, m1: TLabMat): Boolean; inline;
 function LabMatToEuler(const m: TLabMat): TLabVec3;
 function LabEulerToMat(const e: TLabVec3): TLabMat;
@@ -1760,10 +1768,28 @@ begin
   Result.y := v.y - p.y;
 end;
 
+operator - (q0, q1: TLabQuat): TLabQuat;
+begin
+  Result.x := q0.x - q1.x;
+  Result.y := q0.y - q1.y;
+  Result.z := q0.z - q1.z;
+  Result.w := q0.w - q1.w;
+end;
+
 operator - (p: TPoint; v: TLabVec2): TLabVec2;
 begin
   Result.x := p.x - v.x;
   Result.y := p.y - v.y;
+end;
+
+operator - (m0, m1: TLabMat): TLabMat;
+begin
+  Result := LabMat(
+    m0.e00 - m1.e00, m0.e10 - m1.e10, m0.e20 - m1.e20, m0.e30 - m1.e30,
+    m0.e01 - m1.e01, m0.e11 - m1.e11, m0.e21 - m1.e21, m0.e31 - m1.e31,
+    m0.e02 - m1.e02, m0.e12 - m1.e12, m0.e22 - m1.e22, m0.e32 - m1.e32,
+    m0.e03 - m1.e03, m0.e13 - m1.e13, m0.e23 - m1.e23, m0.e33 - m1.e33
+  );
 end;
 
 operator + (v0, v1: TLabVec2): TLabVec2;
@@ -1798,6 +1824,14 @@ begin
   Result.y := v.y + f;
   Result.z := v.z + f;
   Result.w := v.w + f;
+end;
+
+operator + (q0, q1: TLabQuat): TLabQuat;
+begin
+  Result.x := q0.x + q1.x;
+  Result.y := q0.y + q1.y;
+  Result.z := q0.z + q1.z;
+  Result.w := q0.w + q1.w;
 end;
 
 operator + (f: TLabFloat; v: TLabVec2): TLabVec2;
@@ -1843,6 +1877,16 @@ operator + (p: TPoint; v: TLabVec2): TLabVec2;
 begin
   Result.x := v.x + p.x;
   Result.y := v.y + p.y;
+end;
+
+operator + (m0, m1: TLabMat): TLabMat;
+begin
+  Result := LabMat(
+    m0.e00 + m1.e00, m0.e10 + m1.e10, m0.e20 + m1.e20, m0.e30 + m1.e30,
+    m0.e01 + m1.e01, m0.e11 + m1.e11, m0.e21 + m1.e21, m0.e31 + m1.e31,
+    m0.e02 + m1.e02, m0.e12 + m1.e12, m0.e22 + m1.e22, m0.e32 + m1.e32,
+    m0.e03 + m1.e03, m0.e13 + m1.e13, m0.e23 + m1.e23, m0.e33 + m1.e33
+  );
 end;
 
 operator * (v: TLabVec2; f: TLabFloat): TLabVec2;
@@ -1918,9 +1962,24 @@ begin
   LabVec3MatMul4x3(@Result, @v, @m);
 end;
 
+operator * (q: TLabQuat; f: TLabFloat): TLabQuat;
+begin
+  Result := LabQuat(q.x * f, q.y * f, q.z * f, q.w * f);
+end;
+
 operator * (m0, m1: TLabMat): TLabMat;
 begin
   LabMatMul(@Result, @m0, @m1);
+end;
+
+operator * (m: TLabMat; f: TLabFloat): TLabMat;
+begin
+  Result := LabMat(
+    m.e00 * f, m.e10 * f, m.e20 * f, m.e30 * f,
+    m.e01 * f, m.e11 * f, m.e21 * f, m.e31 * f,
+    m.e02 * f, m.e12 * f, m.e22 * f, m.e32 * f,
+    m.e03 * f, m.e13 * f, m.e23 * f, m.e33 * f
+  );
 end;
 
 operator / (v: TLabVec2; f: TLabFloat): TLabVec2;
@@ -2127,59 +2186,18 @@ begin
 end;
 
 function LabQuat(const m: TLabMat): TLabQuat;
-  var Trace, SqrtTrace, RcpSqrtTrace, MaxDiag, s: TLabFloat;
-  var MaxI, i: TLabInt32;
 begin
-  Trace := m.e00 + m.e11 + m.e22 + 1;
-  if Trace > 0 then
-  begin
-    SqrtTrace := Sqrt(Trace);
-    RcpSqrtTrace := 0.5 / SqrtTrace;
-    Result.x := (m.e12 - m.e21) * RcpSqrtTrace;
-    Result.y := (m.e20 - m.e02) * RcpSqrtTrace;
-    Result.z := (m.e01 - m.e10) * RcpSqrtTrace;
-    Result.w := SqrtTrace * 0.5;
-    Exit;
-  end;
-  MaxI := 0;
-  MaxDiag := m.e00;
-  for i := 1 to 2 do
-  if m.Mat[i, i] > MaxDiag then
-  begin
-    MaxI := i;
-    MaxDiag := m.Mat[i, i];
-  end;
-  case MaxI of
-    0:
-    begin
-      s := 2 * Sqrt(1 + m.e00 - m.e11 - m.e22);
-      Result.x := 0.25 * s; s := 1 / s;
-      Result.y := (m.e01 + m.e10) * s;
-      Result.z := (m.e02 + m.e20) * s;
-      Result.w := (m.e12 - m.e21) * s;
-    end;
-    1:
-    begin
-      s := 2 * Sqrt(1 + m.e11 - m.e00 - m.e22);
-      Result.y := 0.25 * s; s := 1 / s;
-      Result.x := (m.e01 + m.e10) * s;
-      Result.z := (m.e12 + m.e21) * s;
-      Result.w := (m.e20 - m.e02) * s;
-    end;
-    2:
-    begin
-      s := 2 * Sqrt(1 + m.e22 - m.e00 - m.e11);
-      Result.z := 0.25 * s; s := 1 / s;
-      Result.x := (m.e02 + m.e20) * s;
-      Result.y := (m.e12 + m.e21) * s;
-      Result.w := (m.e01 - m.e10) * s;
-    end;
-  end;
+  Result := LabMatToQuat(m);
 end;
 
 function LabQuatDot(const q0, q1: TLabQuat): TLabFloat;
 begin
   Result := q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
+end;
+
+function LabQuatNlerp(const q0, q1: TLabQuat; const s: TLabFloat): TLabQuat;
+begin
+  Result := (q0 + ((q1 - q0) * s)).Norm;
 end;
 
 function LabQuatSlerp(const q0, q1: TLabQuat; const s: TLabFloat): TLabQuat;
@@ -2568,6 +2586,24 @@ begin
     );
     OutRotation^ := LabQuat(mn);
   end;
+end;
+
+function LabMatCompose(const Scaling: TLabVec3; const Rotation: TLabQuat; const Translation: TLabVec3): TLabMat;
+  var x2, y2, z2, xx, xy, xz, yy, yz, zz, wx, wy, wz: TLabFloat;
+  var s: TLabVec3 absolute Scaling;
+  var t: TLabVec3 absolute Translation;
+  var r: TLabQuat absolute Rotation;
+begin
+  x2 := r.x + r.x; y2 := r.y + r.y; z2 := r.z + r.z;
+  xx := r.x * x2; xy := r.x * y2; xz := r.x * z2;
+  yy := r.y * y2; yz := r.y * z2; zz := r.z * z2;
+  wx := r.w * x2; wy := r.w * y2; wz := r.w * z2;
+  Result := LabMat(
+    (1 - (yy + zz)) * s.x, (xy - wz) * s.y, (xz + wy) * s.z, t.x,
+    (xy + wz) * s.x, (1 - (xx + zz)) * s.y, (yz - wx) * s.z, t.y,
+    (xz - wy) * s.x, (yz + wx) * s.y, (1 - (xx + yy)) * s.z, t.z,
+    0, 0, 0, 1
+  );
 end;
 
 function LabMatCompare(const m0, m1: TLabMat): Boolean;

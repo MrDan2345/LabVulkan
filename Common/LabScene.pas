@@ -1678,7 +1678,7 @@ procedure TLabSceneAnimationTrack.SampleData(
     out_s := LabLerpVec3(s0, s1, t);
     out_t := LabLerpVec3(t0, t1, t);
     out_r := LabQuatSlerp(r0, r1, t);
-    OutMat^ := LabMatScaling(out_s) * LabMatRotation(out_r) * LabMatTranslation(out_t);
+    OutMat^ := LabMatCompose(out_s, out_r, out_t);
   end;
   var k0, k1, i, j: TVkInt32;
   var t, tgt0, tgt1: TVkFloat;

@@ -852,6 +852,7 @@ procedure TLabApp.UpdateTransforms;
       World := Node.Transform * GlobalWorld;
       WVP := World * View * Projection * GlobalClip;
     end;
+    //DebugDraw.DrawTransform(Node.Transform);
     for i_n := 0 to Node.Children.Count - 1 do
     begin
       UpdateNode(Node.Children[i_n]);
@@ -865,9 +866,14 @@ procedure TLabApp.UpdateTransforms;
     end;
   end;
   var fov: TVkFloat;
+  const rot_loop = 45;
 begin
   fov := LabDegToRad * 45;
-  GlobalWorld := LabMatRotationX(-LabHalfPi) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);//LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+  GlobalWorld := LabMatRotationX(-LabHalfPi);//LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+  if rot_loop > LabEPS then
+  begin
+    GlobalWorld := GlobalWorld * LabMatRotationY((LabTimeLoopSec(rot_loop) / rot_loop) * Pi * 2);
+  end;
   GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
   GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
@@ -1144,7 +1150,7 @@ procedure TLabApp.Loop;
   var n: TLabSceneNode;
   var e: TLabVec3;
   var m: TLabMat;
-  var t: TLabFloat;
+  var t, anim_loop: TLabFloat;
 begin
   TLabVulkan.IsActive := Window.IsActive;
   if not TLabVulkan.IsActive
@@ -1159,8 +1165,9 @@ begin
   end;
   if Scene.DefaultAnimationClip.MaxTime > LabEPS then
   begin
-    t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * 2) / 2;
-    Scene.DefaultAnimationClip.Sample(t, True);
+    anim_loop := 1;
+    t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * anim_loop) / anim_loop;
+    Scene.DefaultAnimationClip.Sample(t, False);
   end;
   Viewport := LabViewport(0, 0, Window.Width, Window.Height);
   Scissor := LabRect2D(0, 0, Window.Width, Window.Height);
