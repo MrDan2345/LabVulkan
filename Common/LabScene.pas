@@ -2157,7 +2157,6 @@ procedure TLabScene.Add(const FileName: String);
 begin
   _Path := ExpandFileName(ExtractFileDir(FileName) + PathDelim);
   Collada := TLabColladaParser.Create(FileName);
-  Collada.RootNode.Dump;
   if not Assigned(Collada.RootNode)
   or not Assigned(Collada.RootNode.Scene) then
   begin
