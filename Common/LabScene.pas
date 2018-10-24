@@ -719,10 +719,10 @@ begin
     Inc(loc_in);
     StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in vec' + IntToStr(SkinInfo^.MaxJointWeights) + ' in_joint_weight;'#$D#$A;
     Inc(loc_in);
-  end;
 
- // StrAttrOut += 'layout (location = 10) out vec4 tmp_color;';
- // StrCode += '  tmp_color = vec4(in_joint_weight, 1);'#$D#$A;
+    //StrAttrOut += 'layout (location = 10) out vec4 tmp_color;'#$D#$A;
+    //StrCode += '  tmp_color = in_joint_weight;'#$D#$A;
+  end;
 
   Code := LabStrReplace(ShaderCodeVS, '<$uniforms$>', StrUniforms);
   Code := LabStrReplace(Code, '<$attribs$>', StrAttrIn + StrAttrOut);
@@ -730,7 +730,10 @@ begin
   Result.VertexShader := TLabSceneVertexShader.FindOrCreate(ADevice, Code);
   StrAttr := '';
 
-//  StrAttr += 'layout (location = 10) in vec4 tmp_color;';
+  if Assigned(SkinInfo) then
+  begin
+    //StrAttr += 'layout (location = 10) in vec4 tmp_color;'#$D#$A;
+  end;
 
   Texture := '';
   TexCoord := '';
@@ -785,7 +788,11 @@ begin
   end;
   StrCode += '  out_color = color;'#$D#$A;
 
-  //StrCode += '  out_color = tmp_color;'#$D#$A;
+  if Assigned(SkinInfo) then
+  begin
+    //StrCode += '  float s = 0.5 * (tmp_color.x + tmp_color.y + tmp_color.z + tmp_color.w);'#$D#$A;
+    //StrCode += '  out_color = vec4(s, s, s, 1);'#$D#$A;
+  end;
 
   //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
   Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
@@ -1303,12 +1310,12 @@ begin
       AttribIndices[j] := Triangles.Indices^[i * (max_offset + 1) + Offset];
       crc := LabCRC32(crc, @AttribIndices[j], SizeOf(TVkInt32));
     end;
-    ind := FindRemap(crc);
-    if ind > -1 then
-    begin
-      AddIndex(ind);
-    end
-    else
+    //ind := FindRemap(crc);
+    //if ind > -1 then
+    //begin
+    //  AddIndex(ind);
+    //end
+    //else
     begin
       for j := 0 to Triangles.Inputs.Count - 1 do
       begin
@@ -1437,9 +1444,35 @@ constructor TLabSceneControllerSkin.Create(
   type PDataIndices = ^TDataIndices;
   type TDataWeights = array[0..3] of TVkFloat;
   type PDataWeights = ^TDataWeights;
+  TWeightArr = array[Word] of TWeight;
+  PWeightArr = ^TWeightArr;
+  procedure SortWeights(const w: PWeightArr; const l, h: TVkInt32);
+    var i, j, m: LongInt;
+    var tmp: TWeight;
+  begin
+    if h < l then Exit;
+    i := l;
+    j := h;
+    m := (i + j) shr 1;
+    repeat
+      while w^[m].JointWeight < w^[i].JointWeight do i := i + 1;
+      while w^[j].JointWeight < w^[m].JointWeight do j := j - 1;
+      if i <= j then
+      begin
+        tmp := w^[i];
+        w^[i] := w^[j];
+        w^[j] := tmp;
+        j := j - 1;
+        i := i + 1;
+      end;
+    until i > j;
+    if l < j then SortWeights(w, j, j);
+    if i < h then SortWeights(w, i, h);
+  end;
   var WeightsOffset: TVkUInt32;
   var Subset: TSubset;
   var i, j, n, w: TVkInt32;
+  var tw: TVkFloat;
   var pi: PDataIndices;
   var pw: PDataWeights;
 begin
@@ -1464,6 +1497,19 @@ begin
     begin
       _Weights[i][j].JointIndex := ColladaSkin.VertexWeights.Weights[i][j].JointIndex;
       _Weights[i][j].JointWeight := ColladaSkin.VertexWeights.Weights[i][j].JointWeight;
+      if _Weights[i][j].JointIndex > 39 then
+      begin
+        _Weights[i][j].JointIndex := 0;
+      end;
+    end;
+    if Length(_Weights[i]) > 4 then
+    begin
+      SortWeights(@_Weights[i][0], 0, High(_Weights[i]));
+      SetLength(_Weights[i], 4);
+      tw := 0;
+      for j := 0 to High(_Weights[i]) do tw += _Weights[i][j].JointWeight;
+      tw := 1 / tw;
+      for j := 0 to High(_Weights[i]) do _Weights[i][j].JointWeight := _Weights[i][j].JointWeight * tw;
     end;
   end;
   if _MaxWeightCount > 4 then _MaxWeightCount := 4;
@@ -1673,12 +1719,21 @@ procedure TLabSceneAnimationTrack.SampleData(
     OutMat := PLabMat(OutFloat);
     InMat0 := PLabMat(InFloat0);
     InMat1 := PLabMat(InFloat1);
+    //OutMat^ := InMat0^ * (1 - t) + InMat1^ * t;
+    //Exit;
     LabMatDecompose(@s0, @r0, @t0, InMat0^);
     LabMatDecompose(@s1, @r1, @t1, InMat1^);
     out_s := LabLerpVec3(s0, s1, t);
-    out_t := LabLerpVec3(t0, t1, t);
-    out_r := LabQuatSlerp(r0, r1, t);
-    OutMat^ := LabMatCompose(out_s, out_r, out_t);
+    OutMat^ := InMat0^ * (1 - t) + InMat1^ * t;
+    OutMat^.AxisX := TLabVec3(OutMat^.AxisX).Norm * out_s.x;
+    OutMat^.AxisY := TLabVec3(OutMat^.AxisY).Norm * out_s.y;
+    OutMat^.AxisZ := TLabVec3(OutMat^.AxisZ).Norm * out_s.z;
+    //r0 := LabMatToQuat(InMat0^);
+    //r1 := LabMatToQuat(InMat1^);
+    //out_s := LabLerpVec3(s0, s1, t);
+    //out_t := LabLerpVec3(t0, t1, t);
+    //out_r := LabQuatSlerp(r0, r1, t);
+    //OutMat^ := LabMatCompose(out_s, out_r, out_t);
   end;
   var k0, k1, i, j: TVkInt32;
   var t, tgt0, tgt1: TVkFloat;

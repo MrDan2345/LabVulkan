@@ -1165,7 +1165,7 @@ begin
   end;
   if Scene.DefaultAnimationClip.MaxTime > LabEPS then
   begin
-    anim_loop := 1;
+    anim_loop := 0.25;
     t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * anim_loop) / anim_loop;
     Scene.DefaultAnimationClip.Sample(t, False);
   end;
