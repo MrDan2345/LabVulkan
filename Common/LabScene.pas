@@ -1751,7 +1751,8 @@ begin
       Exit;
     end;
   end;
-  k0 := FindKey(Time);
+  t := Time mod _Keys[High(_Keys)].Time;
+  k0 := FindKey(t);
   k1 := (k0 + 1) mod Length(_Keys);
   OutFloat := PVkFloat(Output);
   InFloat0 := PVkFloat(_Keys[k0].Value);
@@ -1761,10 +1762,16 @@ begin
     Move(InFloat0^, OutFloat^, _SampleSize * _SampleCount);
     Exit;
   end;
-  t := Time mod _Keys[High(_Keys)].Time;
   if k1 < k0 then
   begin
-    t := t / _Keys[0].Time;
+    if t <= _Keys[0].Time then
+    begin
+      t := t / _Keys[0].Time;
+    end
+    else
+    begin
+      t := 0;
+    end;
   end
   else
   begin
@@ -2258,7 +2265,6 @@ end;
 constructor TLabScene.Create(const ADevice: TLabDeviceShared);
 begin
   _Device := ADevice;
-  _Root := TLabSceneNode.Create(Self, nil, nil);
   _Images := TLabSceneImageList.Create;
   _Geometries := TLabSceneGeometryList.Create;
   _Controllers := TLabSceneControllerList.Create;
@@ -2268,10 +2274,12 @@ begin
   _AnimationClips := TLabSceneAnimationClipList.Create;
   _DefaultAnimationClip := TLabSceneAnimationClip.Create(Self, 'Default');
   _AnimationClips.Add(_DefaultAnimationClip);
+  _Root := TLabSceneNode.Create(Self, nil, nil);
 end;
 
 destructor TLabScene.Destroy;
 begin
+  _Root.Free;
   while _AnimationClips.Count > 0 do _AnimationClips.Pop.Free;
   _AnimationClips.Free;
   while _Animations.Count > 0 do _Animations.Pop.Free;
@@ -2286,7 +2294,6 @@ begin
   _Geometries.Free;
   while _Images.Count > 0 do _Images.Pop.Free;
   _Images.Free;
-  _Root.Free;
   inherited Destroy;
 end;
 

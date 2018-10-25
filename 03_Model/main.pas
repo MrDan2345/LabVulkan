@@ -1002,8 +1002,8 @@ begin
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
   Scene.Add('../Models/maya/maya_anim.dae');
-  //Scene.Add('../Models/box.dae');
-  //Scene.Add('../Models/skin.dae');
+  Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/skin.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);
@@ -1167,7 +1167,7 @@ begin
   begin
     anim_loop := 0.25;
     t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * anim_loop) / anim_loop;
-    Scene.DefaultAnimationClip.Sample(t, False);
+    Scene.DefaultAnimationClip.Sample(t, True);
   end;
   Viewport := LabViewport(0, 0, Window.Width, Window.Height);
   Scissor := LabRect2D(0, 0, Window.Width, Window.Height);
