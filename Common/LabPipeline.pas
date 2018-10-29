@@ -136,6 +136,22 @@ type
     destructor Destroy; override;
   end;
 
+  TLabComputePipeline = class (TLabPipeline)
+  private
+    var _Shader: TLabComputeShaderShared;
+  public
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const APipelineCache: TLabPipelineCacheShared;
+      const APipelineLayout: TLabPipelineLayout;
+      const AShader: TLabComputeShaderShared;
+      const MapEntries: array of TVkSpecializationMapEntry;
+      const Data: PVkVoid = nil;
+      const DataSize: TVkUInt32 = 0
+    );
+    destructor Destroy; override;
+  end;
+
 const
   LabDefaultStencilOpState: TVkStencilOpState = (
     failOp: VK_STENCIL_OP_KEEP;
@@ -228,6 +244,11 @@ function LabPipelineColorBlendState(
   const LogicOp: TVkLogicOp = VK_LOGIC_OP_NO_OP;
   const Flags:TVkPipelineColorBlendStateCreateFlags = 0
 ): TVkPipelineColorBlendStateCreateInfo;
+
+function LabSpecializationMapEntry(
+  const ConstantID, Offset: TVkUInt32;
+  const Size: TVkSize
+): TVkSpecializationMapEntry; inline;
 
 implementation
 
@@ -596,6 +617,45 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabComputePipeline.Create(
+  const ADevice: TLabDeviceShared;
+  const APipelineCache: TLabPipelineCacheShared;
+  const APipelineLayout: TLabPipelineLayout;
+  const AShader: TLabComputeShaderShared;
+  const MapEntries: array of TVkSpecializationMapEntry;
+  const Data: PVkVoid;
+  const DataSize: TVkUInt32
+);
+  var pipeline_info: TVkComputePipelineCreateInfo;
+  var spec_info: TVkSpecializationInfo;
+begin
+  inherited Create(ADevice, APipelineCache, VK_PIPELINE_BIND_POINT_COMPUTE);
+  _Shader := AShader;
+  FillChar(pipeline_info, SizeOf(pipeline_info), 0);
+  pipeline_info.sType := VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  pipeline_info.layout := APipelineLayout.VkHandle;
+  pipeline_info.stage.sType := VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  pipeline_info.stage.pName := PAnsiChar('main');
+  pipeline_info.stage.stage := VK_SHADER_STAGE_COMPUTE_BIT;
+  pipeline_info.stage.module := _Shader.Ptr.VkHandle;
+  if Length(MapEntries) > 0 then
+  begin
+    pipeline_info.stage.pSpecializationInfo := @spec_info;
+    spec_info.dataSize := DataSize;
+    spec_info.pData := Data;
+    spec_info.mapEntryCount := Length(MapEntries);
+    spec_info.pMapEntries := @MapEntries[0];
+  end;
+  LabAssertVkError(
+    Vulkan.CreateComputePipelines(_Device.Ptr.VkHandle, APipelineCache.Ptr.VkHandle, 1, @pipeline_info, nil, @_Handle)
+  );
+end;
+
+destructor TLabComputePipeline.Destroy;
+begin
+  inherited Destroy;
+end;
+
 function LabPushConstantRange(
   const StageFlags: TVkShaderStageFlags;
   const Offset: TVkUInt32;
@@ -760,6 +820,16 @@ begin
   Result.pAttachments := Attachments;
   for i := 0 to High(Result.blendConstants) do
   if i < Length(BlendConstants) then Result.blendConstants[i] := BlendConstants[i] else Result.blendConstants[i] := 1;
+end;
+
+function LabSpecializationMapEntry(
+  const ConstantID, Offset: TVkUInt32;
+  const Size: TVkSize
+): TVkSpecializationMapEntry;
+begin
+  Result.constantID := ConstantID;
+  Result.offset := Offset;
+  Result.size := Size;
 end;
 
 end.

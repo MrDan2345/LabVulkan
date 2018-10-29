@@ -41,6 +41,13 @@ type
   end;
   TLabPixelShaderShared = specialize TLabSharedRef<TLabPixelShader>;
 
+  TLabComputeShader = class (TLabShader)
+  public
+    constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
+  end;
+  TLabComputeShaderShared = specialize TLabSharedRef<TLabComputeShader>;
+
   TLabShaderStages = array of TVkPipelineShaderStageCreateInfo;
 function LabShaderStages(const Shaders: array of TLabShader): TLabShaderStages;
 function LabShaderStages(const Shaders: array of TLabShaderShared): TLabShaderStages;
@@ -124,6 +131,21 @@ constructor TLabPixelShader.Create(const ADevice: TLabDeviceShared; const FileNa
 begin
   inherited Create(ADevice, FileName);
   _StageCreateInfo.stage := VK_SHADER_STAGE_FRAGMENT_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabComputeShader.Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32);
+begin
+  inherited Create(ADevice, Data, Size);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_COMPUTE_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabComputeShader.Create(const ADevice: TLabDeviceShared;
+  const FileName: AnsiString);
+begin
+  inherited Create(ADevice, FileName);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_COMPUTE_BIT;
   _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
 end;
 

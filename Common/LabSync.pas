@@ -13,10 +13,12 @@ type
   private
     var _Device: TLabDeviceShared;
     var _Handle: TVkFence;
+    function GetIsSignaled: Boolean; inline;
   public
+    property IsSignaled: Boolean read GetIsSignaled;
     constructor Create(const ADevice: TLabDeviceShared; const AFlags: TVkFenceCreateFlags = TVkFenceCreateFlags(0));
     destructor Destroy; override;
-    function GetStatus: TVkResult;
+    function GetStatus: TVkResult; inline;
     function Reset: TVkResult;
     function WaitFor(const TimeOut: TVkUInt64 = TVKUInt64(TVKInt64(-1))): TVkResult;
     property Device: TLabDeviceShared read _Device;
@@ -41,6 +43,11 @@ type
 implementation
 
 //TLabFence BEGIN
+function TLabFence.GetIsSignaled: Boolean;
+begin
+  Result := GetStatus = VK_SUCCESS;
+end;
+
 constructor TLabFence.Create(const ADevice: TLabDeviceShared; const AFlags: TVkFenceCreateFlags);
   var FenceCreateInfo: TVkFenceCreateInfo;
 begin

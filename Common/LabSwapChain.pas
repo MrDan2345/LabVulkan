@@ -30,8 +30,10 @@ type
     var _Extent: TVkExtent2D;
     var _Images: array of TImageBuffer;
     var _QueueFamilyIndexGraphics: TVkUInt32;
+    var _QueueFamilyIndexCompute: TVkUInt32;
     var _QueueFamilyIndexPresent: TVkUInt32;
     var _QueueFamilyGraphics: TVkQueue;
+    var _QueueFamilyCompute: TVkQueue;
     var _QueueFamilyPresent: TVkQueue;
     var _CurImage: TVkUInt32;
     function GetWidth: TVkUInt32; inline;
@@ -46,8 +48,10 @@ type
     property Images[const Index: TVkInt32]: PImageBuffer read GetImageBuffer;
     property ImageCount: TVkInt32 read GetImageCount;
     property QueueFamilyIndexGraphics: TVkUInt32 read _QueueFamilyIndexGraphics;
+    property QueueFamilyIndexCompute: TVkUInt32 read _QueueFamilyIndexCompute;
     property QueueFamilyIndexPresent: TVkUInt32 read _QueueFamilyIndexPresent;
     property QueueFamilyGraphics: TVkQueue read _QueueFamilyGraphics;
+    property QueueFamilyCompute: TVkQueue read _QueueFamilyCompute;
     property QueueFamilyPresent: TVkQueue read _QueueFamilyPresent;
     property CurImage: TVkUInt32 read _CurImage;
     constructor Create(
@@ -90,6 +94,17 @@ constructor TLabSwapChain.Create(
   const ASurface: TLabSurfaceShared;
   const AUsageFlags: TVkImageUsageFlags
 );
+  var queue_family_index_count: TVkInt32;
+  var queue_family_indices: array[0..2] of TVkUInt32;
+  function AddQueueFamilyIndex(const Index: TVkUInt32): TVkUInt32;
+    var i: TVkInt32;
+  begin
+    for i := 0 to queue_family_index_count - 1 do
+    if queue_family_indices[i] = Index then Exit(i);
+    queue_family_indices[queue_family_index_count] := Index;
+    Result := queue_family_index_count;
+    Inc(queue_family_index_count);
+  end;
   var r: TVkResult;
   var supports_present: array of TVkBool32;
   var surf_formats: array of TVkSurfaceFormatKHR;
@@ -103,7 +118,6 @@ constructor TLabSwapChain.Create(
   var composite_alpha: TVkCompositeAlphaFlagBitsKHR;
   var composite_alpha_flags: array[0..3] of TVkCompositeAlphaFlagBitsKHR;
   var swapchain_ci: TVkSwapchainCreateInfoKHR;
-  var queue_family_indices: array[0..1] of TVkUInt32;
   var swapchain_images: array of TVkImage;
   var swapchain_image_count: TVkUInt32;
   var buffer: TImageBuffer;
@@ -124,6 +138,7 @@ begin
   // Search for a graphics and a present queue in the array of queue
   // families, try to find one that supports both
   _QueueFamilyIndexGraphics := High(TVkUInt32);
+  _QueueFamilyIndexCompute := High(TVkUInt32);
   _QueueFamilyIndexPresent := High(TVkUInt32);
   for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
   begin
@@ -137,6 +152,13 @@ begin
         Break;
       end;
     end;
+  end;
+
+  for i := 0 to _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyCount - 1 do
+  if _Device.Ptr.PhysicalDevice.Ptr.QueueFamilyProperties[i]^.queueFlags and TVkFlags(VK_QUEUE_COMPUTE_BIT) <> 0 then
+  begin
+    _QueueFamilyIndexCompute := i;
+    Break;
   end;
 
   if (_QueueFamilyIndexPresent = High(TVkUInt32)) then
@@ -255,6 +277,11 @@ begin
     end;
   end;
 
+  queue_family_index_count := 0;
+  _QueueFamilyIndexGraphics := AddQueueFamilyIndex(_QueueFamilyIndexGraphics);
+  _QueueFamilyIndexCompute := AddQueueFamilyIndex(_QueueFamilyIndexCompute);
+  _QueueFamilyIndexPresent := AddQueueFamilyIndex(_QueueFamilyIndexPresent);
+
   FillChar(swapchain_ci, sizeof(swapchain_ci), 0);
   swapchain_ci.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   swapchain_ci.pNext := nil;
@@ -276,11 +303,9 @@ begin
   swapchain_ci.imageColorSpace := VK_COLORSPACE_SRGB_NONLINEAR_KHR;
   swapchain_ci.imageUsage := AUsageFlags;
   swapchain_ci.imageSharingMode := VK_SHARING_MODE_EXCLUSIVE;
-  swapchain_ci.queueFamilyIndexCount := 0;
-  swapchain_ci.pQueueFamilyIndices := nil;
+  swapchain_ci.queueFamilyIndexCount := queue_family_index_count;
+  swapchain_ci.pQueueFamilyIndices := @queue_family_indices;
   //uint32_t queueFamilyIndices[2] = {(uint32_t)info.graphics_queue_family_index, (uint32_t)info.present_queue_family_index};
-  queue_family_indices[0] := _QueueFamilyIndexGraphics;
-  queue_family_indices[1] := _QueueFamilyIndexPresent;
   if (_QueueFamilyIndexGraphics <> _QueueFamilyIndexPresent) then
   begin
     // If the graphics and present queues are from different queue families,
@@ -288,8 +313,6 @@ begin
     // queues, or we have to create the swapchain with imageSharingMode
     // as VK_SHARING_MODE_CONCURRENT
     swapchain_ci.imageSharingMode := VK_SHARING_MODE_CONCURRENT;
-    swapchain_ci.queueFamilyIndexCount := 2;
-    swapchain_ci.pQueueFamilyIndices := @queue_family_indices;
   end;
 
   r := Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_ci, nil, @_Handle);
@@ -314,15 +337,13 @@ begin
     SetLength(_Images, Length(_Images) + 1);
     _Images[High(_Images)] := buffer;
   end;
+
+  _QueueFamilyIndexGraphics := queue_family_indices[_QueueFamilyIndexGraphics];
+  _QueueFamilyIndexCompute := queue_family_indices[_QueueFamilyIndexCompute];
+  _QueueFamilyIndexPresent := queue_family_indices[_QueueFamilyIndexPresent];
   Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyGraphics);
-  if (_QueueFamilyIndexGraphics = _QueueFamilyIndexPresent) then
-  begin
-    _QueueFamilyPresent := _QueueFamilyGraphics;
-  end
-  else
-  begin
-    Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexGraphics, 0, @_QueueFamilyPresent);
-  end;
+  Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexCompute, 0, @_QueueFamilyCompute);
+  Vulkan.GetDeviceQueue(_Device.Ptr.VkHandle, _QueueFamilyIndexPresent, 0, @_QueueFamilyPresent);
 end;
 
 destructor TLabSwapChain.Destroy;

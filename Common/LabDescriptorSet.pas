@@ -78,25 +78,37 @@ function LabWriteDescriptorSet(
   const ImageInfos: array of TVkDescriptorImageInfo;
   const BufferInfos: array of TVkDescriptorBufferInfo;
   const TexelBufferViews: array of TVkBufferView
-): TLabWriteDescriptorSet; inline;
+): TLabWriteDescriptorSet;
+
+function LabWriteDescriptorSetStorageBuffer(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
+
+function LabWriteDescriptorSetStorageBufferDynamic(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
 
 function LabWriteDescriptorSetUniformBuffer(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
   const BufferInfo: array of TVkDescriptorBufferInfo
-): TLabWriteDescriptorSet; inline;
+): TLabWriteDescriptorSet;
 
 function LabWriteDescriptorSetUniformBufferDynamic(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
   const BufferInfo: array of TVkDescriptorBufferInfo
-): TLabWriteDescriptorSet; inline;
+): TLabWriteDescriptorSet;
 
 function LabWriteDescriptorSetImageSampler(
   const DstSet: TVkDescriptorSet;
   const DstBinding: TVkUInt32;
   const ImageInfo: array of TVkDescriptorImageInfo
-): TLabWriteDescriptorSet; inline;
+): TLabWriteDescriptorSet;
 
 function LabDescriptorBufferInfo(
   const Buffer: TVkBuffer;
@@ -278,6 +290,32 @@ begin
   begin
     Result.WriteDescriptorSet.pTexelBufferView := nil;
   end;
+end;
+
+function LabWriteDescriptorSetStorageBuffer(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
+begin
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    0, Length(BufferInfo), [], BufferInfo, []
+  );
+end;
+
+function LabWriteDescriptorSetStorageBufferDynamic(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const BufferInfo: array of TVkDescriptorBufferInfo
+): TLabWriteDescriptorSet;
+begin
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+    0, Length(BufferInfo), [], BufferInfo, []
+  );
 end;
 
 function LabWriteDescriptorSetUniformBuffer(

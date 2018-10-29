@@ -28,6 +28,8 @@ type
   PLabInt32Arr = ^TLabInt32Arr;
   TLabUInt32 = TVkUInt32;
   PLabUInt32 = ^TLabUInt32;
+  TLabUInt32Arr = array[Word] of TLabUInt32;
+  PLabUInt32Arr = ^TLabUInt32Arr;
   TLabInt64 = TVkInt64;
   PLabInt64 = ^TLabInt64;
   TLabUInt64 = TVkUInt64;

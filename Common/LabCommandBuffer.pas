@@ -42,7 +42,7 @@ type
       const Contents: TVkSubpassContents = VK_SUBPASS_CONTENTS_INLINE
     );
     procedure EndRenderPass;
-    procedure BindPipeline(const Pipeline: TLabPipeline);
+    procedure BindPipeline(const Pipeline: TLabPipeline); inline;
     procedure BindDescriptorSets(
       const PipelineBindPoint: TVkPipelineBindPoint;
       const Layout: TLabPipelineLayout;
@@ -60,7 +60,7 @@ type
       const Buffer: TVkBuffer;
       const Offset: TVkDeviceSize = 0;
       const IndexType: TVkIndexType = VK_INDEX_TYPE_UINT16
-    );
+    ); inline;
     procedure SetViewport(const Viewports: array of TVkViewport);
     procedure SetScissor(const Scissors: array of TVkRect2D);
     procedure Draw(
@@ -68,14 +68,17 @@ type
       const InstanceCount: TVkUInt32 = 1;
       const FirstVertex: TVkUInt32 = 0;
       const FirstInstance: TVkUInt32 = 0
-    );
+    ); inline;
     procedure DrawIndexed(
       const IndexCount: TVkUInt32;
       const InstanceCount: TVkUInt32 = 1;
       const FirstIndex: TVkUInt32 = 0;
       const VertexCffset: TVkUInt32 = 0;
       const FirstInstance: TVkUInt32 = 0
-    );
+    ); inline;
+    procedure DispatchCompute(
+      const GroupCountX, GroupCountY, GroupCountZ: TVkUInt32
+    ); inline;
     procedure CopyBuffer(
       const Src, Dst: TVkBuffer;
       const Regions: array of TVkBufferCopy
@@ -118,6 +121,15 @@ function LabViewport(
   const MinDepth: TVkFloat = 0;
   const MaxDepth: TVkFloat = 1
 ): TVkViewport;
+
+function LabBufferMemoryBarrier(
+  const Buffer: TVkBuffer;
+  const SrcAccessMask: TVkAccessFlags;
+  const DstAccessMask: TVkAccessFlags;
+  const Size: TVkDeviceSize = VK_WHOLE_SIZE;
+  const SrcQueueFamilyIndex: TVkUInt32 = VK_QUEUE_FAMILY_IGNORED;
+  const DstQueueFamilyIndex: TVkUInt32 = VK_QUEUE_FAMILY_IGNORED
+): TVkBufferMemoryBarrier;
 
 function LabImageMemoryBarrier(
   const Image: TVkImage;
@@ -343,6 +355,11 @@ begin
   );
 end;
 
+procedure TLabCommandBuffer.DispatchCompute(const GroupCountX, GroupCountY, GroupCountZ: TVkUInt32);
+begin
+  Vulkan.CmdDispatch(_Handle, GroupCountX, GroupCountY, GroupCountZ);
+end;
+
 procedure TLabCommandBuffer.CopyBuffer(const Src, Dst: TVkBuffer; const Regions: array of TVkBufferCopy);
 begin
   Vulkan.CmdCopyBuffer(_Handle, Src, Dst, Length(Regions), @Regions[0]);
@@ -440,6 +457,24 @@ begin
   Result.height := Height;
   Result.minDepth := MinDepth;
   Result.maxDepth := MaxDepth;
+end;
+
+function LabBufferMemoryBarrier(
+  const Buffer: TVkBuffer;
+  const SrcAccessMask: TVkAccessFlags;
+  const DstAccessMask: TVkAccessFlags;
+  const Size: TVkDeviceSize;
+  const SrcQueueFamilyIndex: TVkUInt32;
+  const DstQueueFamilyIndex: TVkUInt32
+): TVkBufferMemoryBarrier;
+begin
+  Result.sType := VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  Result.buffer := Buffer;
+  Result.size := Size;
+  Result.srcAccessMask := SrcAccessMask;
+  Result.dstAccessMask := DstAccessMask;
+  Result.srcQueueFamilyIndex := SrcQueueFamilyIndex;
+  Result.dstQueueFamilyIndex := DstQueueFamilyIndex;
 end;
 
 function LabImageMemoryBarrier(
