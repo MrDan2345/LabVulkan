@@ -221,6 +221,10 @@ function LabPtrToOrd(const Ptr: Pointer): PtrUInt; inline;
 function LabOrdToPtr(const Ptr: PtrUInt): Pointer; inline;
 function LabAlloc(const Size: TVkUInt32; const Align: TVkUInt32): PVkVoid; inline;
 procedure LabFree(var Mem: PVkVoid); inline;
+function LabRandomPi: TVkFloat; inline;
+function LabRandom2Pi: TVkFloat; inline;
+function LabRandomCirclePoint: TLabVec2; inline;
+function LabRandomSpherePoint: TLabVec3; inline;
 
 implementation
 
@@ -1431,6 +1435,33 @@ procedure LabFree(var Mem: PVkVoid);
 begin
   cmem.Free(PPtrArr(@Mem)^[-1]);
   Mem := nil;
+end;
+
+function LabRandomPi: TVkFloat;
+begin
+  Result := Random(Round(LabPi * 1000)) / 1000;
+end;
+
+function LabRandom2Pi: TVkFloat;
+begin
+  Result := Random(Round(LabTwoPi * 1000)) / 1000;
+end;
+
+function LabRandomCirclePoint: TLabVec2;
+  var a: TVkFloat;
+begin
+  a := LabRandom2Pi;
+  LabSinCos(a, Result.y, Result.x);
+end;
+
+function LabRandomSpherePoint: TLabVec3;
+  var a1, a2, s1, s2, c1, c2: TVkFloat;
+begin
+  a1 := LabRandom2Pi;
+  a2 := LabRandom2Pi;
+  LabSinCos(a1, s1, c1);
+  LabSinCos(a2, s2, c2);
+  Result.SetValue(c1 * c2, s2, s1 * c2);
 end;
 
 function LabVkErrorString(const State: TVkResult): String;

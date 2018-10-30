@@ -14,6 +14,11 @@ uses
   LabShader;
 
 type
+  TLabPipelineColorBlendStateCreateInfo = record
+    CreateInfo: TVkPipelineColorBlendStateCreateInfo;
+    Data: array of TVkPipelineColorBlendAttachmentState;
+  end;
+
   TLabPipelineLayout = class (TLabClass)
   private
     var _Device: TLabDeviceShared;
@@ -97,7 +102,7 @@ type
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-      const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
     ): TVkUInt32;
     class function Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
     class function FindOrCreate(
@@ -114,7 +119,7 @@ type
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-      const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
     ): TLabGraphicsPipeline;
     constructor Create(
       const ADevice: TLabDeviceShared;
@@ -130,7 +135,7 @@ type
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-      const AColorBlendState: TVkPipelineColorBlendStateCreateInfo;
+      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
       const AHash: TVkUInt32 = 0
     );
     destructor Destroy; override;
@@ -237,18 +242,28 @@ function LabPipelineMultisampleState(
 ): TVkPipelineMultisampleStateCreateInfo;
 
 function LabPipelineColorBlendState(
-  const AttachmentCount: TVkUInt32;
-  const Attachments: PVkPipelineColorBlendAttachmentState;
+  const Attachments: array of TVkPipelineColorBlendAttachmentState;
   const BlendConstants: array of TVkFloat;
   const LogicOpEnable: TVkBool32 = VK_FALSE;
   const LogicOp: TVkLogicOp = VK_LOGIC_OP_NO_OP;
   const Flags:TVkPipelineColorBlendStateCreateFlags = 0
-): TVkPipelineColorBlendStateCreateInfo;
+): TLabPipelineColorBlendStateCreateInfo;
 
 function LabSpecializationMapEntry(
   const ConstantID, Offset: TVkUInt32;
   const Size: TVkSize
 ): TVkSpecializationMapEntry; inline;
+
+function LabPipelineColorBlendAttachmentState(
+  const BlendEnable: TVkBool32 = VK_FALSE;
+  const SrcColorBlendFactor: TVkBlendFactor = VK_BLEND_FACTOR_ZERO;
+  const DstColorBlendFactor: TVkBlendFactor = VK_BLEND_FACTOR_ZERO;
+  const SrcAlphaBlendFactor: TVkBlendFactor = VK_BLEND_FACTOR_ZERO;
+  const DstAlphaBlendFactor: TVkBlendFactor = VK_BLEND_FACTOR_ZERO;
+  const ColorBlendOp: TVkBlendOp = VK_BLEND_OP_ADD;
+  const AlphaBlendOp: TVkBlendOp = VK_BLEND_OP_ADD;
+  const ColorWriteMask: TVkColorComponentFlags = $f
+): TVkPipelineColorBlendAttachmentState;
 
 implementation
 
@@ -396,7 +411,7 @@ class function TLabGraphicsPipeline.MakeHash(
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-  const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
 ): TVkUInt32;
   var i: TVkInt32;
   var ds_hash: TVkUInt32;
@@ -440,11 +455,11 @@ begin
   Result := LabCRC32(Result, @ARasterizationState, SizeOf(ARasterizationState));
   Result := LabCRC32(Result, @ADepthStencilState, SizeOf(ADepthStencilState));
   Result := LabCRC32(Result, @AMultisampleState, SizeOf(AMultisampleState));
-  Result := LabCRC32(Result, @AColorBlendState.flags, SizeOf(AColorBlendState.flags));
-  Result := LabCRC32(Result, @AColorBlendState.logicOp, SizeOf(AColorBlendState.logicOp));
-  Result := LabCRC32(Result, @AColorBlendState.logicOpEnable, SizeOf(AColorBlendState.logicOpEnable));
-  Result := LabCRC32(Result, @AColorBlendState.blendConstants, SizeOf(AColorBlendState.blendConstants));
-  Result := LabCRC32(Result, AColorBlendState.pAttachments, AColorBlendState.attachmentCount * SizeOf(TVkPipelineColorBlendAttachmentState));
+  Result := LabCRC32(Result, @AColorBlendState.CreateInfo.flags, SizeOf(AColorBlendState.CreateInfo.flags));
+  Result := LabCRC32(Result, @AColorBlendState.CreateInfo.logicOp, SizeOf(AColorBlendState.CreateInfo.logicOp));
+  Result := LabCRC32(Result, @AColorBlendState.CreateInfo.logicOpEnable, SizeOf(AColorBlendState.CreateInfo.logicOpEnable));
+  Result := LabCRC32(Result, @AColorBlendState.CreateInfo.blendConstants, SizeOf(AColorBlendState.CreateInfo.blendConstants));
+  Result := LabCRC32(Result, AColorBlendState.CreateInfo.pAttachments, AColorBlendState.CreateInfo.attachmentCount * SizeOf(TVkPipelineColorBlendAttachmentState));
 end;
 
 class function TLabGraphicsPipeline.Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
@@ -480,7 +495,7 @@ class function TLabGraphicsPipeline.FindOrCreate(
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-  const AColorBlendState: TVkPipelineColorBlendStateCreateInfo
+  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
 ): TLabGraphicsPipeline;
   var PipelineHash: TVkUInt32;
 begin
@@ -535,7 +550,7 @@ constructor TLabGraphicsPipeline.Create(
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-  const AColorBlendState: TVkPipelineColorBlendStateCreateInfo;
+  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
   const AHash: TVkUInt32
 );
   var i: TVkInt32;
@@ -801,25 +816,42 @@ begin
 end;
 
 function LabPipelineColorBlendState(
-  const AttachmentCount: TVkUInt32;
-  const Attachments: PVkPipelineColorBlendAttachmentState;
+  const Attachments: array of TVkPipelineColorBlendAttachmentState;
   const BlendConstants: array of TVkFloat;
   const LogicOpEnable: TVkBool32;
   const LogicOp: TVkLogicOp;
   const Flags: TVkPipelineColorBlendStateCreateFlags
-): TVkPipelineColorBlendStateCreateInfo;
+): TLabPipelineColorBlendStateCreateInfo;
   var i: Integer;
 begin
-  FillChar(Result, SizeOf(Result), 0);
-  Result.sType := VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  Result.pNext := nil;
-  Result.flags := Flags;
-  Result.logicOpEnable := LogicOpEnable;
-  Result.logicOp := LogicOp;
-  Result.attachmentCount := AttachmentCount;
-  Result.pAttachments := Attachments;
-  for i := 0 to High(Result.blendConstants) do
-  if i < Length(BlendConstants) then Result.blendConstants[i] := BlendConstants[i] else Result.blendConstants[i] := 1;
+  FillChar(Result.CreateInfo, SizeOf(Result), 0);
+  SetLength(Result.Data, Length(Attachments));
+  Move(Attachments[0], Result.Data[0], Length(Attachments) * SizeOf(TVkPipelineColorBlendAttachmentState));
+  Result.CreateInfo.sType := VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  Result.CreateInfo.pNext := nil;
+  Result.CreateInfo.flags := Flags;
+  Result.CreateInfo.logicOpEnable := LogicOpEnable;
+  Result.CreateInfo.logicOp := LogicOp;
+  Result.CreateInfo.attachmentCount := Length(Attachments);
+  if Length(Attachments) > 0 then
+  begin
+    Result.CreateInfo.pAttachments := @Result.Data[0];
+  end
+  else
+  begin
+    Result.CreateInfo.pAttachments := nil;
+  end;
+  for i := 0 to High(Result.CreateInfo.blendConstants) do
+  begin
+    if i < Length(BlendConstants) then
+    begin
+      Result.CreateInfo.blendConstants[i] := BlendConstants[i]
+    end
+    else
+    begin
+      Result.CreateInfo.blendConstants[i] := 1;
+    end;
+  end;
 end;
 
 function LabSpecializationMapEntry(
@@ -830,6 +862,27 @@ begin
   Result.constantID := ConstantID;
   Result.offset := Offset;
   Result.size := Size;
+end;
+
+function LabPipelineColorBlendAttachmentState(
+  const BlendEnable: TVkBool32;
+  const SrcColorBlendFactor: TVkBlendFactor;
+  const DstColorBlendFactor: TVkBlendFactor;
+  const SrcAlphaBlendFactor: TVkBlendFactor;
+  const DstAlphaBlendFactor: TVkBlendFactor;
+  const ColorBlendOp: TVkBlendOp;
+  const AlphaBlendOp: TVkBlendOp;
+  const ColorWriteMask: TVkColorComponentFlags
+): TVkPipelineColorBlendAttachmentState;
+begin
+  Result.blendEnable := BlendEnable;
+  Result.srcColorBlendFactor := SrcColorBlendFactor;
+  Result.dstColorBlendFactor := DstColorBlendFactor;
+  Result.colorBlendOp := ColorBlendOp;
+  Result.srcAlphaBlendFactor := SrcAlphaBlendFactor;
+  Result.dstAlphaBlendFactor := DstAlphaBlendFactor;
+  Result.alphaBlendOp := AlphaBlendOp;
+  Result.colorWriteMask := ColorWriteMask;
 end;
 
 end.

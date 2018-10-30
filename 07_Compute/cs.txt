@@ -1,16 +1,44 @@
 #version 450
 
-layout(binding = 0) buffer Pos {
-   uint values[ ];
+struct t_particle {
+	vec2 pos;
+	vec2 vel;
+	vec4 scale;
 };
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (binding = 0) buffer per_vertex {
+   t_particle values[];
+};
+layout (binding = 1) uniform t_data {
+	float w;
+	float h;
+} data;
 
-layout (constant_id = 0) const uint BUFFER_ELEMENTS = 32;
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout (constant_id = 0) const uint particle_count = 32;
 
 void main() 
 {
 	uint index = gl_GlobalInvocationID.x;
-	if (index >= BUFFER_ELEMENTS) return;	
-	values[index] += values[index];
+	if (index >= particle_count) return;
+	t_particle v = values[index];
+	v.pos += v.vel;
+	if (v.pos.x < 0) {
+		v.pos.x = 0;
+		if (v.vel.x < 0) v.vel.x = -v.vel.x;
+	}
+	if (v.pos.y < 0) {
+		v.pos.y = 0;
+		if (v.vel.y < 0) v.vel.y = -v.vel.y;
+	}
+	if (v.pos.x > data.w) {
+		v.pos.x = data.w;
+		if (v.vel.x > 0) v.vel.x = -v.vel.x;
+	}
+	if (v.pos.y > data.h) {
+		v.pos.y = data.h;
+		if (v.vel.y > 0) v.vel.y = -v.vel.y;
+	}
+	values[index] = v;
 }
