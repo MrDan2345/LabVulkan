@@ -459,7 +459,7 @@ begin
     LabPipelineRasterizationState(),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
-    LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
   );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);

@@ -204,7 +204,7 @@ begin
       VK_FALSE, VK_FALSE
     ),
     LabPipelineMultisampleState(SampleCount),
-    LabPipelineColorBlendState(1, @LabDefaultColorBlendAttachment, [])
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
   );
   Cmd.BindPipeline(_Pipeline.Ptr);
   Cmd.SetViewport([Viewport]);
