@@ -53,6 +53,21 @@ type
     constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
     constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
   end;
+  TLabGeometryShaderShared = specialize TLabSharedRef<TLabGeometryShader>;
+
+  TLabTessControlShader = class (TLabShader)
+  public
+    constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
+  end;
+  TLabTessControlShaderShared = specialize TLabSharedRef<TLabTessControlShader>;
+
+  TLabTessEvaluationShader = class (TLabShader)
+  public
+    constructor Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32); override;
+    constructor Create(const ADevice: TLabDeviceShared; const FileName: AnsiString); override;
+  end;
+  TLabTessEvaluationShaderShared = specialize TLabSharedRef<TLabTessEvaluationShader>;
 
   TLabShaderStages = array of TVkPipelineShaderStageCreateInfo;
 function LabShaderStages(const Shaders: array of TLabShader): TLabShaderStages;
@@ -166,6 +181,34 @@ constructor TLabGeometryShader.Create(const ADevice: TLabDeviceShared; const Fil
 begin
   inherited Create(ADevice, FileName);
   _StageCreateInfo.stage := VK_SHADER_STAGE_GEOMETRY_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabTessControlShader.Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32);
+begin
+  inherited Create(ADevice, Data, Size);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabTessControlShader.Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);
+begin
+  inherited Create(ADevice, FileName);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabTessEvaluationShader.Create(const ADevice: TLabDeviceShared; const Data: Pointer; const Size: TVkInt32);
+begin
+  inherited Create(ADevice, Data, Size);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+  _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
+end;
+
+constructor TLabTessEvaluationShader.Create(const ADevice: TLabDeviceShared; const FileName: AnsiString);
+begin
+  inherited Create(ADevice, FileName);
+  _StageCreateInfo.stage := VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
   _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
 end;
 

@@ -102,7 +102,8 @@ type
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
+      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+      const ATesselationState: TVkPipelineTessellationStateCreateInfo
     ): TVkUInt32;
     class function Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
     class function FindOrCreate(
@@ -119,7 +120,8 @@ type
       const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
+      const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+      const ATesselationState: TVkPipelineTessellationStateCreateInfo
     ): TLabGraphicsPipeline;
     constructor Create(
       const ADevice: TLabDeviceShared;
@@ -136,6 +138,7 @@ type
       const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
       const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
       const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+      const ATesselationState: TVkPipelineTessellationStateCreateInfo;
       const AHash: TVkUInt32 = 0
     );
     destructor Destroy; override;
@@ -248,6 +251,11 @@ function LabPipelineColorBlendState(
   const LogicOp: TVkLogicOp = VK_LOGIC_OP_NO_OP;
   const Flags:TVkPipelineColorBlendStateCreateFlags = 0
 ): TLabPipelineColorBlendStateCreateInfo;
+
+function LabPipelineTesselationState(
+  const PatchControlPointCount: TVkUInt32;
+  const Flags: TVkPipelineTessellationStateCreateFlags = 0
+): TVkPipelineTessellationStateCreateInfo;
 
 function LabSpecializationMapEntry(
   const ConstantID, Offset: TVkUInt32;
@@ -411,7 +419,8 @@ class function TLabGraphicsPipeline.MakeHash(
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
+  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+  const ATesselationState: TVkPipelineTessellationStateCreateInfo
 ): TVkUInt32;
   var i: TVkInt32;
   var ds_hash: TVkUInt32;
@@ -460,6 +469,7 @@ begin
   Result := LabCRC32(Result, @AColorBlendState.CreateInfo.logicOpEnable, SizeOf(AColorBlendState.CreateInfo.logicOpEnable));
   Result := LabCRC32(Result, @AColorBlendState.CreateInfo.blendConstants, SizeOf(AColorBlendState.CreateInfo.blendConstants));
   Result := LabCRC32(Result, AColorBlendState.CreateInfo.pAttachments, AColorBlendState.CreateInfo.attachmentCount * SizeOf(TVkPipelineColorBlendAttachmentState));
+  Result := LabCRC32(Result, @ATesselationState, SizeOf(ATesselationState));
 end;
 
 class function TLabGraphicsPipeline.Find(const AHash: TVkUInt32): TLabGraphicsPipeline;
@@ -495,7 +505,8 @@ class function TLabGraphicsPipeline.FindOrCreate(
   const ARasterizationState: TVkPipelineRasterizationStateCreateInfo;
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
-  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo
+  const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+  const ATesselationState: TVkPipelineTessellationStateCreateInfo
 ): TLabGraphicsPipeline;
   var PipelineHash: TVkUInt32;
 begin
@@ -511,7 +522,8 @@ begin
     ARasterizationState,
     ADepthStencilState,
     AMultisampleState,
-    AColorBlendState
+    AColorBlendState,
+    ATesselationState
   );
   Result := Find(PipelineHash);
   if not Assigned(Result) then
@@ -531,6 +543,7 @@ begin
       ADepthStencilState,
       AMultisampleState,
       AColorBlendState,
+      ATesselationState,
       PipelineHash
     );
   end;
@@ -551,6 +564,7 @@ constructor TLabGraphicsPipeline.Create(
   const ADepthStencilState: TVkPipelineDepthStencilStateCreateInfo;
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
   const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
+  const ATesselationState: TVkPipelineTessellationStateCreateInfo;
   const AHash: TVkUInt32
 );
   var i: TVkInt32;
@@ -578,7 +592,7 @@ begin
   pipeline_info.pInputAssemblyState := @AInputAssemblyState;
   pipeline_info.pRasterizationState := @ARasterizationState;
   pipeline_info.pColorBlendState := @AColorBlendState;
-  pipeline_info.pTessellationState := nil;
+  pipeline_info.pTessellationState := @ATesselationState;
   pipeline_info.pMultisampleState := @AMultisampleState;
   pipeline_info.pDynamicState := @dynamic_state_info;
   pipeline_info.pViewportState := @AViewportState;
@@ -609,7 +623,8 @@ begin
       ARasterizationState,
       ADepthStencilState,
       AMultisampleState,
-      AColorBlendState
+      AColorBlendState,
+      ATesselationState
     );
   end
   else
@@ -852,6 +867,18 @@ begin
       Result.CreateInfo.blendConstants[i] := 1;
     end;
   end;
+end;
+
+function LabPipelineTesselationState(
+  const PatchControlPointCount: TVkUInt32;
+  const Flags: TVkPipelineTessellationStateCreateFlags
+): TVkPipelineTessellationStateCreateInfo;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.sType := VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+  Result.pNext := nil;
+  Result.flags := Flags;
+  Result.patchControlPoints := PatchControlPointCount;
 end;
 
 function LabSpecializationMapEntry(

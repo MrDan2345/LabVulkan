@@ -1,0 +1,20 @@
+#version 400
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+layout (std140, binding = 0) uniform t_xf {
+	mat4 w;
+	mat4 vp;
+    mat4 wvp;
+} xf;
+layout (location = 0) in vec4 in_pos;
+layout (location = 1) in vec4 in_color;
+layout (location = 0) out vec4 out_color;
+layout (location = 1) out vec3 out_normal;
+out gl_PerVertex {
+    vec4 gl_Position;
+};
+void main() {
+	gl_Position = in_pos;
+	out_color = in_color;
+	out_normal = normalize(in_pos.xyz);
+}
