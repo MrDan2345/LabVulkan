@@ -204,7 +204,8 @@ begin
       VK_FALSE, VK_FALSE
     ),
     LabPipelineMultisampleState(SampleCount),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
   );
   Cmd.BindPipeline(_Pipeline.Ptr);
   Cmd.SetViewport([Viewport]);

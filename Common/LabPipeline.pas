@@ -592,7 +592,14 @@ begin
   pipeline_info.pInputAssemblyState := @AInputAssemblyState;
   pipeline_info.pRasterizationState := @ARasterizationState;
   pipeline_info.pColorBlendState := @AColorBlendState;
-  pipeline_info.pTessellationState := @ATesselationState;
+  if (ATesselationState.patchControlPoints > 0) then
+  begin
+    pipeline_info.pTessellationState := @ATesselationState;
+  end
+  else
+  begin
+    pipeline_info.pTessellationState := nil;
+  end;
   pipeline_info.pMultisampleState := @AMultisampleState;
   pipeline_info.pDynamicState := @dynamic_state_info;
   pipeline_info.pViewportState := @AViewportState;

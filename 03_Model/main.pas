@@ -1106,7 +1106,8 @@ procedure TLabApp.Loop;
             ),
             LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
             LabPipelineMultisampleState(SampleCount),
-            LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
+            LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+            LabPipelineTesselationState(0)
           );
         end;
         if not Assigned(cur_pipeline)

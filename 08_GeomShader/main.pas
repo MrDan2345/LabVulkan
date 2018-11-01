@@ -208,7 +208,7 @@ procedure TLabApp.Initialize;
   var map: PVkVoid;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Initialization';
+  Window.Caption := 'Vulkan Geometry Shader';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -299,7 +299,8 @@ begin
     ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
   );
   PipelineGeom := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
@@ -323,7 +324,8 @@ begin
     ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], [])
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
   );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);

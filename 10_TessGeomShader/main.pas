@@ -210,7 +210,7 @@ procedure TLabApp.Initialize;
   var map: PVkVoid;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Initialization';
+  Window.Caption := 'Vulkan Tesselation and Geometry Shader';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [

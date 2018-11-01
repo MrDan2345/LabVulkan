@@ -593,7 +593,8 @@ begin
           VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE
         )
       ], []
-    )
+    ),
+    LabPipelineTesselationState(0)
   );
   ComputeUniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TComputeUniform));
   ComputeUniformBuffer.Ptr.Map(ComputeUniformData);
