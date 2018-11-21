@@ -60,14 +60,15 @@ type
     destructor Destroy; override;
   end;
 
-  TLabClassCallback = procedure (const Obj: TLabClass) of object;
   TLabClass = class (TObject, IUnknown)
+  public
+    type TShared = specialize TLabSharedRef<TLabClass>;
   protected
     class var _VulkanPtr: ^TVulkan;
     class var _VulkanInstance: TVkInstance;
     var _RefCount: Longint;
     var _Weak: TLabWeakCounter;
-    var _OnDestroy: TLabClassCallback;
+    var _References: array of TShared;
     function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
@@ -80,9 +81,10 @@ type
     class function VulkanInstance: TVkInstance; inline;
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
+    procedure AddReference(const Obj: TLabClass);
+    procedure RemoveReference(const Obj: TLabClass);
     class function NewInstance: TObject; override;
     property RefCount: Longint read _RefCount;
-    property OnDestroy: TLabClassCallback read _OnDestroy write _OnDestroy;
   end;
 
   TLabStrArrA = array of AnsiString;
@@ -242,8 +244,34 @@ end;
 
 procedure TLabClass.BeforeDestruction;
 begin
-  if Assigned(_OnDestroy) then OnDestroy(Self);
   if Assigned(_Weak) then _Weak._Obj := nil;
+end;
+
+procedure TLabClass.AddReference(const Obj: TLabClass);
+  var i: TVkInt32;
+begin
+  for i := 0 to High(_References) do
+  begin
+    if _References[i].Ptr = Obj then Exit;
+  end;
+  SetLength(_References, Length(_References) + 1);
+  i := High(_References);
+  _References[i] := Obj;
+end;
+
+procedure TLabClass.RemoveReference(const Obj: TLabClass);
+  var i, j: TVkInt32;
+begin
+  for i := 0 to High(_References) do
+  if _References[i].Ptr = Obj then
+  begin
+    for j := i to High(_References) - 1 do
+    begin
+      _References[j] := _References[j + 1];
+    end;
+    SetLength(_References, Length(_References) - 1);
+    Exit;
+  end;
 end;
 
 class function TLabClass.NewInstance: TObject;

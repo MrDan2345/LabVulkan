@@ -507,6 +507,22 @@ type
   end;
   TLabColladaAnimationList = TLabColladaAnimation.TList;
 
+  TLabColladaCamera = class (TLabColladaObject)
+  private
+    _FOV: TVkFloat;
+    _Aspect: TVkFloat;
+    _Near: TVkFloat;
+    _Far: TVkFloat;
+  public
+    property FOV: TVkFloat read _FOV;
+    property Aspect: TVkFloat read _Aspect;
+    property ClipNear: TVkFloat read _Near;
+    property ClipFar: TVkFloat read _Far;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaCameraList = specialize TLabList<TLabColladaCamera>;
+
   TLabColladaInstanceMaterial = class (TLabColladaObject)
   private
     _Symbol: DOMString;
@@ -547,6 +563,17 @@ type
     property Skeleton: TLabColladaNode read _Skeleton;
     property Controller: TLabColladaController read _Controller;
     property MaterialBindings: TLabColladaInstanceMaterialList read _MaterialBindings;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaInstanceCamera = class (TLabColladaInstance)
+  private
+    _Camera: TLabColladaCamera;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Camera: TLabColladaCamera read _Camera;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -637,6 +664,15 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaLibraryCameras = class (TLabColladaObject)
+  private
+    _Cameras: TLabColladaCameraList;
+  public
+    property Cameras: TLabColladaCameraList read _Cameras;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaLibraryVisualScenes = class (TLabColladaObject)
   private
     _VisualScenes: TLabColladaVisualSceneList;
@@ -684,6 +720,7 @@ type
     _LibGeometries: TLabColladaLibraryGeometries;
     _LibControllers: TLabColladaLibraryControllers;
     _LibAnimations: TLabColladaLibraryAnimations;
+    _LibCameras: TLabColladaLibraryCameras;
     _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
   public
@@ -694,6 +731,7 @@ type
     property LibGeometries: TLabColladaLibraryGeometries read _LibGeometries;
     property LibControllers: TLabColladaLibraryControllers read _LibControllers;
     property LibAnimations: TLabColladaLibraryAnimations read _LibAnimations;
+    property LibCameras: TLabColladaLibraryCameras read _LibCameras;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
     property Scene: TLabColladaScene read _Scene;
     constructor Create(const XMLNode: TDOMNode);
@@ -1609,6 +1647,35 @@ begin
   _Sources.Free;
   while _Animations.Count > 0 do _Animations.Pop.Free;
   _Animations.Free;
+  inherited Destroy;
+end;
+
+constructor TLabColladaCamera.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+  var CurNode, Node: TDOMNode;
+begin
+  inherited Create(XMLNode, AParent);
+  _FOV := 60 * LabDegToRad;
+  _Aspect := 1;
+  _Near := 0.1;
+  _Far := 100;
+  CurNode := XMLNode.FindNode('optics');
+  if Assigned(CurNode) then CurNode := CurNode.FindNode('technique_common');
+  if Assigned(CurNode) then CurNode := CurNode.FindNode('perspective');
+  if Assigned(CurNode) then
+  begin
+    Node := CurNode.FindNode('xfov');
+    if Assigned(Node) then _FOV := StrToFloatDef(AnsiString(Node.TextContent), 60) * LabDegToRad;
+    Node := CurNode.FindNode('aspect_ratio');
+    if Assigned(Node) then _Aspect := StrToFloatDef(AnsiString(Node.TextContent), 1);
+    Node := CurNode.FindNode('znear');
+    if Assigned(Node) then _Near := StrToFloatDef(AnsiString(Node.TextContent), 0.1);
+    Node := CurNode.FindNode('zfar');
+    if Assigned(Node) then _Far := StrToFloatDef(AnsiString(Node.TextContent), 100);
+  end;
+end;
+
+destructor TLabColladaCamera.Destroy;
+begin
   inherited Destroy;
 end;
 
@@ -2542,6 +2609,26 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaInstanceCamera.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaCamera) then
+  begin
+    _Camera := TLabColladaCamera(Obj);
+  end;
+end;
+
+constructor TLabColladaInstanceCamera.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+begin
+  inherited Create(XMLNode, AParent);
+end;
+
+destructor TLabColladaInstanceCamera.Destroy;
+begin
+  inherited Destroy;
+end;
+
 constructor TLabColladaNode.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -2658,6 +2745,10 @@ begin
     else if NodeName = 'instance_controller' then
     begin
       _Instances.Add(TLabColladaInstanceController.Create(CurNode, Self));
+    end
+    else if NodeName = 'instance_camera' then
+    begin
+      _Instances.Add(TLabColladaInstanceCamera.Create(CurNode, Self));
     end;
     CurNode := CurNode.NextSibling;
   end;
@@ -2878,6 +2969,31 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaLibraryCameras.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Cameras := TLabColladaCameraList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'camera' then
+    begin
+      _Cameras.Add(TLabColladaCamera.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryCameras.Destroy;
+begin
+  while _Cameras.Count > 0 do _Cameras.Pop.Free;
+  _Cameras.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaLibraryVisualScenes.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -3001,6 +3117,7 @@ begin
     end
     else if NodeName = 'library_cameras' then
     begin
+      _LibCameras := TLabColladaLibraryCameras.Create(CurNode, Self);
     end
     else if NodeName = 'library_lights' then
     begin
@@ -3043,6 +3160,7 @@ end;
 
 destructor TLabColladaRoot.Destroy;
 begin
+  FreeAndNil(_LibCameras);
   FreeAndNil(_LibMaterials);
   FreeAndNil(_LibEffects);
   FreeAndNil(_LibImages);

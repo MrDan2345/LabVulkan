@@ -107,7 +107,7 @@ begin
       )
     ]
   );
-  _PipelineLayout := TLabPipelineLayout.Create(_Device, [], [_Shader.DescriptorSetLayout]);
+  _PipelineLayout := TLabPipelineLayout.Create(_Device, [], [_Shader.DescriptorSetLayout.Ptr]);
 end;
 
 destructor TLabDebugDraw.Destroy;
@@ -213,7 +213,7 @@ begin
   Cmd.BindDescriptorSets(
     VK_PIPELINE_BIND_POINT_GRAPHICS,
     _PipelineLayout,
-    0, 1, _Shader.DescriptorSets.Ptr, []
+    0, [_Shader.DescriptorSets.Ptr.VkHandle[0]], []
   );
   Cmd.BindVertexBuffers(0, [_VertexBuffer.VkHandle], [0]);
   Cmd.Draw(_FlushedVertices);

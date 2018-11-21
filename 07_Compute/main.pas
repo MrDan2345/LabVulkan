@@ -23,7 +23,6 @@ uses
   LabRenderPass,
   LabShader,
   LabFrameBuffer,
-  LabDescriptorPool,
   LabSync,
   LabUtils,
   LabImageData,
@@ -69,7 +68,6 @@ type
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
     var UniformBuffer: TLabUniformBufferShared;
-    var DescriptorSetLayout: TLabDescriptorSetLayoutShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -77,13 +75,11 @@ type
     var PixelShader: TLabShaderShared;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexBufferStaging: TLabBufferShared;
-    var DescriptorPool: TLabDescriptorPoolShared;
+    var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
     var ComputePipeline: TLabPipelineShared;
     var ComputePipelineLayout: TLabPipelineLayoutShared;
-    var ComputeDescriptorPool: TLabDescriptorPoolShared;
-    var ComputeDescriptorSetLayout: TLabDescriptorSetLayoutShared;
     var ComputeDescriptorSets: TLabDescriptorSetsShared;
     var ComputeShader: TLabComputeShaderShared;
     var ComputeUniformBuffer: TLabUniformBufferShared;
@@ -361,7 +357,7 @@ begin
   CmdBuffer.Ptr.BindDescriptorSets(
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ComputePipelineLayout.Ptr,
-    0, 1, ComputeDescriptorSets.Ptr,
+    0, [ComputeDescriptorSets.Ptr.VkHandle[0]],
     []
   );
   CmdBuffer.Ptr.DispatchCompute(ComputeGroups, 1, 1);
@@ -492,14 +488,14 @@ begin
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
   UniformBuffer.Ptr.Map(UniformData);
-  DescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device,
-    [
+  DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
+  DescriptorSets := DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
       LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
-    ]
-  );
-  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSetLayout]);
+    ])
+  ]);
+  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   ComputeShader := TLabComputeShader.Create(Device, 'cs.spv');
@@ -531,18 +527,6 @@ begin
     VertexBufferStaging.Ptr.Unmap;
   end;
   Texture := TTexture.Create('../Images/flare.png');
-  DescriptorPool := TLabDescriptorPool.Create(
-    Device,
-    [
-      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
-    ],
-    1
-  );
-  DescriptorSets := TLabDescriptorSets.Create(
-    Device, DescriptorPool,
-    [DescriptorSetLayout.Ptr.VkHandle]
-  );
   DescriptorSets.Ptr.UpdateSets(
     [
       LabWriteDescriptorSetUniformBuffer(
@@ -598,26 +582,14 @@ begin
   );
   ComputeUniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TComputeUniform));
   ComputeUniformBuffer.Ptr.Map(ComputeUniformData);
-  ComputeDescriptorSetLayout := TLabDescriptorSetLayout.Create(
-    Device,
-    [
+  ComputeDescriptorSets := DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_COMPUTE_BIT)),
       LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_COMPUTE_BIT))
-    ]
-  );
+    ])
+  ]);
   ComputePipelineLayout := TLabPipelineLayout.Create(
-    Device, [], [ComputeDescriptorSetLayout]
-  );
-  ComputeDescriptorPool := TLabDescriptorPool.Create(
-    Device,
-    [
-      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-      LabDescriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1)
-    ],
-    1
-  );
-  ComputeDescriptorSets := TLabDescriptorSets.Create(
-    Device, ComputeDescriptorPool, [ComputeDescriptorSetLayout.Ptr.VkHandle]
+    Device, [], [ComputeDescriptorSets.Ptr.Layout[0].Ptr]
   );
   ComputeDescriptorSets.Ptr.UpdateSets(
     [
@@ -652,21 +624,18 @@ begin
   ComputePipeline := nil;
   ComputePipelineLayout := nil;
   ComputeDescriptorSets := nil;
-  ComputeDescriptorPool := nil;
-  ComputeDescriptorSetLayout := nil;
   ComputeShader := nil;
   ComputeUniformBuffer := nil;
   Semaphore := nil;
   Pipeline := nil;
   PipelineCache := nil;
   DescriptorSets := nil;
-  DescriptorPool := nil;
+  DescriptorSetsFactory := nil;
   Texture := nil;
   VertexBuffer := nil;
   PixelShader := nil;
   VertexShader := nil;
   PipelineLayout := nil;
-  DescriptorSetLayout := nil;
   UniformBuffer := nil;
   CmdBuffer := nil;
   CmdPool := nil;
@@ -718,7 +687,7 @@ begin
   CmdBuffer.Ptr.BindDescriptorSets(
     VK_PIPELINE_BIND_POINT_GRAPHICS,
     PipelineLayout.Ptr,
-    0, 1, DescriptorSets.Ptr, []
+    0, [DescriptorSets.Ptr.VkHandle[0]], []
   );
   CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
   CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);

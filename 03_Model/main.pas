@@ -23,7 +23,6 @@ uses
   LabPipeline,
   LabRenderPass,
   LabFrameBuffer,
-  LabDescriptorPool,
   LabPlatform,
   LabSync,
   LabColladaParser,
@@ -255,6 +254,7 @@ begin
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
   );
+  map := nil;
   if VertexBufferStaging.Map(map) then
   begin
     Move(Subset.WeightData^, map^, VertexBuffer.Size);
@@ -520,7 +520,7 @@ begin
       Pass.SkinSubset := nil;
     end;
     Pass.Shader := TLabSceneShaderFactory.MakeShader(App.Device, r_s.VertexDescriptor, Params, si_ptr);
-    Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.Shader.Ptr.DescriptorSetLayout]);
+    Pass.PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [Pass.Shader.Ptr.DescriptorSetLayout.Ptr]);
     Passes.Add(Pass);
   end;
 end;
@@ -1121,7 +1121,7 @@ procedure TLabApp.Loop;
         CmdBuffer.Ptr.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
           r_p.PipelineLayout.Ptr,
-          0, 1, r_p.Shader.Ptr.DescriptorSets.Ptr, [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
+          0, [r_p.Shader.Ptr.DescriptorSets.Ptr.VkHandle[0]], [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
         );
         if Assigned(r_ss) then
         begin

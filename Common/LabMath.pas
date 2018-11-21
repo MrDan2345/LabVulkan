@@ -2650,6 +2650,8 @@ begin
   //if Result.z < 0 then Result.z := Result.z + LabTwoPi;
 end;
 
+{$Push}
+{$Hints off}
 function LabEulerToMat(const e: TLabVec3): TLabMat;
   var s1, s2, s3, c1, c2, c3, x: TLabFloat;
 begin
@@ -2665,6 +2667,7 @@ begin
     0, 0, 0, 1
   );
 end;
+{$Pop}
 
 function LabQuatToEuler(const q: TLabQuat): TLabVec3;
   function ClampAngle(const a: TLabFloat): TLabFloat;
@@ -2705,6 +2708,8 @@ begin
   if Result.z < 0 then Result.z := Result.z + LabTwoPi;
 end;
 
+{$Push}
+{$Hints off}
 function LabEulerToQuat(const e: TLabVec3): TLabQuat;
   function ClampAngle(const a: TLabFloat): TLabFloat;
   begin
@@ -2726,6 +2731,7 @@ begin
   Result.z := cr * cp * sy - sr * sp * cy;
   Result.w := cr * cp * cy + sr * sp * sy;
 end;
+{$Pop}
 
 function LabQuatToMat(const q: TLabQuat): TLabMat;
   var x2, y2, z2, xx, xy, xz, yy, yz, zz, wx, wy, wz: TLabFloat;

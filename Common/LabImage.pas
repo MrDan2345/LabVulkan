@@ -164,7 +164,9 @@ begin
   begin
     Move(AQueueFamilyIndices[0], _QueueFamilyIndices[0], SizeOf(TVkUint32) * Length(_QueueFamilyIndices));
   end;
+  {$Push}{$Hints off}
   FillChar(image_info, sizeof(image_info), 0);
+  {$Pop}
   image_info.sType := VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_info.pNext := nil;
   image_info.imageType := _ImageType;
@@ -175,6 +177,7 @@ begin
   image_info.mipLevels := _MipLevels;
   image_info.arrayLayers := _Layers;
   image_info.samples := _Samples;
+  image_info.tiling := ATiling;
   image_info.initialLayout := AInitialLayout;
   image_info.queueFamilyIndexCount := Length(_QueueFamilyIndices);
   if Length(_QueueFamilyIndices) > 0 then
@@ -188,8 +191,9 @@ begin
   image_info.sharingMode := _SharingMode;
   image_info.usage := _Usage;
   image_info.flags := _Flags;
-
+  {$Push}{$Hints off}
   FillChar(mem_alloc, sizeof(mem_alloc), 0);
+  {$Pop}
   mem_alloc.sType := VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   mem_alloc.pNext := nil;
   mem_alloc.allocationSize := 0;
@@ -233,7 +237,9 @@ begin
   LabLog('TLabImageView.Create');
   inherited Create;
   _Device := ADevice;
+  {$Push}{$Hints off}
   FillChar(view_info, sizeof(view_info), 0);
+  {$Pop}
   view_info.sType := VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view_info.pNext := nil;
   view_info.image := AImage;
@@ -294,7 +300,7 @@ begin
   inherited Create(
     ADevice,
     depth_format,
-    TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT),
+    AUsage or TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT),
     [],
     AWidth, AHeight, 1, 1, 1, ASamples,
     tiling, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
@@ -342,7 +348,9 @@ constructor TLabSampler.Create(
   var samp_info: TVkSamplerCreateInfo;
 begin
   _Device := ADevice;
+  {$Push}{$Hints off}
   FillChar(samp_info, SizeOf(samp_info), 0);
+  {$Pop}
   samp_info.sType := VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samp_info.minFilter := AMinFilter;
   samp_info.magFilter := AMagFilter;

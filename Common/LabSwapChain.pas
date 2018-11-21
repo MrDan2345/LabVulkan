@@ -117,7 +117,7 @@ constructor TLabSwapChain.Create(
   var pre_transform: TVkSurfaceTransformFlagBitsKHR;
   var composite_alpha: TVkCompositeAlphaFlagBitsKHR;
   var composite_alpha_flags: array[0..3] of TVkCompositeAlphaFlagBitsKHR;
-  var swapchain_ci: TVkSwapchainCreateInfoKHR;
+  var swapchain_info: TVkSwapchainCreateInfoKHR;
   var swapchain_images: array of TVkImage;
   var swapchain_image_count: TVkUInt32;
   var buffer: TImageBuffer;
@@ -281,30 +281,31 @@ begin
   _QueueFamilyIndexGraphics := AddQueueFamilyIndex(_QueueFamilyIndexGraphics);
   _QueueFamilyIndexCompute := AddQueueFamilyIndex(_QueueFamilyIndexCompute);
   _QueueFamilyIndexPresent := AddQueueFamilyIndex(_QueueFamilyIndexPresent);
-
-  FillChar(swapchain_ci, sizeof(swapchain_ci), 0);
-  swapchain_ci.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swapchain_ci.pNext := nil;
-  swapchain_ci.surface := _Surface.Ptr.VkHandle;
-  swapchain_ci.minImageCount := desired_number_of_swap_chain_images;
-  swapchain_ci.imageFormat := _Format;
-  swapchain_ci.imageExtent.width := _Extent.width;
-  swapchain_ci.imageExtent.height := _Extent.height;
-  swapchain_ci.preTransform := pre_transform;
-  swapchain_ci.compositeAlpha := composite_alpha;
-  swapchain_ci.imageArrayLayers := 1;
-  swapchain_ci.presentMode := swapchain_present_mode;
-  swapchain_ci.oldSwapchain := VK_NULL_HANDLE;
+  {$Push}{$Hints off}
+  FillChar(swapchain_info, sizeof(swapchain_info), 0);
+  {$Pop}
+  swapchain_info.sType := VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swapchain_info.pNext := nil;
+  swapchain_info.surface := _Surface.Ptr.VkHandle;
+  swapchain_info.minImageCount := desired_number_of_swap_chain_images;
+  swapchain_info.imageFormat := _Format;
+  swapchain_info.imageExtent.width := _Extent.width;
+  swapchain_info.imageExtent.height := _Extent.height;
+  swapchain_info.preTransform := pre_transform;
+  swapchain_info.compositeAlpha := composite_alpha;
+  swapchain_info.imageArrayLayers := 1;
+  swapchain_info.presentMode := swapchain_present_mode;
+  swapchain_info.oldSwapchain := VK_NULL_HANDLE;
 {$ifndef __ANDROID__}
-  swapchain_ci.clipped := VK_TRUE;
+  swapchain_info.clipped := VK_TRUE;
 {$else}
   swapchain_ci.clipped := VK_FALSE;
 {$endif}
-  swapchain_ci.imageColorSpace := VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-  swapchain_ci.imageUsage := AUsageFlags;
-  swapchain_ci.imageSharingMode := VK_SHARING_MODE_EXCLUSIVE;
-  swapchain_ci.queueFamilyIndexCount := queue_family_index_count;
-  swapchain_ci.pQueueFamilyIndices := @queue_family_indices;
+  swapchain_info.imageColorSpace := VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+  swapchain_info.imageUsage := AUsageFlags;
+  swapchain_info.imageSharingMode := VK_SHARING_MODE_EXCLUSIVE;
+  swapchain_info.queueFamilyIndexCount := queue_family_index_count;
+  swapchain_info.pQueueFamilyIndices := @queue_family_indices;
   //uint32_t queueFamilyIndices[2] = {(uint32_t)info.graphics_queue_family_index, (uint32_t)info.present_queue_family_index};
   if (_QueueFamilyIndexGraphics <> _QueueFamilyIndexPresent) then
   begin
@@ -312,10 +313,10 @@ begin
     // we either have to explicitly transfer ownership of images between the
     // queues, or we have to create the swapchain with imageSharingMode
     // as VK_SHARING_MODE_CONCURRENT
-    swapchain_ci.imageSharingMode := VK_SHARING_MODE_CONCURRENT;
+    swapchain_info.imageSharingMode := VK_SHARING_MODE_CONCURRENT;
   end;
 
-  r := Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_ci, nil, @_Handle);
+  r := Vulkan.CreateSwapchainKHR(_Device.Ptr.VkHandle, @swapchain_info, nil, @_Handle);
   LabAssertVkError(r);
 
   r := Vulkan.GetSwapchainImagesKHR(_Device.Ptr.VkHandle, _Handle, @swapchain_image_count, nil);

@@ -54,7 +54,9 @@ begin
   inherited Create;
   _Device := ADevice;
   _Handle := VK_NULL_HANDLE;
+  {$Push}{$Hints off}
   FillChar(FenceCreateInfo, SizeOf(TVkFenceCreateInfo), #0);
+  {$Pop}
   FenceCreateInfo.sType := VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   FenceCreateInfo.pNext := nil;
   FenceCreateInfo.flags := AFlags;
@@ -101,7 +103,9 @@ begin
   inherited Create;
   _Device := ADevice;
   _Handle := VK_NULL_HANDLE;
+  {$Push}{$Hints off}
   FillChar(SemaphoreCreateInfo, SizeOf(TVkSemaphoreCreateInfo), #0);
+  {$Pop}
   SemaphoreCreateInfo.sType := VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
   SemaphoreCreateInfo.pNext := nil;
   SemaphoreCreateInfo.flags := AFlags;

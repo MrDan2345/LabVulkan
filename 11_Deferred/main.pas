@@ -6,6 +6,7 @@ unit main;
 interface
 
 uses
+  cube_data,
   Vulkan,
   LabTypes,
   LabMath,
@@ -22,6 +23,7 @@ uses
   LabPipeline,
   LabRenderPass,
   LabShader,
+  LabScene,
   LabFrameBuffer,
   LabPlatform,
   LabSync,
@@ -31,22 +33,31 @@ uses
   SysUtils;
 
 type
-  TVertex0 = packed record
-    Position: TLabVec3;
+  TRenderTarget = object
+    Image: TLabImageShared;
+    View: TLabImageViewShared;
+    procedure SetupImage(
+      const Format: TVkFormat;
+      const Usage: TVkImageUsageFlags
+    );
   end;
-  TVertex1 = packed record
-    Normal: TLabVec3;
-    Color: TLabVec4;
-    TexCoord0: TLabVec2;
+
+  TFullscreenQuad = class
+    VertexBuffer: TLabVertexBufferShared;
+    VertexBufferStaging: TLabBufferShared;
+    IndexBuffer: TLabIndexBufferShared;
+    IndexBufferStaging: TLabBufferShared;
+    VertexShader: TLabVertexShaderShared;
+    PixelShader: TLabPixelShaderShared;
+    Sampler: TLabSamplerShared;
+    DescriptorSets: TLabDescriptorSetsShared;
+    PipelineLayout: TLabPipelineLayoutShared;
+    Pipeline: TLabPipelineShared;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Stage(const Cmd: TLabCommandBuffer);
+    procedure Draw(const Cmd: TLabCommandBuffer);
   end;
-  TVertex2 = packed record
-    BoneIndex: array[0..1] of TVkUInt32;
-    BoneWeight: array[0..1] of TVkFloat;
-  end;
-  TSkinUniform = packed record
-    Bones: array[0..1] of TLabMat;
-  end;
-  PSkinUniform = ^TSkinUniform;
 
   TLabApp = class (TLabVulkan)
   public
@@ -58,21 +69,26 @@ type
     var Cmd: TLabCommandBufferShared;
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
+    var OffscreenTargets: array of record
+      Depth: TRenderTarget;
+      Color: TRenderTarget;
+      Normals: TRenderTarget;
+      ZBuffer: TLabDepthBufferShared;
+      FrameBuffer: TLabFrameBufferShared;
+    end;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
     var UniformBuffer: TLabUniformBufferShared;
-    var UniformBufferSkin: TLabUniformBufferShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
+    var RenderPassOffscreen: TLabRenderPassShared;
     var VertexShader: TLabShaderShared;
     var PixelShader: TLabShaderShared;
-    var VertexBuffer: array [0..2] of TLabVertexBufferShared;
-    var VertexBufferStaging: array [0..2] of TLabBufferShared;
-    var IndexBuffer: TLabIndexBufferShared;
-    var IndexBufferStaging: TLabBufferShared;
-    var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
+    var VertexBuffer: TLabVertexBufferShared;
+    var VertexBufferStaging: TLabBufferShared;
     var DescriptorSets: TLabDescriptorSetsShared;
+    var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Texture: record
       var Image: TLabImageShared;
@@ -87,11 +103,7 @@ type
       Projection: TLabMat;
       WVP: TLabMat;
     end;
-    var VertexStream0: array of TVertex0;
-    var VertexStream1: array of TVertex1;
-    var VertexStream2: array of TVertex2;
-    var Indices: array of TVkUInt16;
-    var SkinUniform: PSkinUniform;
+    var ScreenQuad: TFullscreenQuad;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -100,7 +112,6 @@ type
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
-    procedure GenerateVertices;
   end;
 
 const
@@ -115,6 +126,163 @@ var
   App: TLabApp;
 
 implementation
+
+constructor TFullscreenQuad.Create;
+  var Map: PVkVoid;
+  var i: TVkInt32;
+  var Layouts: array of TVkDescriptorSetLayout;
+  var Writes: array of TLabWriteDescriptorSet;
+begin
+  VertexBuffer := TLabVertexBuffer.Create(
+    App.Device,
+    SizeOf(fullscreen_quad_vb), SizeOf(TVertex),
+    [
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).posX)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
+    ],
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexBufferStaging := TLabBuffer.Create(
+    App.Device,
+    VertexBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT),
+    [],
+    VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  );
+  Map := nil;
+  if VertexBufferStaging.Ptr.Map(Map) then
+  begin
+    Move(fullscreen_quad_vb, Map^, VertexBuffer.Ptr.Size);
+    VertexBufferStaging.Ptr.Unmap;
+    VertexBufferStaging.Ptr.FlushAll;
+  end;
+  IndexBuffer := TLabIndexBuffer.Create(
+    App.Device, Length(fullscreen_quad_ib),
+    VK_INDEX_TYPE_UINT16,
+    TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  IndexBufferStaging := TLabBuffer.Create(
+    App.Device, IndexBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT),
+    [],
+    VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  );
+  if IndexBufferStaging.Ptr.Map(Map) then
+  begin
+    Move(fullscreen_quad_ib, Map^, IndexBuffer.Ptr.Size);
+    IndexBufferStaging.Ptr.Unmap;
+    IndexBufferStaging.Ptr.FlushAll;
+  end;
+  Sampler := TLabSampler.Create(
+    App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
+  );
+  VertexShader := TLabVertexShader.Create(
+    App.Device, 'fullscreen_vs.spv'
+  );
+  PixelShader := TLabPixelShader.Create(
+    App.Device, 'fullscreen_ps.spv'
+  );
+  DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
+      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+    ], App.SwapChain.Ptr.ImageCount)
+  ]);
+  SetLength(Writes, App.SwapChain.Ptr.ImageCount);
+  for i := 0 to High(Writes) do
+  begin
+    Writes[i] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      0,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          App.OffscreenTargets[i].Color.View.Ptr.VkHandle,
+          Sampler.Ptr.VkHandle
+          //App.Texture.View.Ptr.VkHandle,
+          //App.Texture.Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+  end;
+  DescriptorSets.Ptr.UpdateSets(Writes, []);
+  PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
+  Pipeline := TLabGraphicsPipeline.Create(
+    App.Device, App.PipelineCache, PipelineLayout.Ptr,
+    [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+    [VertexShader.Ptr, PixelShader.Ptr],
+    App.RenderPass.Ptr, 0,
+    LabPipelineViewportState(),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState(
+      [VertexBuffer.Ptr.MakeBindingDesc(0)],
+      VertexBuffer.Ptr.MakeAttributeDescArr(0, 0)
+    ),
+    LabPipelineRasterizationState(),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
+  );
+end;
+
+destructor TFullscreenQuad.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TFullscreenQuad.Stage(const Cmd: TLabCommandBuffer);
+begin
+  Cmd.CopyBuffer(
+    VertexBufferStaging.Ptr.VkHandle,
+    VertexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(VertexBuffer.Ptr.Size)]
+  );
+  Cmd.CopyBuffer(
+    IndexBufferStaging.Ptr.VkHandle,
+    IndexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(IndexBuffer.Ptr.Size)]
+  );
+end;
+
+procedure TFullscreenQuad.Draw(const Cmd: TLabCommandBuffer);
+begin
+  Cmd.BindPipeline(Pipeline.Ptr);
+  Cmd.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    PipelineLayout.Ptr,
+    0, [DescriptorSets.Ptr.VkHandle[App.SwapChain.Ptr.CurImage]], []
+  );
+  Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
+  Cmd.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
+  Cmd.DrawIndexed(IndexBuffer.Ptr.IndexCount);
+end;
+
+procedure TRenderTarget.SetupImage(
+  const Format: TVkFormat;
+  const Usage: TVkImageUsageFlags
+);
+  var rt_w, rt_h: TVkUInt32;
+begin
+  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
+  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
+  Image := TLabImage.Create(
+    App.Device, Format, Usage or TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT), [],
+    rt_w, rt_h, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+    VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE, TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  View := TLabImageView.Create(
+    App.Device, Image.Ptr.VkHandle,
+    Image.Ptr.Format
+  );
+end;
 
 constructor TLabApp.Create;
 begin
@@ -131,6 +299,7 @@ end;
 
 procedure TLabApp.SwapchainCreate;
   var i: Integer;
+  var rt_w, rt_h: TVkInt32;
 begin
   SwapChain := TLabSwapChain.Create(Device, Surface);
   SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
@@ -138,6 +307,93 @@ begin
   begin
     DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
   end;
+  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
+  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
+  SetLength(OffscreenTargets, SwapChain.Ptr.ImageCount);
+  for i := 0 to SwapChain.Ptr.ImageCount - 1 do
+  begin
+    OffscreenTargets[i].Depth.SetupImage(VK_FORMAT_R32_SFLOAT, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    OffscreenTargets[i].Color.SetupImage(VK_FORMAT_R8G8B8A8_UNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    OffscreenTargets[i].Normals.SetupImage(VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    OffscreenTargets[i].ZBuffer := TLabDepthBuffer.Create(
+      App.Device, rt_w, rt_h, VK_FORMAT_UNDEFINED,
+      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    );
+  end;
+  RenderPassOffscreen := TLabRenderPass.Create(
+    Device,
+    [
+      LabAttachmentDescription(
+        OffscreenTargets[0].Depth.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR,
+        VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE
+      ),
+      LabAttachmentDescription(
+        OffscreenTargets[0].Color.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR,
+        VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE
+      ),
+      LabAttachmentDescription(
+        OffscreenTargets[0].Normals.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR,
+        VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE
+      ),
+      LabAttachmentDescription(
+        OffscreenTargets[0].ZBuffer.Ptr.Format,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR,
+        VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE
+      )
+    ],
+    [
+      LabSubpassDescriptionData(
+        [],
+        [
+          LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        ],
+        [],
+        LabAttachmentReference(3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+        []
+      )
+    ],
+    [
+      LabSubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      ),
+      LabSubpassDependency(
+        0,
+        VK_SUBPASS_EXTERNAL,
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      )
+    ]
+  );
   RenderPass := TLabRenderPass.Create(
     Device,
     [
@@ -163,7 +419,8 @@ begin
         VK_IMAGE_LAYOUT_UNDEFINED,
         0
       )
-    ], [
+    ],
+    [
       LabSubpassDescriptionData(
         [],
         [LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)],
@@ -180,16 +437,31 @@ begin
     FrameBuffers[i] := TLabFrameBuffer.Create(
       Device, RenderPass.Ptr,
       SwapChain.Ptr.Width, SwapChain.Ptr.Height,
-      [SwapChain.Ptr.Images[i]^.View.VkHandle, DepthBuffers[i].Ptr.View.VkHandle]
+      [
+        SwapChain.Ptr.Images[i]^.View.VkHandle,
+        DepthBuffers[i].Ptr.View.VkHandle
+      ]
+    );
+    OffscreenTargets[i].FrameBuffer := TLabFrameBuffer.Create(
+      Device, RenderPassOffscreen.Ptr,
+      SwapChain.Ptr.Width, SwapChain.Ptr.Height,
+      [
+        OffscreenTargets[i].Depth.View.Ptr.VkHandle,
+        OffscreenTargets[i].Color.View.Ptr.VkHandle,
+        OffscreenTargets[i].Normals.View.Ptr.VkHandle,
+        OffscreenTargets[i].ZBuffer.Ptr.View.VkHandle
+      ]
     );
   end;
 end;
 
 procedure TLabApp.SwapchainDestroy;
 begin
+  RenderPass := nil;
+  RenderPassOffscreen := nil;
+  OffscreenTargets := nil;
   FrameBuffers := nil;
   DepthBuffers := nil;
-  RenderPass := nil;
   SwapChain := nil;
 end;
 
@@ -197,20 +469,12 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
 begin
-  SkinUniform^.Bones[0] := LabMatIdentity;
-  SkinUniform^.Bones[1] := (
-    LabMatTranslation(0, -2, 0) *
-    LabMatRotationY(1.8 * sin(4 * LabTimeLoopSec(2 * LabTwoPi))) *
-    LabMatRotationX(1.5 * sin(LabTimeLoopSec(LabTwoPi))) *
-    LabMatTranslation(0, 2, 0)
-  );
   fov := LabDegToRad * 20;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(0, 2, -20), LabVec3(0, 2, 0), LabVec3(0, 1, 0));
+    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
     World := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-    // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
       1, 0, 0, 0,
       0, -1, 0, 0,
@@ -226,18 +490,10 @@ procedure TLabApp.TransferBuffers;
   var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
 begin
   Cmd.Ptr.RecordBegin;
-  for i := 0 to High(VertexBuffer) do
-  begin
-    Cmd.Ptr.CopyBuffer(
-      VertexBufferStaging[i].Ptr.VkHandle,
-      VertexBuffer[i].Ptr.VkHandle,
-      [LabBufferCopy(VertexBuffer[i].Ptr.Size)]
-    );
-  end;
   Cmd.Ptr.CopyBuffer(
-    IndexBufferStaging.Ptr.VkHandle,
-    IndexBuffer.Ptr.VkHandle,
-    [LabBufferCopy(IndexBuffer.Ptr.Size)]
+    VertexBufferStaging.Ptr.VkHandle,
+    VertexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(VertexBuffer.Ptr.Size)]
   );
   Cmd.Ptr.PipelineBarrier(
     TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
@@ -344,6 +600,7 @@ begin
   //    )
   //  ]
   //);
+  ScreenQuad.Stage(Cmd.Ptr);
   Cmd.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -353,11 +610,7 @@ begin
     VK_NULL_HANDLE
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
-  for i := 0 to High(VertexBuffer) do
-  begin
-    VertexBufferStaging[i] := nil;
-  end;
-  IndexBufferStaging := nil;
+  VertexBufferStaging := nil;
   Texture.Staging := nil;
 end;
 
@@ -366,7 +619,7 @@ procedure TLabApp.Initialize;
   var img: TLabImageData;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Skin';
+  Window.Caption := 'Vulkan Texture';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -375,98 +628,37 @@ begin
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
   Surface := TLabSurface.Create(Window);
+  DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   Cmd := TLabCommandBuffer.Create(CmdPool);
   UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
-  UniformBufferSkin := TLabUniformBuffer.Create(Device, SizeOf(TSkinUniform));
-  UniformBufferSkin.Ptr.Map(PVkVoid(SkinUniform));
+  //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
+  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
-  GenerateVertices;
-  VertexBuffer[0] := TLabVertexBuffer.Create(
+  VertexBuffer := TLabVertexBuffer.Create(
     Device,
-    sizeof(TVertex0) * Length(VertexStream0),
-    sizeof(TVertex0),
+    sizeof(g_vb_solid_face_colors_Data),
+    sizeof(g_vb_solid_face_colors_Data[0]),
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex0( nil^ ).Position))
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).posX) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
     ],
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
-  VertexBufferStaging[0] := TLabBuffer.Create(
-    Device, VertexBuffer[0].Ptr.Size,
+  VertexBufferStaging := TLabBuffer.Create(
+    Device, VertexBuffer.Ptr.Size,
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
   );
   map := nil;
-  if (VertexBufferStaging[0].Ptr.Map(map)) then
+  if (VertexBufferStaging.Ptr.Map(map)) then
   begin
-    Move(VertexStream0[0], map^, sizeof(TVertex0) * Length(VertexStream0));
-    VertexBufferStaging[0].Ptr.Unmap;
-  end;
-  VertexBuffer[1] := TLabVertexBuffer.Create(
-    Device,
-    sizeof(TVertex1) * Length(VertexStream1),
-    sizeof(TVertex1),
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex1( nil^ ).Normal)),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex1( nil^ ).Color)),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex1( nil^ ).TexCoord0))
-    ],
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  VertexBufferStaging[1] := TLabBuffer.Create(
-    Device, VertexBuffer[1].Ptr.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if (VertexBufferStaging[1].Ptr.Map(map)) then
-  begin
-    Move(VertexStream1[0], map^, sizeof(TVertex1) * Length(VertexStream1));
-    VertexBufferStaging[1].Ptr.Unmap;
-  end;
-  VertexBuffer[2] := TLabVertexBuffer.Create(
-    Device,
-    sizeof(TVertex2) * Length(VertexStream2),
-    sizeof(TVertex2),
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_UINT, LabPtrToOrd(@TVertex2( nil^ ).BoneIndex)),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex2( nil^ ).BoneWeight))
-    ],
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  VertexBufferStaging[2] := TLabBuffer.Create(
-    Device, VertexBuffer[2].Ptr.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if (VertexBufferStaging[2].Ptr.Map(map)) then
-  begin
-    Move(VertexStream2[0], map^, sizeof(TVertex2) * Length(VertexStream2));
-    VertexBufferStaging[2].Ptr.Unmap;
-  end;
-  IndexBuffer := TLabIndexBuffer.Create(
-    Device,
-    Length(Indices),
-    VK_INDEX_TYPE_UINT16,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  IndexBufferStaging := TLabBuffer.Create(
-    Device, IndexBuffer.Ptr.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if IndexBufferStaging.Ptr.Map(map) then
-  begin
-    Move(Indices[0], map^, Length(Indices) * SizeOf(Indices[0]));
-    IndexBufferStaging.Ptr.Unmap;
+    Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
+    VertexBufferStaging.Ptr.Unmap;
   end;
   img := TLabImageDataPNG.Create;
   img.Load('../Images/box.png');
@@ -503,12 +695,10 @@ begin
     VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT,
     VK_TRUE, 16, VK_SAMPLER_MIPMAP_MODE_LINEAR, 0, 0, Texture.MipLevels - 1
   );
-  DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
     ])
   ]);
   DescriptorSets.Ptr.UpdateSets(
@@ -518,14 +708,9 @@ begin
         0,
         [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]
       ),
-      LabWriteDescriptorSetUniformBuffer(
-        DescriptorSets.Ptr.VkHandle[0],
-        1,
-        [LabDescriptorBufferInfo(UniformBufferSkin.Ptr.VkHandle)]
-      ),
       LabWriteDescriptorSetImageSampler(
         DescriptorSets.Ptr.VkHandle[0],
-        2,
+        1,
         [
           LabDescriptorImageInfo(
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -545,32 +730,22 @@ begin
     [VertexShader.Ptr, PixelShader.Ptr],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
-    LabPipelineInputAssemblyState(
-      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-    ),
+    LabPipelineInputAssemblyState(),
     LabPipelineVertexInputState(
+      [VertexBuffer.Ptr.MakeBindingDesc(0)],
       [
-        VertexBuffer[0].Ptr.MakeBindingDesc(0),
-        VertexBuffer[1].Ptr.MakeBindingDesc(1),
-        VertexBuffer[2].Ptr.MakeBindingDesc(2)
-      ],
-      [
-        VertexBuffer[0].Ptr.MakeAttributeDesc(0, 0, 0),
-        VertexBuffer[1].Ptr.MakeAttributeDesc(0, 1, 1),
-        VertexBuffer[1].Ptr.MakeAttributeDesc(1, 2, 1),
-        VertexBuffer[1].Ptr.MakeAttributeDesc(2, 3, 1),
-        VertexBuffer[2].Ptr.MakeAttributeDesc(0, 4, 2),
-        VertexBuffer[2].Ptr.MakeAttributeDesc(1, 5, 2)
+        VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
+        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0),
+        VertexBuffer.Ptr.MakeAttributeDesc(2, 2, 0)
       ]
     ),
-    LabPipelineRasterizationState(
-      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL
-    ),
+    LabPipelineRasterizationState(),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
     LabPipelineTesselationState(0)
   );
+  ScreenQuad := TFullscreenQuad.Create;
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
@@ -580,8 +755,7 @@ procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
-  UniformBufferSkin.Ptr.Unmap;
-  UniformBufferSkin := nil;
+  ScreenQuad.Free;
   Texture.Sampler := nil;
   Texture.View := nil;
   Texture.Image := nil;
@@ -590,17 +764,14 @@ begin
   Pipeline := nil;
   PipelineCache := nil;
   DescriptorSets := nil;
-  DescriptorSetsFactory := nil;
-  IndexBuffer := nil;
-  VertexBuffer[0] := nil;
-  VertexBuffer[1] := nil;
-  VertexBuffer[2] := nil;
+  VertexBuffer := nil;
   PixelShader := nil;
   VertexShader := nil;
   PipelineLayout := nil;
   UniformBuffer := nil;
   Cmd := nil;
   CmdPool := nil;
+  DescriptorSetsFactory := nil;
   Surface := nil;
   Device := nil;
   Window.Free;
@@ -645,28 +816,30 @@ begin
   end;
   cur_buffer := SwapChain.Ptr.CurImage;
   Cmd.Ptr.RecordBegin();
+  Cmd.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
+  Cmd.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  Cmd.Ptr.BeginRenderPass(
+    RenderPassOffscreen.Ptr, OffscreenTargets[cur_buffer].FrameBuffer.Ptr,
+    [LabClearValue(1, 0, 0, 0), LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0, 0, 1.0, 1.0), LabClearValue(1.0, 0)]
+  );
+  //Cmd.Ptr.BeginRenderPass(
+  //  RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
+  //  [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
+  //);
+  //Cmd.Ptr.BindPipeline(Pipeline.Ptr);
+  //Cmd.Ptr.BindDescriptorSets(
+  //  VK_PIPELINE_BIND_POINT_GRAPHICS,
+  //  PipelineLayout.Ptr,
+  //  0, 1, DescriptorSets.Ptr, []
+  //);
+  //Cmd.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
+  //Cmd.Ptr.Draw(12 * 3);
+  Cmd.Ptr.EndRenderPass;
   Cmd.Ptr.BeginRenderPass(
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
     [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
   );
-  Cmd.Ptr.BindPipeline(Pipeline.Ptr);
-  Cmd.Ptr.BindDescriptorSets(
-    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    PipelineLayout.Ptr,
-    0, [DescriptorSets.Ptr.VkHandle[0]], []
-  );
-  Cmd.Ptr.BindVertexBuffers(
-    0,
-    [
-      VertexBuffer[0].Ptr.VkHandle,
-      VertexBuffer[1].Ptr.VkHandle,
-      VertexBuffer[2].Ptr.VkHandle
-    ], [0, 0, 0]
-  );
-  Cmd.Ptr.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
-  Cmd.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  Cmd.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
-  Cmd.Ptr.DrawIndexed(Length(Indices));
+  ScreenQuad.Draw(Cmd.Ptr);
   Cmd.Ptr.EndRenderPass;
   Cmd.Ptr.RecordEnd;
   QueueSubmit(
@@ -680,145 +853,6 @@ begin
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
-end;
-
-procedure TLabApp.GenerateVertices;
-  const segment_count = 24;
-  const section_count = 16;
-  const cap_section_count = 8;
-  const radius = 1;
-  const size = 4;
-  var i, j, v, n: TVkInt32;
-  var a, va, t, h: TVkFloat;
-begin
-  v := segment_count * (cap_section_count + 1) * 2 + (section_count - 1) * segment_count;
-  SetLength(VertexStream0, v);
-  SetLength(VertexStream1, v);
-  SetLength(VertexStream2, v);
-  for j := 0 to segment_count - 1 do
-  begin
-    VertexStream0[j].Position.x := 0;
-    VertexStream0[j].Position.y := -radius;
-    VertexStream0[j].Position.z := 0;
-    VertexStream1[j].Normal := LabVec3(0, -1, 0);
-    VertexStream1[j].Color := LabVec4(0, 0, 0, 1);
-    t := (j * 2) / segment_count;
-    if t > 1 then t := 2 - t;
-    VertexStream1[j].TexCoord0 := LabVec2(t, 0);
-    VertexStream2[j].BoneIndex[0] := 0;
-    VertexStream2[j].BoneIndex[1] := 1;
-    VertexStream2[j].BoneWeight[0] := 1;
-    VertexStream2[j].BoneWeight[1] := 0;
-  end;
-  for i := 1 to cap_section_count - 1 do
-  for j := 0 to segment_count - 1 do
-  begin
-    v := i * segment_count + j;
-    a := (j / segment_count) * LabTwoPi;
-    va := (i / cap_section_count) * LabHalfPi - LabHalfPi;
-    h := i / (cap_section_count * 2 + section_count);
-    VertexStream0[v].Position.x := cos(a) * radius * cos(va);
-    VertexStream0[v].Position.z := sin(a) * radius * cos(va);
-    VertexStream0[v].Position.y := radius * ((i / cap_section_count) - 1);
-    VertexStream1[v].Normal := VertexStream0[v].Position.Norm;
-    VertexStream1[v].Color := LabVec4(h, 0, 0, 1);
-    t := (j * 2) / segment_count;
-    if t > 1 then t := 2 - t;
-    VertexStream1[v].TexCoord0 := LabVec2(t, h);
-    VertexStream2[v].BoneIndex[0] := 0;
-    VertexStream2[v].BoneIndex[1] := 1;
-    VertexStream2[v].BoneWeight[0] := 1;
-    VertexStream2[v].BoneWeight[1] := 0;
-  end;
-  for i := 0 to section_count - 1 do
-  for j := 0 to segment_count - 1 do
-  begin
-    v := cap_section_count * segment_count + i * segment_count + j;
-    a := (j / segment_count) * LabTwoPi;
-    h := (i + cap_section_count) / (cap_section_count * 2 + section_count);
-    VertexStream0[v].Position.x := cos(a) * radius;
-    VertexStream0[v].Position.z := sin(a) * radius;
-    VertexStream0[v].Position.y := (i / section_count) * size;
-    VertexStream1[v].Normal := VertexStream0[v].Position;
-    VertexStream1[v].Normal.y := 0;
-    VertexStream1[v].Normal := VertexStream1[v].Normal.Norm;
-    VertexStream1[v].Color := LabVec4(h, 0, 0, 1);
-    t := (j * 2) / segment_count;
-    if t > 1 then t := 2 - t;
-    VertexStream1[v].TexCoord0 := LabVec2(t, h);
-    VertexStream2[v].BoneIndex[0] := 0;
-    VertexStream2[v].BoneIndex[1] := 1;
-    VertexStream2[v].BoneWeight[0] := 1 - (i / section_count);
-    VertexStream2[v].BoneWeight[1] := (i / section_count);
-  end;
-  for i := 0 to cap_section_count - 1 do
-  for j := 0 to segment_count - 1 do
-  begin
-    v := cap_section_count * segment_count + section_count * segment_count + i * segment_count + j;
-    a := (j / segment_count) * LabTwoPi;
-    va := (i / cap_section_count) * LabHalfPi + LabHalfPi;
-    h := (i + cap_section_count + section_count) / (cap_section_count * 2 + section_count);
-    VertexStream0[v].Position.x := cos(a) * radius * sin(va);
-    VertexStream0[v].Position.z := sin(a) * radius * sin(va);
-    VertexStream0[v].Position.y := size + radius * (i / cap_section_count);
-    VertexStream1[v].Normal := (VertexStream0[v].Position - LabVec3(0, size, 0)).Norm;
-    VertexStream1[v].Color := LabVec4(h, 0, 0, 1);
-    t := (j * 2) / segment_count;
-    if t > 1 then t := 2 - t;
-    VertexStream1[v].TexCoord0 := LabVec2(t, h);
-    VertexStream2[v].BoneIndex[0] := 0;
-    VertexStream2[v].BoneIndex[1] := 1;
-    VertexStream2[v].BoneWeight[0] := 0;
-    VertexStream2[v].BoneWeight[1] := 1;
-  end;
-  for j := 0 to segment_count - 1 do
-  begin
-    v := 2 * (cap_section_count * segment_count) + section_count * segment_count + j;
-    VertexStream0[v].Position.x := 0;
-    VertexStream0[v].Position.y := size + radius;
-    VertexStream0[v].Position.z := 0;
-    VertexStream1[v].Normal := LabVec3(0, 1, 0);
-    VertexStream1[v].Color := LabVec4(1, 0, 0, 1);
-    t := (j * 2) / segment_count;
-    if t > 1 then t := 2 - t;
-    VertexStream1[v].TexCoord0 := LabVec2(t, 1);
-    VertexStream2[v].BoneIndex[0] := 0;
-    VertexStream2[v].BoneIndex[1] := 1;
-    VertexStream2[v].BoneWeight[0] := 0;
-    VertexStream2[v].BoneWeight[1] := 1;
-  end;
-  v := (segment_count * 3 * 2 + (segment_count * (cap_section_count - 1) * 6 * 2)) + segment_count * section_count * 6;
-  SetLength(Indices, v);
-  n := 0;
-  for i := 0 to segment_count - 1 do
-  begin
-    Indices[n] := i; Inc(n);
-    Indices[n] := segment_count + i; Inc(n);
-    Indices[n] := segment_count + ((i + 1) mod segment_count); Inc(n);
-  end;
-  for i := 0 to cap_section_count * 2 + section_count - 3 do
-  for j := 0 to segment_count - 1 do
-  begin
-    v := (i + 1) * segment_count;
-    Indices[n] := v + j; Inc(n);
-    Indices[n] := v + segment_count + j; Inc(n);
-    Indices[n] := v + segment_count + ((j + 1) mod segment_count); Inc(n);
-    Indices[n] := v + j; Inc(n);
-    Indices[n] := v + segment_count + ((j + 1) mod segment_count); Inc(n);
-    Indices[n] := v + ((j + 1) mod segment_count); Inc(n);
-  end;
-  v := cap_section_count * segment_count + section_count * segment_count + (cap_section_count - 1) * segment_count;
-  for i := 0 to segment_count - 1 do
-  begin
-    Indices[n] := v + i; Inc(n);
-    Indices[n] := v + segment_count + i; Inc(n);
-    Indices[n] := v + ((i + 1) mod segment_count); Inc(n);
-  end;
-  for i := 0 to High(VertexStream1) do
-  begin
-    VertexStream1[i].Color.y := VertexStream1[i].Color.x;
-    VertexStream1[i].Color.z := VertexStream1[i].Color.x;
-  end;
 end;
 
 end.

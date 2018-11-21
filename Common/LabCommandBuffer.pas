@@ -10,8 +10,7 @@ uses
   LabCommandPool,
   LabRenderPass,
   LabFrameBuffer,
-  LabPipeline,
-  LabDescriptorSet;
+  LabPipeline;
 
 type
   TLabCommandBuffer = class (TLabClass)
@@ -47,8 +46,7 @@ type
       const PipelineBindPoint: TVkPipelineBindPoint;
       const Layout: TLabPipelineLayout;
       const FirstSet: TVkUInt32;
-      const SetCount:TVkUInt32;
-      const DescriptorSets: TLabDescriptorSets;
+      const DescriptorSets: array of TVkDescriptorSet;
       const DynamicOffsets: array of TVkUInt32
     );
     procedure BindVertexBuffers(
@@ -275,8 +273,7 @@ procedure TLabCommandBuffer.BindDescriptorSets(
   const PipelineBindPoint: TVkPipelineBindPoint;
   const Layout: TLabPipelineLayout;
   const FirstSet: TVkUInt32;
-  const SetCount: TVkUInt32;
-  const DescriptorSets: TLabDescriptorSets;
+  const DescriptorSets: array of TVkDescriptorSet;
   const DynamicOffsets: array of TVkUInt32
 );
   var dynamic_offsets: PVkUInt32;
@@ -294,8 +291,8 @@ begin
     PipelineBindPoint,
     Layout.VkHandle,
     FirstSet,
-    SetCount,
-    DescriptorSets.VkHandlePtr[0],
+    Length(DescriptorSets),
+    @DescriptorSets[0],
     Length(DynamicOffsets),
     dynamic_offsets
   );
@@ -492,7 +489,9 @@ function LabImageMemoryBarrier(
   const ImageArrayLayerCount: TVkUInt32
 ): TVkImageMemoryBarrier;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   Result.image := Image;
   Result.srcQueueFamilyIndex := SrcQueueFamilyIndex;
@@ -523,7 +522,9 @@ function LabImageBlit(
   const DstArrayLayerCount: TVkUInt32
 ): TVkImageBlit;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.srcOffsets[0] := SrcOffsetMin;
   Result.srcOffsets[1] := SrcOffsetMax;
   Result.srcSubresource.aspectMask := SrcAspectMask;

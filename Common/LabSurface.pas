@@ -64,7 +64,9 @@ begin
   _Window := AWindow;
 // Construct the surface description:
 {$if defined(Platform_Windows)}
+{$Push}{$Hints off}
   FillChar(create_info, SizeOf(create_info), 0);
+{$Pop}
   create_info.sType := VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
   create_info.pNext := nil;
   create_info.hinstance_ := _Window.WndClass.hInstance;

@@ -35,7 +35,7 @@ type
     constructor Create(
       const ADevice: TLabDeviceShared;
       const APushConstantRanges: array of TVkPushConstantRange;
-      const ADescriptorSetLayouts: array of TLabDescriptorSetLayoutShared
+      const ADescriptorSetLayouts: array of TLabDescriptorSetLayout
     );
     destructor Destroy; override;
   end;
@@ -287,7 +287,7 @@ end;
 
 constructor TLabPipelineLayout.Create(const ADevice: TLabDeviceShared;
   const APushConstantRanges: array of TVkPushConstantRange;
-  const ADescriptorSetLayouts: array of TLabDescriptorSetLayoutShared
+  const ADescriptorSetLayouts: array of TLabDescriptorSetLayout
 );
   var pipeline_layout_info: TVkPipelineLayoutCreateInfo;
   var i: TVkInt32;
@@ -298,9 +298,11 @@ begin
   SetLength(_DescriptorSetLayouts, Length(ADescriptorSetLayouts));
   for i := 0 to High(_DescriptorSetLayouts) do
   begin
-    _DescriptorSetLayouts[i] := ADescriptorSetLayouts[i].Ptr.VkHandle;
+    _DescriptorSetLayouts[i] := ADescriptorSetLayouts[i].VkHandle;
   end;
+  {$Push}{$Hints off}
   FillChar(pipeline_layout_info, SizeOf(pipeline_layout_info), 0);
+  {$Pop}
   pipeline_layout_info.sType := VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_info.pNext := nil;
   pipeline_layout_info.pushConstantRangeCount := Length(APushConstantRanges);
@@ -325,7 +327,7 @@ begin
   _Hash := LabCRC32(0, @APushConstantRanges[0], Length(APushConstantRanges) * SizeOf(TVkPushConstantRange));
   for i := 0 to High(ADescriptorSetLayouts) do
   begin
-    _Hash := LabCRC32(_Hash, @ADescriptorSetLayouts[i].Ptr.Hash, SizeOf(TVkUInt32));
+    _Hash := LabCRC32(_Hash, @ADescriptorSetLayouts[i].Hash, SizeOf(TVkUInt32));
   end;
 end;
 
@@ -577,7 +579,9 @@ begin
   for i := 0 to High(_Shaders) do _Shaders[i] := AShaders[i];
   shader_stages := LabShaderStages(_Shaders);
   _RenderPass := ARenderPass;
+  {$Push}{$Hints off}
   FillChar(dynamic_state_info, SizeOf(dynamic_state_info), 0);
+  {$Pop}
   dynamic_state_info.sType := VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic_state_info.pNext := nil;
   dynamic_state_info.pDynamicStates := @ADynamicStates[0];
@@ -668,7 +672,9 @@ constructor TLabComputePipeline.Create(
 begin
   inherited Create(ADevice, APipelineCache, VK_PIPELINE_BIND_POINT_COMPUTE);
   _Shader := AShader;
+  {$Push}{$Hints off}
   FillChar(pipeline_info, SizeOf(pipeline_info), 0);
+  {$Pop}
   pipeline_info.sType := VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipeline_info.layout := APipelineLayout.VkHandle;
   pipeline_info.stage.sType := VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -699,7 +705,9 @@ function LabPushConstantRange(
   const Size: TVkUInt32
 ): TVkPushConstantRange;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.stageFlags := StageFlags;
   Result.offset := Offset;
   Result.size := Size;
@@ -713,7 +721,9 @@ function LabPipelineViewportState(
   const Flags: TVkPipelineViewportStateCreateFlags
 ): TVkPipelineViewportStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -729,7 +739,9 @@ function LabPipelineInputAssemblyState(
   const Flags: TVkPipelineInputAssemblyStateCreateFlags
 ): TVkPipelineInputAssemblyStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -771,7 +783,9 @@ function LabPipelineRasterizationState(
   const Flags: TVkPipelineRasterizationStateCreateFlags
 ): TVkPipelineRasterizationStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -800,7 +814,9 @@ function LabPipelineDepthStencilState(
   const Flags: TVkPipelineDepthStencilStateCreateFlags
 ): TVkPipelineDepthStencilStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -825,7 +841,9 @@ function LabPipelineMultisampleState(
   const Flags: TVkPipelineMultisampleStateCreateFlags
 ): TVkPipelineMultisampleStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;
@@ -881,7 +899,9 @@ function LabPipelineTesselationState(
   const Flags: TVkPipelineTessellationStateCreateFlags
 ): TVkPipelineTessellationStateCreateInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.sType := VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
   Result.pNext := nil;
   Result.flags := Flags;

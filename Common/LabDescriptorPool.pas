@@ -50,7 +50,9 @@ begin
   LabLog('TLabDescriptorPool.Create');
   inherited Create;
   _Device := ADevice;
+  {$Push}{$Hints off}
   FillChar(descriptor_pool_info, SizeOf(descriptor_pool_info), 0);
+  {$Pop}
   descriptor_pool_info.sType := VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   descriptor_pool_info.pNext := nil;
   descriptor_pool_info.maxSets := MaxSets;

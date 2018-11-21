@@ -91,7 +91,9 @@ begin
   begin
     subpass_descriptions[i] := LabSubpassDescription(ASubpasses[i]);
   end;
+  {$Push}{$Hints off}
   FillChar(rp_info, SizeOf(rp_info), 0);
+  {$Pop}
   rp_info.sType := VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   rp_info.pNext := nil;
   rp_info.attachmentCount := Length(AAttachments);
@@ -267,7 +269,9 @@ end;
 
 function LabAttachmentReference(const Attachment: TVkUInt32; const Layout: TVkImageLayout): TVkAttachmentReference;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.attachment := Attachment;
   Result.layout := Layout;
 end;
@@ -282,7 +286,9 @@ function LabSubpassDependency(
   const DependencyFlags: TVkDependencyFlags
 ): TVkSubpassDependency;
 begin
+  {$Push}{$Hints off}
   FillChar(Result, SizeOf(Result), 0);
+  {$Pop}
   Result.srcSubpass := SrcSubpass;
   Result.dstSubpass := DstSubpass;
   Result.srcStageMask := SrcStageMask;

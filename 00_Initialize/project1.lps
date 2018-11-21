@@ -8,9 +8,8 @@
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="9"/>
-        <CursorPos X="67" Y="27"/>
-        <UsageCount Value="22"/>
+        <CursorPos Y="40"/>
+        <UsageCount Value="29"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>

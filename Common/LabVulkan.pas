@@ -202,9 +202,9 @@ class procedure TLabVulkan.Run;
 begin
   _IsActive := True;
   if Assigned(_OnInitialize) then _OnInitialize();
-  {$Warnings off}
+  {$Push}{$Hints off}
   FillChar(msg, SizeOf(msg), 0);
-  {$Warnings on}
+  {$Pop}
   while _IsActive do
   begin
     if PeekMessage(msg, 0, 0, 0, PM_REMOVE) then
@@ -229,7 +229,9 @@ class procedure TLabVulkan.QueueSubmit(
 );
   var submit_info: TVkSubmitInfo;
 begin
+  {$Push}{$Hints off}
   FillChar(submit_info, SizeOf(submit_info), 0);
+  {$Pop}
   submit_info.sType := VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit_info.pNext := nil;
   submit_info.waitSemaphoreCount := Length(WaitSemaphores);
@@ -290,7 +292,9 @@ begin
   LabLog('TLabVulkan.Create');
   LabLogOffset(2);
   _PhysicalDevices := TLabPhysicalDeviceList.Create(0, 4);
+  {$Push}{$Hints off}
   FillChar(app_info, SizeOf(app_info), 0);
+  {$Pop}
   app_info.sType := VK_STRUCTURE_TYPE_APPLICATION_INFO;
   app_info.pNext := nil;
   app_info.pApplicationName := PVkChar('LabVulkan');
@@ -308,7 +312,9 @@ begin
   begin
     layers[i] := PVkChar(_LayersEnabled.Ptr[i]);
   end;
+  {$Push}{$Hints off}
   FillChar(inst_info, SizeOf(inst_info), 0);
+  {$Pop}
   inst_info.sType := VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   inst_info.pNext := nil;
   inst_info.flags := 0;

@@ -75,9 +75,6 @@ type
     DescriptorSetLayout: TLabDescriptorSetLayoutShared;
     DescriptorPool: TLabDescriptorPoolShared;
     DescriptorSets: TLabDescriptorSetsShared;
-    SkinLocation: TVkUInt32;
-    constructor Create;
-    destructor Destroy; override;
   end;
   TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
 
@@ -385,6 +382,17 @@ type
   end;
   TLabSceneAnimationClipList = specialize TLabList<TLabSceneAnimationClip>;
 
+  TLabSceneCamera = class (TLabClass)
+  private
+    var _Scene: TLabScene;
+    var _Projection: TLabMat;
+  public
+    property Projection: TLabMat read _Projection write _Projection;
+    constructor Create(const AScene: TLabScene; const ColladaCamera: TLabColladaCamera);
+    destructor Destroy; override;
+  end;
+  TLabSceneCameraList = specialize TLabList<TLabSceneCamera>;
+
   TLabSceneNodeAttachment = class (TLabClass)
   private
     var _Scene: TLabScene;
@@ -433,6 +441,18 @@ type
     destructor Destroy; override;
   end;
   TLabSceneNodeAttachmentControllerList = specialize TLabList<TLabSceneNodeAttachmentController>;
+
+  TLabSceneNodeAttachmentCamera = class (TLabSceneNodeAttachment)
+  private
+    var _Camera: TLabSceneCamera;
+    function GetView: TLabMat;
+  public
+    property Camera: TLabSceneCamera read _Camera;
+    property View: TLabMat read GetView;
+    constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceCamera: TLabColladaInstanceCamera);
+    destructor Destroy; override;
+  end;
+  TLabSceneNodeAttachmentCameraList = specialize TLabList<TLabSceneNodeAttachmentCamera>;
 
   TLabSceneNode = class (TLabClass)
   public
@@ -493,6 +513,7 @@ type
     var _Materials: TLabSceneMaterialList;
     var _Animations: TLabSceneAnimationList;
     var _AnimationClips: TLabSceneAnimationClipList;
+    var _Cameras: TLabSceneCameraList;
     var _DefaultAnimationClip: TLabSceneAnimationClip;
   public
     property Device: TLabDeviceShared read _Device;
@@ -505,6 +526,7 @@ type
     property Controllers: TLabSceneControllerList read _Controllers;
     property Animations: TLabSceneAnimationList read _Animations;
     property AnimationClips: TLabSceneAnimationClipList read _AnimationClips;
+    property Cameras: TLabSceneCameraList read _Cameras;
     property DefaultAnimationClip: TLabSceneAnimationClip read _DefaultAnimationClip;
     procedure Add(const FileName: String);
     function FindAnimationClip(const Name: AnsiString): TLabSceneAnimationClip;
@@ -714,7 +736,6 @@ begin
   end;
   if Assigned(SkinInfo) then
   begin
-    Result.SkinLocation := loc_in;
     StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in uvec' + IntToStr(SkinInfo^.MaxJointWeights) + ' in_joint_index;'#$D#$A;
     Inc(loc_in);
     StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in vec' + IntToStr(SkinInfo^.MaxJointWeights) + ' in_joint_weight;'#$D#$A;
@@ -813,8 +834,8 @@ begin
   Result.DescriptorSetLayout := TLabDescriptorSetLayout.Create(ADevice, Bindings);
   Result.DescriptorPool := TLabDescriptorPool.Create(ADevice, DescPoolSizes, 1);
   Result.DescriptorSets := TLabDescriptorSets.Create(
-    ADevice, Result.DescriptorPool,
-    [Result.DescriptorSetLayout.Ptr.VkHandle]
+    ADevice, Result.DescriptorPool.Ptr,
+    [Result.DescriptorSetLayout.Ptr]
   );
   binding := 0;
   for i := 0 to High(Parameters) do
@@ -995,6 +1016,7 @@ begin
   _ListSort := True;
 end;
 
+{$Push}{$Hints off}
 constructor TLabSceneShaderBase.Create(const ADevice: TLabDeviceShared; const ShaderData: TLabByteArr; const AHash: TVkUInt32);
 begin
   _Device := ADevice;
@@ -1002,6 +1024,7 @@ begin
   _List.Add(Self);
   _ListSort := True;
 end;
+{$Pop}
 
 destructor TLabSceneShaderBase.Destroy;
 begin
@@ -1068,16 +1091,6 @@ constructor TLabScenePixelShader.Create(const ADevice: TLabDeviceShared; const S
 begin
   inherited Create(ADevice, ShaderData, AHash);
   _Shader := TLabPixelShader.Create(_Device, @ShaderData[0], Length(ShaderData));
-end;
-
-constructor TLabSceneShader.Create;
-begin
-  SkinLocation := -1;
-end;
-
-destructor TLabSceneShader.Destroy;
-begin
-  inherited Destroy;
 end;
 
 destructor TLabSceneMaterialBinding.Destroy;
@@ -1153,6 +1166,28 @@ destructor TLabSceneNodeAttachmentController.Destroy;
 begin
   while _MaterialBindings.Count > 0 do _MaterialBindings.Pop.Free;
   _MaterialBindings.Free;
+  inherited Destroy;
+end;
+
+function TLabSceneNodeAttachmentCamera.GetView: TLabMat;
+  var xf: TLabMat;
+begin
+  xf := _Node.Transform;
+  Result := LabMatView(xf.Translation, xf.Translation - xf.AxisZ, LabVec3(0, 0, 1));
+end;
+
+constructor TLabSceneNodeAttachmentCamera.Create(
+  const AScene: TLabScene;
+  const ANode: TLabSceneNode;
+  const ColladaInstanceCamera: TLabColladaInstanceCamera
+);
+begin
+  inherited Create(AScene, ANode);
+  _Camera := TLabSceneCamera(ColladaInstanceCamera.Camera.UserData);
+end;
+
+destructor TLabSceneNodeAttachmentCamera.Destroy;
+begin
   inherited Destroy;
 end;
 
@@ -1984,6 +2019,21 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabSceneCamera.Create(const AScene: TLabScene; const ColladaCamera: TLabColladaCamera);
+begin
+  ColladaCamera.UserData := Self;
+  _Scene := AScene;
+  _Projection := LabMatProj(
+    ColladaCamera.FOV, ColladaCamera.Aspect,
+    ColladaCamera.ClipNear, ColladaCamera.ClipFar
+  );
+end;
+
+destructor TLabSceneCamera.Destroy;
+begin
+  inherited Destroy;
+end;
+
 procedure TLabSceneNode.SetParent(const Value: TLabSceneNode);
 begin
   if _Parent = Value then Exit;
@@ -2143,6 +2193,10 @@ begin
       else if ANode.Children[i] is TLabColladaInstanceController then
       begin
         _Attachments.Add(TLabSceneNodeAttachmentController.Create(_Scene, Self, TLabColladaInstanceController(ANode.Children[i])));
+      end
+      else if ANode.Children[i] is TLabColladaInstanceCamera then
+      begin
+        _Attachments.Add(TLabSceneNodeAttachmentCamera.Create(_Scene, Self, TLabColladaInstanceCamera(ANode.Children[i])));
       end;
     end;
   end;
@@ -2193,6 +2247,11 @@ begin
   for i := 0 to Collada.RootNode.LibGeometries.Geometries.Count - 1 do
   begin
     _Geometries.Add(TLabSceneGeometry.Create(Self, Collada.RootNode.LibGeometries.Geometries[i]));
+  end;
+  if Assigned(Collada.RootNode.LibCameras) then
+  for i := 0 to Collada.RootNode.LibCameras.Cameras.Count - 1 do
+  begin
+    _Cameras.Add(TLabSceneCamera.Create(Self, Collada.RootNode.LibCameras.Cameras[i]));
   end;
   if Assigned(Collada.RootNode.LibControllers) then
   for i := 0 to Collada.RootNode.LibControllers.Controllers.Count - 1 do
@@ -2272,6 +2331,7 @@ begin
   _Materials := TLabSceneMaterialList.Create;
   _Animations := TLabSceneAnimationList.Create;
   _AnimationClips := TLabSceneAnimationClipList.Create;
+  _Cameras := TLabSceneCameraList.Create;
   _DefaultAnimationClip := TLabSceneAnimationClip.Create(Self, 'Default');
   _AnimationClips.Add(_DefaultAnimationClip);
   _Root := TLabSceneNode.Create(Self, nil, nil);
@@ -2292,6 +2352,8 @@ begin
   _Controllers.Free;
   while _Geometries.Count > 0 do _Geometries.Pop.Free;
   _Geometries.Free;
+  while _Cameras.Count > 0 do _Cameras.Pop.Free;
+  _Cameras.Free;
   while _Images.Count > 0 do _Images.Pop.Free;
   _Images.Free;
   inherited Destroy;
