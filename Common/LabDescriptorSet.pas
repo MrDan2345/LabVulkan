@@ -18,8 +18,12 @@ type
     var _Flags: TVkDescriptorSetLayoutCreateFlags;
     var _Handle: TVkDescriptorSetLayout;
     var _Hash: TVkUInt32;
+    function GetBindingCount: TVkUInt32; inline;
+    function GetBinding(const Index: TVkUInt32): PVkDescriptorSetLayoutBinding; inline;
   public
     property VkHandle: TVkDescriptorSetLayout read _Handle;
+    property BindingCount: TVkUInt32 read GetBindingCount;
+    property Binding[const Index: TVkUInt32]: PVkDescriptorSetLayoutBinding read GetBinding;
     property Hash: TVkUInt32 read _Hash;
     constructor Create(
       const ADevice: TLabDeviceShared;
@@ -29,6 +33,7 @@ type
     destructor Destroy; override;
   end;
   TLabDescriptorSetLayoutShared = specialize TLabSharedRef<TLabDescriptorSetLayout>;
+  TLabDescriptorSetLayoutWeak = specialize TLabWeakRef<TLabDescriptorSetLayout>;
 
   TLabWriteDescriptorSet = record
     WriteDescriptorSet: TVkWriteDescriptorSet;
@@ -105,6 +110,18 @@ type
         const SetCount: TVkUInt32 = 1
       );
     end;
+    type TLayoutTracker = class (TLabClass)
+    public
+      type TLayoutTrackerPtr = ^TLayoutTracker;
+    private
+      var _TrackerList: TLayoutTrackerPtr;
+    public
+      var Next: TLayoutTracker;
+      var Prev: TLayoutTracker;
+      var Layout: TLabDescriptorSetLayoutWeak;
+      constructor Create(const ALayout: TLabDescriptorSetLayout; const ATRackerList: TLayoutTrackerPtr);
+      destructor Destroy; override;
+    end;
     type TPoolAllocTracker = class (TLabClass)
       Pool: TPool;
       Sizes: array of TVkDescriptorPoolSize;
@@ -118,6 +135,8 @@ type
     end;
     var _Device: TLabDeviceShared;
     var _PoolList: TPool;
+    var _LayoutList: TLayoutTracker;
+    function FindLayout(const Bindings: array of TVkDescriptorSetLayoutBinding): TLabDescriptorSetLayoutShared;
   public
     constructor Create(const ADevice: TLabDeviceShared);
     destructor Destroy; override;
@@ -296,6 +315,36 @@ begin
   CountSetAvailable += SetCount;
 end;
 
+constructor TLabDescriptorSetsFactory.TLayoutTracker.Create(
+  const ALayout: TLabDescriptorSetLayout;
+  const ATRackerList: TLayoutTrackerPtr
+);
+begin
+  _TrackerList := ATRackerList;
+  Layout := ALayout;
+  Prev := nil;
+  Next := _TrackerList^;
+  _TrackerList^ := Self;
+end;
+
+destructor TLabDescriptorSetsFactory.TLayoutTracker.Destroy;
+begin
+  if Assigned(Prev) then Prev.Next := Next;
+  if Assigned(Next) then Next.Prev := Prev;
+  if _TrackerList^ = Self then _TrackerList^ := Next;
+  inherited Destroy;
+end;
+
+function TLabDescriptorSetLayout.GetBindingCount: TVkUInt32;
+begin
+  Result := Length(_Bindings);
+end;
+
+function TLabDescriptorSetLayout.GetBinding(const Index: TVkUInt32): PVkDescriptorSetLayoutBinding;
+begin
+  Result := @_Bindings[Index];
+end;
+
 constructor TLabDescriptorSetLayout.Create(
   const ADevice: TLabDeviceShared;
   const ABindings: array of TVkDescriptorSetLayoutBinding;
@@ -419,14 +468,62 @@ begin
   Vulkan.UpdateDescriptorSets(_Device.Ptr.VkHandle, Length(Writes), WritePtr, Length(Copies), CopyPtr);
 end;
 
+function TLabDescriptorSetsFactory.FindLayout(const Bindings: array of TVkDescriptorSetLayoutBinding): TLabDescriptorSetLayoutShared;
+  var Tracker: TLayoutTracker;
+  var layout: TLabDescriptorSetLayoutShared;
+  var i, j: TVkInt32;
+  var match: Boolean;
+begin
+  Result := nil;
+  Tracker := _LayoutList;
+  while Assigned(Tracker) do
+  begin
+    layout := Tracker.Layout.AsShared;
+    if layout.IsValid
+    and (layout.Ptr.BindingCount = Length(Bindings)) then
+    begin
+      match := False;
+      for i := 0 to High(Bindings) do
+      begin
+        match := False;
+        for j := 0 to layout.Ptr.BindingCount - 1 do
+        if (layout.Ptr.Binding[j]^.binding = Bindings[i].binding)
+        and (layout.Ptr.Binding[j]^.descriptorType = Bindings[i].descriptorType)
+        and (layout.Ptr.Binding[j]^.descriptorCount = Bindings[i].descriptorCount)
+        and (layout.Ptr.Binding[j]^.stageFlags = Bindings[i].stageFlags) then
+        begin
+          match := True;
+          Break;
+        end;
+        if not match then Break;
+      end;
+      if match then
+      begin
+        Result := layout;
+        Exit;
+      end;
+    end;
+    Tracker := Tracker.Next;
+  end;
+  Result := TLabDescriptorSetLayout.Create(_Device, Bindings);
+  Tracker := TLayoutTracker.Create(Result.Ptr, @_LayoutList);
+  Result.Ptr.AddReference(Tracker);
+end;
+
 constructor TLabDescriptorSetsFactory.Create(const ADevice: TLabDeviceShared);
 begin
   _Device := ADevice;
   _PoolList := nil;
+  _LayoutList := nil;
 end;
 
 destructor TLabDescriptorSetsFactory.Destroy;
 begin
+  while Assigned(_LayoutList) do
+  begin
+    _LayoutList.Layout.Ptr.RemoveReference(_LayoutList);
+    _LayoutList.Free;
+  end;
   while Assigned(_PoolList) do _PoolList.Free;
   inherited Destroy;
 end;
@@ -440,7 +537,7 @@ function TLabDescriptorSetsFactory.Request(
   var size_found: Boolean;
   var AllocTracker: TPoolAllocTracker;
   var desc_layouts: array of TLabDescriptorSetLayout;
-  var layout: TLabDescriptorSetLayout;
+  var layouts_shared: array of TLabDescriptorSetLayoutShared;
   var max_sets: TVkUInt32;
 begin
   max_sets := 0;
@@ -479,13 +576,14 @@ begin
   end;
   AllocTracker := TPoolAllocTracker.Create(Pool, Sizes);
   SetLength(desc_layouts, max_sets);
+  SetLength(layouts_shared, Length(Layouts));
   n := 0;
   for i := 0 to High(Layouts) do
   begin
-    layout := TLabDescriptorSetLayout.Create(_Device, Layouts[i].Bindings);
+    layouts_shared[i] := FindLayout(Layouts[i].Bindings);
     for j := 0 to Layouts[i].SetCount - 1 do
     begin
-      desc_layouts[n] := layout;
+      desc_layouts[n] := layouts_shared[i].Ptr;
       Inc(n);
     end;
   end;

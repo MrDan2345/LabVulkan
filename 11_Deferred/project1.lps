@@ -15,7 +15,7 @@
     </Units>
   </ProjectSession>
   <Debugging>
-    <BreakPoints Count="3">
+    <BreakPoints Count="2">
       <Item1>
         <Kind Value="bpkSource"/>
         <WatchScope Value="wpsLocal"/>
@@ -30,13 +30,6 @@
         <Source Value="main.pas"/>
         <Line Value="217"/>
       </Item2>
-      <Item3>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\Common\LabDescriptorSet.pas"/>
-        <Line Value="490"/>
-      </Item3>
     </BreakPoints>
   </Debugging>
 </CONFIG>
