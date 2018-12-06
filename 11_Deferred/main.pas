@@ -43,6 +43,7 @@ type
   end;
 
   TFullscreenQuad = class
+    QuadData: array[0..3] of TVertex;
     VertexBuffer: TLabVertexBufferShared;
     VertexBufferStaging: TLabBufferShared;
     IndexBuffer: TLabIndexBufferShared;
@@ -57,6 +58,8 @@ type
     destructor Destroy; override;
     procedure Stage(const Cmd: TLabCommandBuffer);
     procedure Draw(const Cmd: TLabCommandBuffer);
+    procedure BindOffscreenTargets;
+    procedure Resize(const Cmd: TLabCommandBuffer);
   end;
 
   TLabApp = class (TLabVulkan)
@@ -129,15 +132,23 @@ implementation
 
 constructor TFullscreenQuad.Create;
   var Map: PVkVoid;
-  var i: TVkInt32;
   var Layouts: array of TVkDescriptorSetLayout;
-  var Writes: array of TLabWriteDescriptorSet;
+  var rt_w, rt_h: TVkUInt32;
+  var u, v: TLabFloat;
 begin
+  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
+  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
+  u := App.SwapChain.Ptr.Width / rt_w;
+  v := App.SwapChain.Ptr.Height / rt_h;
+  QuadData[0] := Vertex(-1, -1, 0.5, 1, 1, 1, 1, 1, 0, 0);
+  QuadData[1] := Vertex(1, -1, 0.5, 1, 1, 1, 1, 1, u, 0);
+  QuadData[2] := Vertex(-1, 1, 0.5, 1, 1, 1, 1, 1, 0, v);
+  QuadData[3] := Vertex(1, 1, 0.5, 1, 1, 1, 1, 1, u, v);
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
-    SizeOf(fullscreen_quad_vb), SizeOf(TVertex),
+    SizeOf(QuadData), SizeOf(TVertex),
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).posX)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).x)),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
     ],
@@ -155,7 +166,7 @@ begin
   Map := nil;
   if VertexBufferStaging.Ptr.Map(Map) then
   begin
-    Move(fullscreen_quad_vb, Map^, VertexBuffer.Ptr.Size);
+    Move(QuadData, Map^, VertexBuffer.Ptr.Size);
     VertexBufferStaging.Ptr.Unmap;
     VertexBufferStaging.Ptr.FlushAll;
   end;
@@ -195,24 +206,6 @@ begin
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
     ], App.SwapChain.Ptr.ImageCount)
   ]);
-  SetLength(Writes, App.SwapChain.Ptr.ImageCount);
-  for i := 0 to High(Writes) do
-  begin
-    Writes[i] := LabWriteDescriptorSetImageSampler(
-      DescriptorSets.Ptr.VkHandle[i],
-      0,
-      [
-        LabDescriptorImageInfo(
-          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          App.OffscreenTargets[i].Color.View.Ptr.VkHandle,
-          Sampler.Ptr.VkHandle
-          //App.Texture.View.Ptr.VkHandle,
-          //App.Texture.Sampler.Ptr.VkHandle
-        )
-      ]
-    );
-  end;
-  DescriptorSets.Ptr.UpdateSets(Writes, []);
   PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
@@ -231,6 +224,7 @@ begin
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
     LabPipelineTesselationState(0)
   );
+  BindOffscreenTargets;
 end;
 
 destructor TFullscreenQuad.Destroy;
@@ -263,6 +257,67 @@ begin
   Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
   Cmd.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
   Cmd.DrawIndexed(IndexBuffer.Ptr.IndexCount);
+end;
+
+procedure TFullscreenQuad.BindOffscreenTargets;
+  var i: TVkInt32;
+  var Writes: array of TLabWriteDescriptorSet;
+begin
+  SetLength(Writes, App.SwapChain.Ptr.ImageCount);
+  for i := 0 to High(Writes) do
+  begin
+    Writes[i] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      0,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          App.OffscreenTargets[i].Color.View.Ptr.VkHandle,
+          Sampler.Ptr.VkHandle
+          //App.Texture.View.Ptr.VkHandle,
+          //App.Texture.Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+  end;
+  DescriptorSets.Ptr.UpdateSets(Writes, []);
+end;
+
+procedure TFullscreenQuad.Resize(const Cmd: TLabCommandBuffer);
+  var rt_w, rt_h: TVkUInt32;
+  var u, v: TVkFloat;
+  var map: PVkVoid;
+begin
+  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
+  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
+  u := App.SwapChain.Ptr.Width / rt_w;
+  v := App.SwapChain.Ptr.Height / rt_h;
+  QuadData[1].u := u;
+  QuadData[2].v := v;
+  QuadData[3].u := u;
+  QuadData[3].v := v;
+  map := nil;
+  if VertexBufferStaging.Ptr.Map(map) then
+  begin
+    Move(QuadData, map^, VertexBuffer.Ptr.Size);
+    VertexBufferStaging.Ptr.Unmap;
+    VertexBufferStaging.Ptr.FlushAll;
+  end;
+  Cmd.RecordBegin;
+  Cmd.CopyBuffer(
+    VertexBufferStaging.Ptr.VkHandle,
+    VertexBuffer.Ptr.VkHandle,
+    [LabBufferCopy(VertexBuffer.Ptr.Size)]
+  );
+  Cmd.RecordEnd;
+  App.QueueSubmit(
+    App.SwapChain.Ptr.QueueFamilyGraphics,
+    [Cmd.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE
+  );
+  App.QueueWaitIdle(App.SwapChain.Ptr.QueueFamilyGraphics);
 end;
 
 procedure TRenderTarget.SetupImage(
@@ -642,7 +697,7 @@ begin
     sizeof(g_vb_solid_face_colors_Data),
     sizeof(g_vb_solid_face_colors_Data[0]),
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).posX) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).x) ),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
     ],
@@ -779,6 +834,14 @@ begin
 end;
 
 procedure TLabApp.Loop;
+  procedure ResetSwapChain;
+  begin
+    Device.Ptr.WaitIdle;
+    SwapchainDestroy;
+    SwapchainCreate;
+    ScreenQuad.BindOffscreenTargets;
+    ScreenQuad.Resize(Cmd.Ptr);
+  end;
   var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
@@ -790,9 +853,7 @@ begin
   if (SwapChain.Ptr.Width <> Window.Width)
   or (SwapChain.Ptr.Height <> Window.Height) then
   begin
-    Device.Ptr.WaitIdle;
-    SwapchainDestroy;
-    SwapchainCreate;
+    ResetSwapChain;
   end;
   UpdateTransforms;
   UniformData := nil;
@@ -805,9 +866,7 @@ begin
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
     LabLogVkError(r);
-    Device.Ptr.WaitIdle;
-    SwapchainDestroy;
-    SwapchainCreate;
+    ResetSwapChain;
     Exit;
   end
   else

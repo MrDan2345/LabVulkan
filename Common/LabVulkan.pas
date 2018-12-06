@@ -36,9 +36,11 @@ type
     class var _Layers: array of TLabLayer;
     class var _ExtensionsEnabled: TLabListStringShared;
     class var _LayersEnabled: TLabListStringShared;
+    class var _ReportFormats: Boolean;
     var _PhysicalDevices: TLabPhysicalDeviceList;
     var _Vulkan: TVulkan;
   public
+    class property ReportFormats: Boolean read _ReportFormats write _ReportFormats;
     class property IsEnabled: Boolean read _IsEnabled;
     class property IsActive: Boolean read _IsActive write _IsActive;
     class property OnInitialize: TLabProcObj read _OnInitialize write _OnInitialize;
@@ -149,6 +151,7 @@ class constructor TLabVulkan.CreateClass;
   var extension_properties: array of TVkExtensionProperties;
 begin
   LabLog('TLabVulkan.CreateClass');
+  _ReportFormats := False;
   _IsActive := False;
   _IsEnabled := LoadVulkanLibrary and LoadVulkanGlobalCommands;
   if _IsEnabled then
@@ -282,12 +285,15 @@ constructor TLabVulkan.Create;
   var app_info: TVkApplicationInfo;
   var inst_info: TVkInstanceCreateInfo;
   var inst_commands: TVulkanCommands;
-  var new_vk: TVulkan;
   var extensions: array of PVkChar;
   var layers: array of PVkChar;
   var r: TVkResult;
   var i, j, physical_device_count: Integer;
   var physical_device_arr: array of TVkPhysicalDevice;
+  var fmt: TVkFormat;
+  var fmt_props: TVkFormatProperties;
+  var ff: TVkFormatFeatureFlagBits;
+  var fmt_str, str: String;
 begin
   LabLog('TLabVulkan.Create');
   LabLogOffset(2);
@@ -381,6 +387,56 @@ begin
       if _PhysicalDevices[i].Ptr.QueueFamilyProperties[j]^.queueFlags and TVkFlags(VK_QUEUE_PROTECTED_BIT) > 0 then
       begin
         LabLog('PROTECTED');
+      end;
+      LabLogOffset(-2);
+    end;
+    if _ReportFormats then
+    begin
+      LabLog('Supported formats:', 2);
+      for fmt in [Low(TVkFormat)..VK_FORMAT_ASTC_12x12_SRGB_BLOCK] do
+      begin
+        Vulkan.GetPhysicalDeviceFormatProperties(_PhysicalDevices[i].Ptr.VkHandle, fmt, @fmt_props);
+        if (fmt_props.optimalTilingFeatures > 0)
+        or (fmt_props.linearTilingFeatures > 0)
+        or (fmt_props.optimalTilingFeatures > 0) then
+        begin
+          WriteStr(str, fmt);
+          LabLog(str, 2);
+          if fmt_props.optimalTilingFeatures > 0 then
+          begin
+            LabLog('optimal:', 2);
+            for ff in LabFormatFeatures do
+            if (TVkFlags(ff) and fmt_props.optimalTilingFeatures) > 0 then
+            begin
+              WriteStr(str, ff);
+              LabLog(str);
+            end;
+            LabLogOffset(-2)
+          end;
+          if fmt_props.linearTilingFeatures > 0 then
+          begin
+            LabLog('linear:', 2);
+            for ff in LabFormatFeatures do
+            if (TVkFlags(ff) and fmt_props.linearTilingFeatures) > 0 then
+            begin
+              WriteStr(str, ff);
+              LabLog(str);
+            end;
+            LabLogOffset(-2)
+          end;
+          if fmt_props.bufferFeatures > 0 then
+          begin
+            LabLog('buffer:', 2);
+            for ff in LabFormatFeatures do
+            if (TVkFlags(ff) and fmt_props.bufferFeatures) > 0 then
+            begin
+              WriteStr(str, ff);
+              LabLog(str);
+            end;
+            LabLogOffset(-2)
+          end;
+          LabLogOffset(-2);
+        end;
       end;
       LabLogOffset(-2);
     end;

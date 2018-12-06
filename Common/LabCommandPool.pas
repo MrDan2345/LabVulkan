@@ -22,6 +22,7 @@ type
       const ACreateFlags: TVkCommandPoolCreateFlags = TVkFlags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
     );
     destructor Destroy; override;
+    procedure Reset(const ReleaseResources: Boolean = False);
   end;
   TLabCommandPoolShared = specialize TLabSharedRef<TLabCommandPool>;
 
@@ -50,6 +51,14 @@ begin
   inherited Destroy;
   LabLog('TLabCommandPool.Destroy');
 end;
+
+procedure TLabCommandPool.Reset(const ReleaseResources: Boolean);
+  var flags: TVkCommandPoolResetFlags;
+begin
+  if ReleaseResources then flags := TVkFlags(VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT) else flags := 0;
+  Vulkan.ResetCommandPool(_Device.Ptr.VkHandle, _Handle, flags);
+end;
+
 //TLabCommandPool END
 
 end.

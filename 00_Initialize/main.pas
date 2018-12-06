@@ -86,6 +86,7 @@ implementation
 
 constructor TLabApp.Create;
 begin
+  //ReportFormats := True;
   //EnableLayerIfAvailable('VK_LAYER_LUNARG_api_dump');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
@@ -154,7 +155,6 @@ begin
 end;
 
 procedure TLabApp.SwapchainDestroy;
-  var i: Integer;
 begin
   FrameBuffers := nil;
   DepthBuffers := nil;
@@ -195,6 +195,7 @@ begin
     VK_NULL_HANDLE
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
+  CmdPool.Ptr.Reset(True);
   VertexBufferStaging := nil;
 end;
 
@@ -374,6 +375,7 @@ begin
   );
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
+  CmdPool.Ptr.Reset();
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
 end;
 

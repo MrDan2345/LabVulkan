@@ -30,6 +30,7 @@ type
     function RecordBegin(const Flags: TVkCommandBufferUsageFlags = 0): Boolean;
     function RecordEnd: Boolean;
     function QueueSubmit(const Queue: TVkQueue; const WaitSemaphores: array of TVkSemaphore): Boolean;
+    procedure Reset(const ReleaseResources: Boolean = False);
     procedure BeginRenderPass(
       const RenderPass: TLabRenderPass;
       const FrameBuffer: TLabFrameBuffer;
@@ -230,6 +231,13 @@ begin
   while fence.WaitFor = VK_TIMEOUT do;
   fence.Free;
   Result := True;
+end;
+
+procedure TLabCommandBuffer.Reset(const ReleaseResources: Boolean);
+  var flags: TVkCommandBufferResetFlags;
+begin
+  if ReleaseResources then flags := TVkFlags(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) else flags := 0;
+  Vulkan.ResetCommandBuffer(_Handle, flags);
 end;
 
 procedure TLabCommandBuffer.BeginRenderPass(
