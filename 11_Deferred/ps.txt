@@ -1,10 +1,18 @@
 #version 400
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
-layout(binding = 1) uniform sampler2D tex_color;
-layout (location = 0) in vec4 in_color;
-layout (location = 1) in vec2 in_tc0;
-layout (location = 0) out vec4 out_color;
+layout (binding = 1) uniform sampler2D tex_color;
+layout (binding = 2) uniform sampler2D tex_normal;
+layout (location = 0) in vec4 in_pos;
+layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec4 in_color;
+layout (location = 3) in vec2 in_tc0;
+layout (location = 4) in vec4 in_pos_w;
+layout (location = 0) out float out_depth;
+layout (location = 1) out vec4 out_color;
+layout (location = 2) out vec4 out_normal;
 void main() {
-   out_color = in_color * texture(tex_color, in_tc0);
+  out_depth = (in_pos.z / in_pos.w);
+  out_color = texture(tex_color, in_tc0);
+  out_normal = vec4(normalize(in_normal), 1);
 }

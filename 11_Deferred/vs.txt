@@ -8,15 +8,24 @@ layout (std140, binding = 0) uniform t_data {
     mat4 wvp;
 } data;
 layout (location = 0) in vec4 in_pos;
-layout (location = 1) in vec4 in_color;
-layout (location = 2) in vec2 in_tc0;
-layout (location = 0) out vec4 out_color;
-layout (location = 1) out vec2 out_tc0;
+layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec3 in_tangent;
+layout (location = 3) in vec4 in_color;
+layout (location = 4) in vec2 in_tc0;
+layout (location = 0) out vec4 out_pos;
+layout (location = 1) out vec3 out_normal;
+layout (location = 2) out vec4 out_color;
+layout (location = 3) out vec2 out_tc0;
+layout (location = 4) out vec4 out_pos_w;
 out gl_PerVertex {
     vec4 gl_Position;
 };
 void main() {
-   out_color = in_color;
-   out_tc0 = in_tc0;
-   gl_Position = data.wvp * in_pos;
+  out_pos_w = data.w * in_pos;
+  vec4 pos = data.wvp * in_pos;
+  out_normal = mat3(data.w) * in_normal;
+  out_color = in_color;
+  out_tc0 = in_tc0;
+  out_pos = pos;
+  gl_Position = pos;
 }
