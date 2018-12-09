@@ -818,7 +818,7 @@ begin
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-    View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
+    View := LabMatView(LabVec3(-5, 8, -10), LabVec3, LabVec3(0, 1, 0));
     World := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     Clip := LabMat(
       1, 0, 0, 0,

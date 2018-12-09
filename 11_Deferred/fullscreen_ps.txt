@@ -25,7 +25,7 @@ void main() {
   pos_w *= (1 / pos_w.w);
   
   vec3 pos_to_light = light_pos - pos_w.xyz;
-  float light_att = 1 - smoothstep(light_rad * 0.3, light_rad, length(pos_to_light));
+  float light_att = 1 - smoothstep(light_rad * 0.5, light_rad, length(pos_to_light));
   pos_to_light = normalize(pos_to_light);
   float light = dot(normal, pos_to_light) * light_att;
   out_color = color * light;//vec4(sc, 0, 1);//vec4(depth, depth, depth, 1);
