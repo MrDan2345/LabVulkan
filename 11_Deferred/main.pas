@@ -33,6 +33,15 @@ uses
   SysUtils;
 
 type
+  TTransforms = record
+    World: TLabMat;
+    View: TLabMat;
+    Projection: TLabMat;
+    Clip: TLabMat;
+    WVP: TLabMat;
+  end;
+  PTransforms = ^TTransforms;
+
   TTexture = class (TLabClass)
     var Image: TLabImageShared;
     var Staging: TLabBufferShared;
@@ -40,31 +49,63 @@ type
     var Sampler: TLabSamplerShared;
     var MipLevels: TVkUInt32;
     constructor Create(const FileName: String);
-    procedure Stage(const Cmd: TLabCommandBuffer);
+    destructor Destroy; override;
+    procedure Stage(const Args: array of const);
   end;
   TTextureShared = specialize TLabSharedRef<TTexture>;
 
-  TLightData = object
-    type TLightVertex = packed record
-      x, y, z: TVkFloat;
+  TLightData = class (TLabClass)
+    type TUniformVertex = packed record
+      VP: TLabMat;
     end;
+    type PUniformVertex = ^TUniformVertex;
+    type TUniformPixel = packed record
+      VP_i: TLabMat;
+      rt_ratio: TLabVec4;
+    end;
+    type PUniformPixel = ^TUniformPixel;
+    type TLightVertex = packed record
+      x, y, z, w: TVkFloat;
+    end;
+    type TLightInstance = packed record
+      pos: TLabVec4;
+    end;
+    type TLightInstanceArr = array[Word] of TLightInstance;
+    type PLightInstanceArr = ^TLightInstanceArr;
     const light_vertices: array[0..5] of TLightVertex = (
-      (x:0; y:1; z:0), (x:1; y:0; z:0), (x:0; y:0; z:1), (x:-1; y:0; z:0), (x:0; y:0; z:-1), (x:0; y:-1; z:0)
+      (x:0; y:1; z:0; w:1), (x:1; y:0; z:0; w:1), (x:0; y:0; z:1; w:1), (x:-1; y:0; z:0; w:1), (x:0; y:0; z:-1; w:1), (x:0; y:-1; z:0; w:1)
     );
     const light_indices: array[0..23] of TVkUInt16 = (
       0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1,
       1, 4, 5, 4, 3, 5, 3, 2, 5, 2, 1, 5
     );
+    var InstanceCount: TVkUInt32;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexStaging: TLabBufferShared;
     var IndexBuffer: TLabIndexBufferShared;
     var IndexStaging: TLabIndexBufferShared;
+    var InstanceBuffer: TLabVertexBufferShared;
+    var InstanceStaging: TLabBufferShared;
     var VertexShader: TLabVertexShaderShared;
     var TessControlShader: TLabTessControlShaderShared;
     var TessEvalShader: TLabTessEvaluationShaderShared;
     var PixelShader: TLabPixelShaderShared;
-    procedure Setup;
+    var Sampler: TLabSamplerShared;
+    var DescriptorSets: TLabDescriptorSetsShared;
+    var PipelineLayout: TLabPipelineLayoutShared;
+    var Pipeline: TLabPipelineShared;
+    var UniformBufferVertex: TLabUniformBufferShared;
+    var UniformBufferPixel: TLabUniformBufferShared;
+    var UniformsVertex: PUniformVertex;
+    var UniformsPixel: PUniformPixel;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Stage(const Args: array of const);
+    procedure UpdateTransforms(const Args: array of const);
+    procedure BindOffscreenTargets(const Args: array of const);
+    procedure Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
   end;
+  TLightDataShared = specialize TLabSharedRef<TLightData>;
 
   TRenderTarget = object
     var Image: TLabImageShared;
@@ -75,7 +116,8 @@ type
     );
   end;
 
-  TFullscreenQuad = class
+  TFullscreenQuad = class (TLabClass)
+  public
     type TScreenVertex = packed record
       x, y, z, w: TVkFloat;
       u, v: TVkFloat;
@@ -101,13 +143,41 @@ type
     var Uniforms: PUniforms;
     constructor Create;
     destructor Destroy; override;
-    procedure Stage(const Cmd: TLabCommandBuffer);
-    procedure Draw(const Cmd: TLabCommandBuffer);
-    procedure BindOffscreenTargets;
+    procedure Stage(const Args: array of const);
+    procedure UpdateTransforms(const Args: array of const);
+    procedure BindOffscreenTargets(const Args: array of const);
+    procedure Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
     procedure Resize(const Cmd: TLabCommandBuffer);
     procedure UpdateUniforms;
     class function ScreenVertex(const x, y, z, w, u, v: TVkFloat): TScreenVertex; inline;
   end;
+  TFullscreenQuadShared = specialize TLabSharedRef<TFullscreenQuad>;
+
+  TCube = class (TLabClass)
+  public
+    type TUniforms = record
+      W: TLabMat;
+      WVP: TLabMat;
+    end;
+    type PUniforms = ^TUniforms;
+    var UniformBuffer: TLabUniformBufferShared;
+    var VertexBuffer: TLabVertexBufferShared;
+    var VertexStaging: TLabBufferShared;
+    var TextureColor: TTextureShared;
+    var TextureNormal: TTextureShared;
+    var VertexShader: TLabVertexShaderShared;
+    var PixelShader: TLabPixelShaderShared;
+    var DescriptorSets: TLabDescriptorSetsShared;
+    var PipelineLayout: TLabPipelineLayoutShared;
+    var Pipeline: TLabPipelineShared;
+    var Uniforms: PUniforms;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Stage(const Args: array of const);
+    procedure UpdateTransforms(const Args: array of const);
+    procedure Draw(const Cmd: TLabCommandBuffer);
+  end;
+  TCubeShared = specialize TLabSharedRef<TCube>;
 
   TLabApp = class (TLabVulkan)
   public
@@ -126,29 +196,20 @@ type
       ZBuffer: TLabDepthBufferShared;
       FrameBuffer: TLabFrameBufferShared;
     end;
+    var WidthRT: TVkUInt32;
+    var HeightRT: TVkUInt32;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
-    var PipelineLayout: TLabPipelineLayoutShared;
-    var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
     var RenderPassOffscreen: TLabRenderPassShared;
-    var VertexShader: TLabShaderShared;
-    var PixelShader: TLabShaderShared;
-    var VertexBuffer: TLabVertexBufferShared;
-    var VertexBufferStaging: TLabBufferShared;
-    var DescriptorSets: TLabDescriptorSetsShared;
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var PipelineCache: TLabPipelineCacheShared;
-    var TextureColor: TTextureShared;
-    var TextureNormal: TTextureShared;
-    var Transforms: record
-      World: TLabMat;
-      View: TLabMat;
-      Projection: TLabMat;
-      WVP: TLabMat;
-    end;
-    var ScreenQuad: TFullscreenQuad;
+    var Cube: TCubeShared;
+    var ScreenQuad: TFullscreenQuadShared;
+    var LightData: TLightDataShared;
+    var OnStage: TLabDelegate;
+    var OnUpdateTransforms: TLabDelegate;
+    var OnBindOffscreenTargets: TLabDelegate;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -223,11 +284,20 @@ begin
     VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT,
     VK_TRUE, 16, VK_SAMPLER_MIPMAP_MODE_LINEAR, 0, 0, MipLevels - 1
   );
+  App.OnStage.Add(@Stage);
 end;
 
-procedure TTexture.Stage(const Cmd: TLabCommandBuffer);
+destructor TTexture.Destroy;
+begin
+  App.OnStage.Remove(@Stage);
+  inherited Destroy;
+end;
+
+procedure TTexture.Stage(const Args: array of const);
+  var Cmd: TLabCommandBuffer;
   var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height, i: TVkUInt32;
 begin
+  Cmd := TLabCommandBuffer(Args[0].VObject);
   Cmd.PipelineBarrier(
     TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
     TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
@@ -321,13 +391,16 @@ begin
   );
 end;
 
-procedure TLightData.Setup;
+constructor TLightData.Create;
+  var i: TVkInt32;
+  var map: PVkVoid;
 begin
+  InstanceCount := 100;
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
     SizeOf(light_vertices), SizeOf(TLightVertex),
     [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, 0)
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0)
     ],
     TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
@@ -340,6 +413,12 @@ begin
     VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
+  if VertexStaging.Ptr.Map(map) then
+  begin
+    Move(light_vertices, map^, SizeOf(light_vertices));
+    VertexStaging.Ptr.FlushAll;
+    VertexStaging.Ptr.Unmap;
+  end;
   IndexBuffer := TLabIndexBuffer.Create(
     App.Device, Length(light_indices), VK_INDEX_TYPE_UINT16,
     TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
@@ -352,17 +431,216 @@ begin
     VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
+  if IndexStaging.Ptr.Map(map) then
+  begin
+    Move(light_indices, map^, SizeOf(light_indices));
+    IndexStaging.Ptr.FlushAll;
+    IndexStaging.Ptr.Unmap;
+  end;
+  InstanceBuffer := TLabVertexBuffer.Create(
+    App.Device, SizeOf(TLightInstance) * InstanceCount, SizeOf(TLightInstance),
+    [LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0)],
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  InstanceStaging := TLabBuffer.Create(
+    App.Device, InstanceBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT),
+    [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  );
+  if InstanceStaging.Ptr.Map(map) then
+  begin
+    for i := 0 to InstanceCount - 1 do
+    begin
+      PLightInstanceArr(map)^[i].pos := LabVec4(
+        (Random * 2 - 1) * 5,
+        (Random * 2 - 1) * 5,
+        (Random * 2 - 1) * 5,
+        Random(2) + 1
+      );
+    end;
+    InstanceStaging.Ptr.FlushAll;
+    InstanceStaging.Ptr.Unmap;
+  end;
+  VertexShader := TLabVertexShader.Create(App.Device, 'light_vs.spv');
+  TessControlShader := TLabTessControlShader.Create(App.Device, 'light_tcs.spv');
+  TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'light_tes.spv');
+  PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');
+  Sampler := TLabSampler.Create(
+    App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_FALSE, 1, VK_SAMPLER_MIPMAP_MODE_NEAREST
+  );
+  UniformBufferVertex := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformVertex));
+  UniformBufferVertex.Ptr.Map(UniformsVertex);
+  UniformBufferPixel := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformPixel));
+  UniformBufferPixel.Ptr.Map(UniformsPixel);
+  DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
+      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)),
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)),
+      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)),
+      LabDescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)),
+      LabDescriptorBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+    ], App.SwapChain.Ptr.ImageCount)
+  ]);
+  for i := 0 to App.SwapChain.Ptr.ImageCount - 1 do
+  begin
+    DescriptorSets.Ptr.UpdateSets(
+      [
+        LabWriteDescriptorSetUniformBuffer(
+          DescriptorSets.Ptr.VkHandle[i],
+          0, [LabDescriptorBufferInfo(UniformBufferVertex.Ptr.VkHandle)]
+        ),
+        LabWriteDescriptorSetUniformBuffer(
+          DescriptorSets.Ptr.VkHandle[i],
+          1, [LabDescriptorBufferInfo(UniformBufferPixel.Ptr.VkHandle)]
+        )
+      ], []
+    );
+  end;
+  PipelineLayout := TLabPipelineLayout.Create(
+    App.Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]
+  );
+  Pipeline := TLabGraphicsPipeline.Create(
+    App.Device, App.PipelineCache, PipelineLayout.Ptr,
+    [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+    [VertexShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr, PixelShader.Ptr],
+    App.RenderPass.Ptr, 0,
+    LabPipelineViewportState(),
+    LabPipelineInputAssemblyState(
+      VK_PRIMITIVE_TOPOLOGY_PATCH_LIST
+    ),
+    LabPipelineVertexInputState(
+      [VertexBuffer.Ptr.MakeBindingDesc(0), InstanceBuffer.Ptr.MakeBindingDesc(1, VK_VERTEX_INPUT_RATE_INSTANCE)],
+      [
+        VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
+        InstanceBuffer.Ptr.MakeAttributeDesc(0, 1, 1)
+      ]
+    ),
+    LabPipelineRasterizationState(
+      //VK_FALSE, VK_FALSE,
+      //VK_POLYGON_MODE_LINE
+    ),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_TRUE, VK_FALSE),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState(
+      [
+        LabPipelineColorBlendAttachmentState(
+          VK_TRUE,
+          VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE,
+          VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE
+        )
+      ], []
+    ),
+    LabPipelineTesselationState(3)
+  );
+  App.OnStage.Add(@Stage);
+  App.OnUpdateTransforms.Add(@UpdateTransforms);
+  App.OnBindOffscreenTargets.Add(@BindOffscreenTargets);
+end;
+
+destructor TLightData.Destroy;
+begin
+  App.OnBindOffscreenTargets.Remove(@BindOffscreenTargets);
+  App.OnUpdateTransforms.Remove(@UpdateTransforms);
+  App.OnStage.Remove(@Stage);
+  inherited Destroy;
+end;
+
+procedure TLightData.Stage(const Args: array of const);
+  var Cmd: TLabCommandBuffer;
+begin
+  Cmd := TLabCommandBuffer(Args[0].VObject);
+  Cmd.CopyBuffer(VertexStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
+  Cmd.CopyBuffer(InstanceStaging.Ptr.VkHandle, InstanceBuffer.Ptr.VkHandle, [LabBufferCopy(InstanceBuffer.Ptr.Size)]);
+  Cmd.CopyBuffer(IndexStaging.Ptr.VkHandle, IndexBuffer.Ptr.VkHandle, [LabBufferCopy(IndexBuffer.Ptr.Size)]);
+end;
+
+procedure TLightData.UpdateTransforms(const Args: array of const);
+  var xf: PTransforms;
+  var VP: TLabMat;
+begin
+  xf := PTransforms(Args[0].VPointer);
+  VP := xf^.View * xf^.Projection * xf^.Clip;
+  UniformsVertex^.VP := VP;
+  UniformsPixel^.VP_i := VP.Inverse;
+end;
+
+procedure TLightData.BindOffscreenTargets(const Args: array of const);
+  var i: TVkInt32;
+  var Writes: array of TLabWriteDescriptorSet;
+begin
+  SetLength(Writes, App.SwapChain.Ptr.ImageCount * 3);
+  for i := 0 to App.SwapChain.Ptr.ImageCount - 1 do
+  begin
+    Writes[i * 3 + 0] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      2,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          App.OffscreenTargets[i].Depth.View.Ptr.VkHandle,
+          Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+    Writes[i * 3 + 1] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      3,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          App.OffscreenTargets[i].Color.View.Ptr.VkHandle,
+          //App.Texture.View.Ptr.VkHandle,
+          Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+    Writes[i * 3 + 2] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      4,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          App.OffscreenTargets[i].Normals.View.Ptr.VkHandle,
+          Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+  end;
+  DescriptorSets.Ptr.UpdateSets(Writes, []);
+  UniformsPixel^.rt_ratio := LabVec4(
+    1 / App.SwapChain.Ptr.Width,
+    1 / App.SwapChain.Ptr.Height,
+    App.SwapChain.Ptr.Width / App.WidthRT,
+    App.SwapChain.Ptr.Height / App.HeightRT
+  );
+end;
+
+procedure TLightData.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
+begin
+  Cmd.BindPipeline(Pipeline.Ptr);
+  Cmd.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    PipelineLayout.Ptr,
+    0, [DescriptorSets.Ptr.VkHandle[ImageIndex]], []
+  );
+  Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle, InstanceBuffer.Ptr.VkHandle], [0, 0]);
+  Cmd.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
+  Cmd.DrawIndexed(IndexBuffer.Ptr.IndexCount, InstanceCount);
 end;
 
 constructor TFullscreenQuad.Create;
   var Map: PVkVoid;
-  var rt_w, rt_h, i: TVkUInt32;
+  var i: TVkUInt32;
   var u, v: TLabFloat;
 begin
-  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
-  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
-  u := App.SwapChain.Ptr.Width / rt_w;
-  v := App.SwapChain.Ptr.Height / rt_h;
+  u := App.SwapChain.Ptr.Width / App.WidthRT;
+  v := App.SwapChain.Ptr.Height / App.HeightRT;
   QuadData[0] := ScreenVertex(-1, -1, 0.5, 1, 0, 0);
   QuadData[1] := ScreenVertex(1, -1, 0.5, 1, u, 0);
   QuadData[2] := ScreenVertex(-1, 1, 0.5, 1, 0, v);
@@ -463,17 +741,24 @@ begin
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
     LabPipelineTesselationState(0)
   );
-  BindOffscreenTargets;
+  App.OnStage.Add(@Stage);
+  App.OnUpdateTransforms.Add(@UpdateTransforms);
+  App.OnBindOffscreenTargets.Add(@BindOffscreenTargets);
 end;
 
 destructor TFullscreenQuad.Destroy;
 begin
+  App.OnBindOffscreenTargets.Remove(@BindOffscreenTargets);
+  App.OnUpdateTransforms.Remove(@UpdateTransforms);
+  App.OnStage.Remove(@Stage);
   UniformBuffer.Ptr.Unmap;
   inherited Destroy;
 end;
 
-procedure TFullscreenQuad.Stage(const Cmd: TLabCommandBuffer);
+procedure TFullscreenQuad.Stage(const Args: array of const);
+  var Cmd: TLabCommandBuffer;
 begin
+  Cmd := TLabCommandBuffer(Args[0].VObject);
   Cmd.CopyBuffer(
     VertexBufferStaging.Ptr.VkHandle,
     VertexBuffer.Ptr.VkHandle,
@@ -486,20 +771,14 @@ begin
   );
 end;
 
-procedure TFullscreenQuad.Draw(const Cmd: TLabCommandBuffer);
+procedure TFullscreenQuad.UpdateTransforms(const Args: array of const);
+  var xf: PTransforms;
 begin
-  Cmd.BindPipeline(Pipeline.Ptr);
-  Cmd.BindDescriptorSets(
-    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    PipelineLayout.Ptr,
-    0, [DescriptorSets.Ptr.VkHandle[App.SwapChain.Ptr.CurImage]], []
-  );
-  Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  Cmd.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
-  Cmd.DrawIndexed(IndexBuffer.Ptr.IndexCount);
+  xf := PTransforms(Args[0].VPointer);
+  Uniforms^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
 end;
 
-procedure TFullscreenQuad.BindOffscreenTargets;
+procedure TFullscreenQuad.BindOffscreenTargets(const Args: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
 begin
@@ -544,15 +823,25 @@ begin
   DescriptorSets.Ptr.UpdateSets(Writes, []);
 end;
 
+procedure TFullscreenQuad.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
+begin
+  Cmd.BindPipeline(Pipeline.Ptr);
+  Cmd.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    PipelineLayout.Ptr,
+    0, [DescriptorSets.Ptr.VkHandle[ImageIndex]], []
+  );
+  Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
+  Cmd.BindIndexBuffer(IndexBuffer.Ptr.VkHandle);
+  Cmd.DrawIndexed(IndexBuffer.Ptr.IndexCount);
+end;
+
 procedure TFullscreenQuad.Resize(const Cmd: TLabCommandBuffer);
-  var rt_w, rt_h: TVkUInt32;
   var u, v: TVkFloat;
   var map: PVkVoid;
 begin
-  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
-  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
-  u := App.SwapChain.Ptr.Width / rt_w;
-  v := App.SwapChain.Ptr.Height / rt_h;
+  u := App.SwapChain.Ptr.Width / App.WidthRT;
+  v := App.SwapChain.Ptr.Height / App.HeightRT;
   Uniforms^.ScreenSize.x := App.SwapChain.Ptr.Width;
   Uniforms^.ScreenSize.y := App.SwapChain.Ptr.Height;
   Uniforms^.ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
@@ -586,18 +875,15 @@ begin
 end;
 
 procedure TFullscreenQuad.UpdateUniforms;
-  var rt_w, rt_h: TVkUInt32;
 begin
-  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
-  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
   Uniforms^.ScreenSize.x := App.SwapChain.Ptr.Width;
   Uniforms^.ScreenSize.y := App.SwapChain.Ptr.Height;
   Uniforms^.ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
   Uniforms^.ScreenSize.w := 1 / App.SwapChain.Ptr.Height;
-  Uniforms^.RTSize.x := rt_w;
-  Uniforms^.RTSize.y := rt_h;
-  Uniforms^.RTSize.z := 1 / rt_w;
-  Uniforms^.RTSize.w := 1 / rt_h;
+  Uniforms^.RTSize.x := App.WidthRT;
+  Uniforms^.RTSize.y := App.HeightRT;
+  Uniforms^.RTSize.z := 1 / App.WidthRT;
+  Uniforms^.RTSize.w := 1 / App.HeightRT;
 end;
 
 class function TFullscreenQuad.ScreenVertex(const x, y, z, w, u, v: TVkFloat): TScreenVertex;
@@ -610,17 +896,148 @@ begin
   Result.v := v;
 end;
 
+constructor TCube.Create;
+  var map: PVkVoid;
+begin
+  VertexBuffer := TLabVertexBuffer.Create(
+    App.Device,
+    sizeof(g_vb_solid_face_colors_Data),
+    sizeof(g_vb_solid_face_colors_Data[0]),
+    [
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).x) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).nx) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).tx) ),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
+    ],
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  );
+  VertexStaging := TLabBuffer.Create(
+    App.Device, VertexBuffer.Ptr.Size,
+    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
+    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+  );
+  map := nil;
+  if (VertexStaging.Ptr.Map(map)) then
+  begin
+    Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
+    VertexStaging.Ptr.Unmap;
+  end;
+  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniforms));
+  UniformBuffer.Ptr.Map(Uniforms);
+  TextureColor := TTexture.Create('crate_c.png');
+  TextureNormal := TTexture.Create('crate_n.png');
+  VertexShader := TLabVertexShader.Create(App.Device, 'vs.spv');
+  PixelShader := TLabPixelShader.Create(App.Device, 'ps.spv');
+  DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
+      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)),
+      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
+    ])
+  ]);
+  PipelineLayout := TLabPipelineLayout.Create(App.Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
+  Pipeline := TLabGraphicsPipeline.Create(
+    App.Device, App.PipelineCache, PipelineLayout.Ptr,
+    [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+    [VertexShader.Ptr, PixelShader.Ptr],
+    App.RenderPassOffscreen.Ptr, 0,
+    LabPipelineViewportState(),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState(
+      [VertexBuffer.Ptr.MakeBindingDesc(0)],
+      VertexBuffer.Ptr.MakeAttributeDescArr(0, 0)
+    ),
+    LabPipelineRasterizationState(
+      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL, TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
+    ),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
+  );
+  DescriptorSets.Ptr.UpdateSets(
+    [
+      LabWriteDescriptorSetUniformBuffer(
+        DescriptorSets.Ptr.VkHandle[0],
+        0,
+        [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]
+      ),
+      LabWriteDescriptorSetImageSampler(
+        DescriptorSets.Ptr.VkHandle[0],
+        1,
+        [
+          LabDescriptorImageInfo(
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            TextureColor.Ptr.View.Ptr.VkHandle,
+            TextureColor.Ptr.Sampler.Ptr.VkHandle
+          )
+        ]
+      ),
+      LabWriteDescriptorSetImageSampler(
+        DescriptorSets.Ptr.VkHandle[0],
+        2,
+        [
+          LabDescriptorImageInfo(
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            TextureNormal.Ptr.View.Ptr.VkHandle,
+            TextureNormal.Ptr.Sampler.Ptr.VkHandle
+          )
+        ]
+      )
+    ],
+    []
+  );
+  App.OnStage.Add(@Stage);
+  App.OnUpdateTransforms.Add(@UpdateTransforms);
+end;
+
+destructor TCube.Destroy;
+begin
+  App.OnUpdateTransforms.Remove(@UpdateTransforms);
+  App.OnStage.Remove(@Stage);
+  UniformBuffer.Ptr.Unmap;
+  Pipeline := nil;
+  PipelineLayout := nil;
+  inherited Destroy;
+end;
+
+procedure TCube.Stage(const Args: array of const);
+  var Cmd: TLabCommandBuffer;
+begin
+  Cmd := TLabCommandBuffer(Args[0].VObject);
+  Cmd.CopyBuffer(VertexStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
+end;
+
+procedure TCube.UpdateTransforms(const Args: array of const);
+  var xf: PTransforms;
+begin
+  xf := PTransforms(Args[0].VPointer);
+  Uniforms^.W := xf^.World;
+  Uniforms^.WVP := xf^.WVP;
+end;
+
+procedure TCube.Draw(const Cmd: TLabCommandBuffer);
+begin
+  Cmd.BindPipeline(Pipeline.Ptr);
+  Cmd.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    PipelineLayout.Ptr,
+    0, [DescriptorSets.Ptr.VkHandle[0]], []
+  );
+  Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
+  Cmd.Draw(12 * 3);
+end;
+
 procedure TRenderTarget.SetupImage(
   const Format: TVkFormat;
   const Usage: TVkImageUsageFlags
 );
-  var rt_w, rt_h: TVkUInt32;
 begin
-  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
-  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
   Image := TLabImage.Create(
     App.Device, Format, Usage or TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT), [],
-    rt_w, rt_h, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+    App.WidthRT, App.HeightRT, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
     VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE, TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   View := TLabImageView.Create(
@@ -644,7 +1061,6 @@ end;
 
 procedure TLabApp.SwapchainCreate;
   var i: Integer;
-  var rt_w, rt_h: TVkInt32;
 begin
   SwapChain := TLabSwapChain.Create(Device, Surface);
   SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
@@ -652,8 +1068,8 @@ begin
   begin
     DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
   end;
-  rt_w := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
-  rt_h := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
+  WidthRT := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
+  HeightRT := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
   SetLength(OffscreenTargets, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
@@ -661,7 +1077,7 @@ begin
     OffscreenTargets[i].Color.SetupImage(VK_FORMAT_R8G8B8A8_UNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     OffscreenTargets[i].Normals.SetupImage(VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     OffscreenTargets[i].ZBuffer := TLabDepthBuffer.Create(
-      App.Device, rt_w, rt_h, VK_FORMAT_UNDEFINED,
+      App.Device, App.WidthRT, App.HeightRT, VK_FORMAT_UNDEFINED,
       TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
     );
   end;
@@ -812,7 +1228,7 @@ end;
 
 procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
-  var Clip: TLabMat;
+  var Transforms: TTransforms;
 begin
   fov := LabDegToRad * 20;
   with Transforms do
@@ -828,7 +1244,7 @@ begin
     );
     WVP := World * View * Projection * Clip;
   end;
-  ScreenQuad.Uniforms^.VP_i := (Transforms.View * Transforms.Projection * Clip).Inverse;
+  OnUpdateTransforms.Call([@Transforms]);
 end;
 
 procedure TLabApp.TransferBuffers;
@@ -836,14 +1252,8 @@ procedure TLabApp.TransferBuffers;
   var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
 begin
   Cmd.Ptr.RecordBegin;
-  Cmd.Ptr.CopyBuffer(
-    VertexBufferStaging.Ptr.VkHandle,
-    VertexBuffer.Ptr.VkHandle,
-    [LabBufferCopy(VertexBuffer.Ptr.Size)]
-  );
-  TextureColor.Ptr.Stage(Cmd.Ptr);
-  TextureNormal.Ptr.Stage(Cmd.Ptr);
-  ScreenQuad.Stage(Cmd.Ptr);
+  OnStage.Call([Cmd.Ptr]);
+  OnStage.Clear;
   Cmd.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -853,8 +1263,6 @@ begin
     VK_NULL_HANDLE
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
-  VertexBufferStaging := nil;
-  TextureColor.Ptr.Staging := nil;
 end;
 
 procedure TLabApp.Initialize;
@@ -875,121 +1283,26 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   Cmd := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
-  //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
-  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
-  VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
-  PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
-  VertexBuffer := TLabVertexBuffer.Create(
-    Device,
-    sizeof(g_vb_solid_face_colors_Data),
-    sizeof(g_vb_solid_face_colors_Data[0]),
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).x) ),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).nx) ),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).tx) ),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).r)),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TVertex( nil^ ).u))
-    ],
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  VertexBufferStaging := TLabBuffer.Create(
-    Device, VertexBuffer.Ptr.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if (VertexBufferStaging.Ptr.Map(map)) then
-  begin
-    Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
-    VertexBufferStaging.Ptr.Unmap;
-  end;
-  TextureColor := TTexture.Create('crate_c.png');
-  TextureNormal := TTexture.Create('crate_n.png');
-  DescriptorSets := DescriptorSetsFactory.Ptr.Request([
-    LabDescriptorSetBindings([
-      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
-      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)),
-      LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT))
-    ])
-  ]);
-  DescriptorSets.Ptr.UpdateSets(
-    [
-      LabWriteDescriptorSetUniformBuffer(
-        DescriptorSets.Ptr.VkHandle[0],
-        0,
-        [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]
-      ),
-      LabWriteDescriptorSetImageSampler(
-        DescriptorSets.Ptr.VkHandle[0],
-        1,
-        [
-          LabDescriptorImageInfo(
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            TextureColor.Ptr.View.Ptr.VkHandle,
-            TextureColor.Ptr.Sampler.Ptr.VkHandle
-          )
-        ]
-      ),
-      LabWriteDescriptorSetImageSampler(
-        DescriptorSets.Ptr.VkHandle[0],
-        2,
-        [
-          LabDescriptorImageInfo(
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            TextureNormal.Ptr.View.Ptr.VkHandle,
-            TextureNormal.Ptr.Sampler.Ptr.VkHandle
-          )
-        ]
-      )
-    ],
-    []
-  );
   PipelineCache := TLabPipelineCache.Create(Device);
-  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
-  Pipeline := TLabGraphicsPipeline.Create(
-    Device, PipelineCache, PipelineLayout.Ptr,
-    [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
-    RenderPassOffscreen.Ptr, 0,
-    LabPipelineViewportState(),
-    LabPipelineInputAssemblyState(),
-    LabPipelineVertexInputState(
-      [VertexBuffer.Ptr.MakeBindingDesc(0)],
-      VertexBuffer.Ptr.MakeAttributeDescArr(0, 0)
-    ),
-    LabPipelineRasterizationState(
-      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL, TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
-    ),
-    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-    LabPipelineMultisampleState(),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
-    LabPipelineTesselationState(0)
-  );
+  Cube := TCube.Create;
   ScreenQuad := TFullscreenQuad.Create;
+  LightData := TLightData.Create;
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
   TransferBuffers;
+  OnBindOffscreenTargets.Call([]);
 end;
 
 procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
-  ScreenQuad.Free;
-  TextureNormal := nil;
-  TextureColor := nil;
+  LightData := nil;
+  ScreenQuad := nil;
+  Cube := nil;
   Fence := nil;
   Semaphore := nil;
-  Pipeline := nil;
   PipelineCache := nil;
-  DescriptorSets := nil;
-  VertexBuffer := nil;
-  PixelShader := nil;
-  VertexShader := nil;
-  PipelineLayout := nil;
-  UniformBuffer := nil;
   Cmd := nil;
   CmdPool := nil;
   DescriptorSetsFactory := nil;
@@ -1005,10 +1318,9 @@ procedure TLabApp.Loop;
     Device.Ptr.WaitIdle;
     SwapchainDestroy;
     SwapchainCreate;
-    ScreenQuad.BindOffscreenTargets;
-    ScreenQuad.Resize(Cmd.Ptr);
+    OnBindOffscreenTargets.Call([]);
+    ScreenQuad.Ptr.Resize(Cmd.Ptr);
   end;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
@@ -1022,12 +1334,6 @@ begin
     ResetSwapChain;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms, UniformData^, SizeOf(Transforms));
-    UniformBuffer.Ptr.Unmap;
-  end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
@@ -1039,6 +1345,10 @@ begin
   begin
     LabAssertVkError(r);
   end;
+  if OnStage.CallbackCount > 0 then
+  begin
+    TransferBuffers;
+  end;
   cur_buffer := SwapChain.Ptr.CurImage;
   Cmd.Ptr.RecordBegin();
   Cmd.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
@@ -1047,20 +1357,14 @@ begin
     RenderPassOffscreen.Ptr, OffscreenTargets[cur_buffer].FrameBuffer.Ptr,
     [LabClearValue(1, 0), LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0, 0, 0, 1.0), LabClearValue(1.0, 0)]
   );
-  Cmd.Ptr.BindPipeline(Pipeline.Ptr);
-  Cmd.Ptr.BindDescriptorSets(
-    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    PipelineLayout.Ptr,
-    0, [DescriptorSets.Ptr.VkHandle[0]], []
-  );
-  Cmd.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  Cmd.Ptr.Draw(12 * 3);
+  Cube.Ptr.Draw(Cmd.Ptr);
   Cmd.Ptr.EndRenderPass;
   Cmd.Ptr.BeginRenderPass(
     RenderPass.Ptr, FrameBuffers[cur_buffer].Ptr,
-    [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(1.0, 0)]
+    [LabClearValue(0.0, 0.0, 0.0, 1.0), LabClearValue(1.0, 0)]
   );
-  ScreenQuad.Draw(Cmd.Ptr);
+  LightData.Ptr.Draw(Cmd.Ptr, cur_buffer);
+  //ScreenQuad.Ptr.Draw(Cmd.Ptr, cur_buffer);
   Cmd.Ptr.EndRenderPass;
   Cmd.Ptr.RecordEnd;
   QueueSubmit(

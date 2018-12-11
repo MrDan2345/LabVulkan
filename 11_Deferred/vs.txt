@@ -3,8 +3,6 @@
 #extension GL_ARB_shading_language_420pack : enable
 layout (std140, binding = 0) uniform t_data {
 	mat4 w;
-	mat4 v;
-	mat4 p;
     mat4 wvp;
 } data;
 layout (location = 0) in vec4 in_pos;

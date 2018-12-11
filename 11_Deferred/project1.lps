@@ -8,10 +8,17 @@
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
-        <CursorPos X="76" Y="16"/>
-        <UsageCount Value="125"/>
+        <CursorPos Y="26"/>
+        <UsageCount Value="140"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
   </ProjectSession>
+  <Debugging>
+    <Watches Count="1">
+      <Item1>
+        <Expression Value="_PipelineList"/>
+      </Item1>
+    </Watches>
+  </Debugging>
 </CONFIG>

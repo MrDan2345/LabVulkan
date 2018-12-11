@@ -102,6 +102,21 @@ type
     procedure Sort(const CmpFunc: TCmpFuncObj); overload;
   end;
 
+  TLabDelegate = object
+  public
+    type TCallback = procedure (const Args: array of const) of Object;
+  private
+    var _Func: array of TCallback;
+    function GetCallbackCount: TVkInt32; inline;
+    class function CompareCallbacks(const a, b: TCallback): Boolean;
+  public
+    property CallbackCount: TVkInt32 read GetCallbackCount;
+    procedure Add(const Callback: TCallback);
+    procedure Remove(const Callback: TCallback);
+    procedure Call(const Args: array of const);
+    procedure Clear;
+  end;
+
   TLabStreamHelper = class
   private
     var _Stream: TStream;
@@ -424,7 +439,19 @@ begin
   while l <= h do
   begin
     m := (l + h) shr 1;
-    if CmpFunc(_Items[m], Item) then h := m - 1 else l := m + 1;
+    if (not CmpFunc(_Items[m], Item))
+    and (not CmpFunc(Item, _Items[m])) then
+    begin
+      Exit(m);
+    end
+    else if CmpFunc(_Items[m], Item) then
+    begin
+      h := m - 1
+    end
+    else
+    begin
+      l := m + 1;
+    end;
   end;
   if (l < _ItemCount)
   and (not CmpFunc(_Items[l], Item))
@@ -440,7 +467,19 @@ begin
   while l <= h do
   begin
     m := (l + h) shr 1;
-    if CmpFunc(_Items[m], Item) then h := m - 1 else l := m + 1;
+    if (not CmpFunc(_Items[m], Item))
+    and (not CmpFunc(Item, _Items[m])) then
+    begin
+      Exit(m);
+    end
+    else if CmpFunc(_Items[m], Item) then
+    begin
+      h := m - 1
+    end
+    else
+    begin
+      l := m + 1;
+    end;
   end;
   if (l < _ItemCount)
   and (not CmpFunc(_Items[l], Item))
@@ -763,6 +802,56 @@ begin
   Sort(CmpFunc, 0, _ItemCount - 1);
 end;
 //TLabRefList END
+
+//TLabDelegate BEGIN
+function TLabDelegate.GetCallbackCount: TVkInt32;
+begin
+  Result := Length(_Func);
+end;
+
+class function TLabDelegate.CompareCallbacks(const a, b: TCallback): Boolean;
+  type TDoublePtr = array[0..1] of Pointer;
+  var ptr_a: TDoublePtr absolute a;
+  var ptr_b: TDoublePtr absolute b;
+begin
+  Result := (ptr_a[0] = ptr_b[0]) and (ptr_a[1] = ptr_b[1]);
+end;
+
+procedure TLabDelegate.Add(const Callback: TCallback);
+  var i: TVkInt32;
+begin
+  for i := 0 to High(_Func) do
+  if CompareCallbacks(_Func[i], Callback) then Exit;
+  SetLength(_Func, Length(_Func) + 1);
+  _Func[High(_Func)] := Callback;
+end;
+
+procedure TLabDelegate.Remove(const Callback: TCallback);
+  var i, j: TVkInt32;
+begin
+  for i := 0 to High(_Func) do
+  if CompareCallbacks(_Func[i], Callback) then
+  begin
+    for j := i to High(_Func) - 1 do
+    begin
+      _Func[j] := _Func[j + 1];
+    end;
+    SetLength(_Func, Length(_Func) - 1);
+    Exit;
+  end;
+end;
+
+procedure TLabDelegate.Call(const Args: array of const);
+  var i: TVkInt32;
+begin
+  for i := 0 to High(_Func) do _Func[i](Args);
+end;
+
+procedure TLabDelegate.Clear;
+begin
+  SetLength(_Func, 0);
+end;
+//TLabDelegate END
 
 //TLabStreamHelper BEGIN
 function TLabStreamHelper.GetSize: TVkInt64;
