@@ -1,0 +1,17 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+layout (vertices = 3) out;
+layout (location = 0) in vec4 in_light_pos[];
+layout (location = 0) out vec4 out_light_pos[];
+void main(void) {
+	float t = 10.0;
+    if (gl_InvocationID == 0) {
+        gl_TessLevelInner[0] = t;
+        gl_TessLevelOuter[0] = t;
+        gl_TessLevelOuter[1] = t;
+        gl_TessLevelOuter[2] = t;
+    }
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+	out_light_pos[gl_InvocationID] = in_light_pos[gl_InvocationID];
+}
