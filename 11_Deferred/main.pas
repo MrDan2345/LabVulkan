@@ -1354,7 +1354,7 @@ begin
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 8, -10), LabVec3, LabVec3(0, 1, 0));
-    World := LabMatIdentity; //LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+    World := LabMatRotationY((LabTimeLoopSec(15) / 15) * Pi * 2);
     Clip := LabMat(
       1, 0, 0, 0,
       0, -1, 0, 0,

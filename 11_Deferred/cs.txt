@@ -24,7 +24,7 @@ void main()
 	uint index = gl_GlobalInvocationID.x;
 	if (index >= light_count) return;
 	t_light v = values[index];
-	v.pos += v.vel * 0.05;
+	v.pos += v.vel * 0.01;
 	bool inside_box = true;
 	float inside_sign = 1;
 	int inside_face = 0;
