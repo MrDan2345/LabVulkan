@@ -1,0 +1,88 @@
+#version 450
+
+struct t_light {
+	vec4 pos;
+    vec4 color;
+    vec4 vel;
+};
+
+layout (binding = 0) buffer per_vertex {
+   t_light values[];
+};
+layout (binding = 1) uniform t_data {
+	vec4 bounds_min;
+	vec4 bounds_max;
+	vec4 box[3];
+} data;
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout (constant_id = 0) const uint light_count = 32;
+
+void main() 
+{
+	uint index = gl_GlobalInvocationID.x;
+	if (index >= light_count) return;
+	t_light v = values[index];
+	v.pos += v.vel * 0.05;
+	bool inside_box = true;
+	float inside_sign = 1;
+	int inside_face = 0;
+	float d = 0;
+	float min_d = -100;
+	for (int i = 0; i < 3; ++i) {
+		d = dot(v.pos.xyz, data.box[i].xyz) - 1;
+		if (d > 0) {
+			inside_box = false;
+			break;
+		}
+		else if (d > min_d) {
+			min_d = d;
+			inside_sign = 1;
+			inside_face = i;
+		}
+		d = dot(v.pos.xyz, -data.box[i].xyz) - 1;
+		if (d > 0) {
+			inside_box = false;
+			break;
+		}
+		else if (d > min_d) {
+			min_d = d;
+			inside_sign = -1;
+			inside_face = i;
+		}
+	}
+	if (inside_box) {
+		vec3 n = data.box[inside_face].xyz * inside_sign;
+		v.pos.xyz += -min_d * n;
+		vec3 r = normalize(v.vel.xyz - 2 * n * dot(v.vel.xyz, n));
+		v.vel.xyz = r;
+	}
+	for (int i = 0; i < 3; ++i) {
+		if (v.pos[i] > data.bounds_max[i]) {
+			v.pos[i] = data.bounds_max[i];
+			v.vel[i] = -v.vel[i];
+		}
+		else if (v.pos[i] < data.bounds_min[i]) {
+			v.pos[i] = data.bounds_min[i];
+			v.vel[i] = -v.vel[i];
+		}
+	}
+	// if (v.pos.x < 0) {
+		// v.pos.x = 0;
+		// if (v.vel.x < 0) v.vel.x = -v.vel.x;
+	// }
+	// if (v.pos.y < 0) {
+		// v.pos.y = 0;
+		// if (v.vel.y < 0) v.vel.y = -v.vel.y;
+	// }
+	// if (v.pos.x > data.w) {
+		// v.pos.x = data.w;
+		// if (v.vel.x > 0) v.vel.x = -v.vel.x;
+	// }
+	// if (v.pos.y > data.h) {
+		// v.pos.y = data.h;
+		// if (v.vel.y > 0) v.vel.y = -v.vel.y;
+	// }
+	values[index] = v;
+}

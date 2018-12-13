@@ -62,6 +62,7 @@ type
     type TUniformPixel = packed record
       VP_i: TLabMat;
       rt_ratio: TLabVec4;
+      camera_pos: TLabVec4;
     end;
     type PUniformPixel = ^TUniformPixel;
     type TLightVertex = packed record
@@ -69,6 +70,8 @@ type
     end;
     type TLightInstance = packed record
       pos: TLabVec4;
+      color: TLabVec4;
+      vel: TLabVec4;
     end;
     type TLightInstanceArr = array[Word] of TLightInstance;
     type PLightInstanceArr = ^TLightInstanceArr;
@@ -79,6 +82,27 @@ type
       0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1,
       1, 4, 5, 4, 3, 5, 3, 2, 5, 2, 1, 5
     );
+    type TComputeTask = class
+      type TComputeUniforms = packed record
+        bounds_min: TLabVec4;
+        bounds_max: TLabVec4;
+        box_x: TLabVec4;
+        box_y: TLabVec4;
+        box_z: TLabVec4;
+      end;
+      type PComputeUniforms = ^TComputeUniforms;
+      var ComputeShader: TLabComputeShaderShared;
+      var UniformBuffer: TLabUniformBufferShared;
+      var DescriptorSets: TLabDescriptorSetsShared;
+      var PipelineLayout: TLabPipelineLayoutShared;
+      var Pipeline: TLabPipelineShared;
+      var Uniforms: PComputeUniforms;
+      var Cmd: TLabCommandBufferShared;
+      var Fence: TLabFenceShared;
+      constructor Create(const StorageBuffer: TLabBuffer; const InstanceCount: TVkUInt32);
+      destructor Destroy; override;
+      procedure Run;
+    end;
     var InstanceCount: TVkUInt32;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexStaging: TLabBufferShared;
@@ -98,6 +122,7 @@ type
     var UniformBufferPixel: TLabUniformBufferShared;
     var UniformsVertex: PUniformVertex;
     var UniformsPixel: PUniformPixel;
+    var ComputeTask: TComputeTask;
     constructor Create;
     destructor Destroy; override;
     procedure Stage(const Args: array of const);
@@ -186,6 +211,7 @@ type
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
     var CmdPool: TLabCommandPoolShared;
+    var CmdPoolCompute: TLabCommandPoolShared;
     var Cmd: TLabCommandBufferShared;
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
@@ -391,11 +417,85 @@ begin
   );
 end;
 
+constructor TLightData.TComputeTask.Create(const StorageBuffer: TLabBuffer; const InstanceCount: TVkUInt32);
+  var dg: TVkUInt32;
+  const bounds = 1.8;
+begin
+  inherited Create;
+  ComputeShader := TLabComputeShader.Create(App.Device, 'cs.spv');
+  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TComputeUniforms));
+  if UniformBuffer.Ptr.Map(Uniforms) then
+  begin
+    FillChar(Uniforms^, SizeOf(TComputeUniforms), 0);
+    Uniforms^.bounds_min := LabVec4(-bounds, -bounds, -bounds, 0);
+    Uniforms^.bounds_max := LabVec4(bounds, bounds, bounds, 0);
+  end;
+  DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
+    LabDescriptorSetBindings([
+      LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_COMPUTE_BIT)),
+      LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_COMPUTE_BIT))
+    ])
+  ]);
+  PipelineLayout := TLabPipelineLayout.Create(
+    App.Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]
+  );
+  DescriptorSets.Ptr.UpdateSets(
+    [
+      LabWriteDescriptorSetStorageBuffer(
+        DescriptorSets.Ptr.VkHandle[0], 0, LabDescriptorBufferInfo(StorageBuffer.VkHandle)
+      ),
+      LabWriteDescriptorSetUniformBuffer(
+        DescriptorSets.Ptr.VkHandle[0], 1, LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)
+      )
+    ],
+    []
+  );
+  Pipeline := TLabComputePipeline.Create(
+    App.Device, App.PipelineCache, PipelineLayout.Ptr, ComputeShader,
+    [
+      LabSpecializationMapEntry(0, 0, SizeOf(InstanceCount))
+    ],
+    @InstanceCount, SizeOf(InstanceCount)
+  );
+  Fence := TLabFence.Create(App.Device);
+  Cmd := TLabCommandBuffer.Create(App.CmdPoolCompute);
+  Cmd.Ptr.RecordBegin;
+  Cmd.Ptr.BindPipeline(Pipeline.Ptr);
+  Cmd.Ptr.BindDescriptorSets(
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    PipelineLayout.Ptr,
+    0, [DescriptorSets.Ptr.VkHandle[0]],
+    []
+  );
+  dg := Trunc((InstanceCount - 1) / 256) + 1;
+  Cmd.Ptr.DispatchCompute(dg, 1, 1);
+  Cmd.Ptr.RecordEnd;
+end;
+
+destructor TLightData.TComputeTask.Destroy;
+begin
+  UniformBuffer.Ptr.Unmap;
+  inherited Destroy;
+end;
+
+procedure TLightData.TComputeTask.Run;
+begin
+  App.QueueSubmit(
+    App.SwapChain.Ptr.QueueFamilyCompute,
+    [Cmd.Ptr.VkHandle],
+    [],
+    [],
+    Fence.Ptr.VkHandle
+  );
+  Fence.Ptr.WaitFor;
+  Fence.Ptr.Reset;
+end;
+
 constructor TLightData.Create;
   var i: TVkInt32;
   var map: PVkVoid;
 begin
-  InstanceCount := 100;
+  InstanceCount := 1024;
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
     SizeOf(light_vertices), SizeOf(TLightVertex),
@@ -439,8 +539,11 @@ begin
   end;
   InstanceBuffer := TLabVertexBuffer.Create(
     App.Device, SizeOf(TLightInstance) * InstanceCount, SizeOf(TLightInstance),
-    [LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0)],
-    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
+    [
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TLightInstance( nil^ ).pos)),
+      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TLightInstance( nil^ ).color))
+    ],
+    TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   InstanceStaging := TLabBuffer.Create(
@@ -449,16 +552,21 @@ begin
     [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
+  Randomize;
   if InstanceStaging.Ptr.Map(map) then
   begin
     for i := 0 to InstanceCount - 1 do
     begin
       PLightInstanceArr(map)^[i].pos := LabVec4(
-        (Random * 2 - 1) * 5,
-        (Random * 2 - 1) * 5,
-        (Random * 2 - 1) * 5,
-        Random(2) + 1
+        (Random * 2 - 1) * 6,
+        (Random * 2 - 1) * 6,
+        (Random * 2 - 1) * 6,
+        0.5 * (Random * 1.5 + 0.2)
       );
+      PLightInstanceArr(map)^[i].color := LabVec4(
+        Random * 0.8 + 0.2, Random * 0.8 + 0.2, Random * 0.8 + 0.2, 1
+      );
+      PLightInstanceArr(map)^[i].vel := LabVec4(LabRandomSpherePoint, 0);
     end;
     InstanceStaging.Ptr.FlushAll;
     InstanceStaging.Ptr.Unmap;
@@ -518,7 +626,8 @@ begin
       [VertexBuffer.Ptr.MakeBindingDesc(0), InstanceBuffer.Ptr.MakeBindingDesc(1, VK_VERTEX_INPUT_RATE_INSTANCE)],
       [
         VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
-        InstanceBuffer.Ptr.MakeAttributeDesc(0, 1, 1)
+        InstanceBuffer.Ptr.MakeAttributeDesc(0, 1, 1),
+        InstanceBuffer.Ptr.MakeAttributeDesc(1, 2, 1)
       ]
     ),
     LabPipelineRasterizationState(
@@ -538,6 +647,7 @@ begin
     ),
     LabPipelineTesselationState(3)
   );
+  ComputeTask := TComputeTask.Create(InstanceBuffer.Ptr, InstanceCount);
   App.OnStage.Add(@Stage);
   App.OnUpdateTransforms.Add(@UpdateTransforms);
   App.OnBindOffscreenTargets.Add(@BindOffscreenTargets);
@@ -545,6 +655,7 @@ end;
 
 destructor TLightData.Destroy;
 begin
+  ComputeTask.Free;
   App.OnBindOffscreenTargets.Remove(@BindOffscreenTargets);
   App.OnUpdateTransforms.Remove(@UpdateTransforms);
   App.OnStage.Remove(@Stage);
@@ -563,11 +674,19 @@ end;
 procedure TLightData.UpdateTransforms(const Args: array of const);
   var xf: PTransforms;
   var VP: TLabMat;
+  var v_pos: TLabVec3;
 begin
   xf := PTransforms(Args[0].VPointer);
+  ComputeTask.Uniforms^.box_x := LabVec4(TLabVec3(xf^.World.AxisX).Norm, 0);
+  ComputeTask.Uniforms^.box_y := LabVec4(TLabVec3(xf^.World.AxisY).Norm, 0);
+  ComputeTask.Uniforms^.box_z := LabVec4(TLabVec3(xf^.World.AxisZ).Norm, 0);
+  v_pos := LabVec3(-xf^.View.e30, -xf^.View.e31, -xf^.View.e32);
+  v_pos := v_pos.Transform3x3(xf^.View.Transpose);
   VP := xf^.View * xf^.Projection * xf^.Clip;
   UniformsVertex^.VP := VP;
   UniformsPixel^.VP_i := VP.Inverse;
+  UniformsPixel^.camera_pos := LabVec4(v_pos, 0);
+  ComputeTask.Run;
 end;
 
 procedure TLightData.BindOffscreenTargets(const Args: array of const);
@@ -1235,7 +1354,7 @@ begin
   begin
     Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 8, -10), LabVec3, LabVec3(0, 1, 0));
-    World := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+    World := LabMatIdentity; //LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
     Clip := LabMat(
       1, 0, 0, 0,
       0, -1, 0, 0,
@@ -1266,15 +1385,14 @@ begin
 end;
 
 procedure TLabApp.Initialize;
-  var map: PVkVoid;
-  var img: TLabImageData;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Caption := 'Vulkan Deferred';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
-      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT)))
+      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT))),
+      LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_COMPUTE_BIT)))
     ],
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
@@ -1282,6 +1400,7 @@ begin
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
+  CmdPoolCompute := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexCompute);
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
   Cube := TCube.Create;
@@ -1305,6 +1424,7 @@ begin
   PipelineCache := nil;
   Cmd := nil;
   CmdPool := nil;
+  CmdPoolCompute := nil;
   DescriptorSetsFactory := nil;
   Surface := nil;
   Device := nil;

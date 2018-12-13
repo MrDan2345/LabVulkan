@@ -3,11 +3,14 @@
 #extension GL_ARB_shading_language_420pack : enable
 layout (location = 0) in vec4 in_pos;
 layout (location = 1) in vec4 in_light_pos;
+layout (location = 2) in vec4 in_light_color;
 layout (location = 0) out vec4 out_light_pos;
+layout (location = 1) out vec4 out_light_color;
 out gl_PerVertex {
     vec4 gl_Position;
 };
 void main() {
 	out_light_pos = in_light_pos;
+	out_light_color = in_light_color;
 	gl_Position = in_pos;
 }
