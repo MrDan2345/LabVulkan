@@ -204,6 +204,15 @@ type
   end;
   TCubeShared = specialize TLabSharedRef<TCube>;
 
+  TScene = class (TLabClass)
+  private
+    var Scene: TLabScene;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+  TSceneShared = specialize TLabSharedRef<TScene>;
+
   TLabApp = class (TLabVulkan)
   public
     var Window: TLabWindow;
@@ -231,6 +240,7 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Cube: TCubeShared;
+    var Scene: TSceneShared;
     var ScreenQuad: TFullscreenQuadShared;
     var LightData: TLightDataShared;
     var OnStage: TLabDelegate;
@@ -255,6 +265,18 @@ var
   App: TLabApp;
 
 implementation
+
+constructor TScene.Create;
+begin
+  Scene := TLabScene.Create(App.Device);
+  Scene.Add('../Models/box.dae');
+end;
+
+destructor TScene.Destroy;
+begin
+  Scene.Free;
+  inherited Destroy;
+end;
 
 constructor TTexture.Create(const FileName: String);
   var img: TLabImageDataPNG;
@@ -1404,6 +1426,7 @@ begin
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
   Cube := TCube.Create;
+  Scene := TScene.Create;
   ScreenQuad := TFullscreenQuad.Create;
   LightData := TLightData.Create;
   Semaphore := TLabSemaphore.Create(Device);
@@ -1418,6 +1441,7 @@ begin
   SwapchainDestroy;
   LightData := nil;
   ScreenQuad := nil;
+  Scene := nil;
   Cube := nil;
   Fence := nil;
   Semaphore := nil;
