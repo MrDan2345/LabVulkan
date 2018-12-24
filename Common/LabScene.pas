@@ -991,7 +991,7 @@ begin
   end;
   if Length(TexCoord) > 0 then
   begin
-    StrCode += '  vec2 tex_coord = vec2(' + TexCoord + '.x, -' + TexCoord + '.y);'#$D#$A;
+    StrCode += '  vec2 tex_coord = vec2(' + TexCoord + '.x, 1 - ' + TexCoord + '.y);'#$D#$A;
   end;
   if tangent_space
   and (Length(TexNormal) > 0)
@@ -1003,7 +1003,7 @@ begin
   if has_normal then
   begin
     //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
-    StrCode += '  color.xyz *= 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1), 2);'#$D#$A;
+    StrCode += '  color.xyz *= 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1), 1.5);'#$D#$A;
   end;
   StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
   if (Length(TexColor) > 0)
