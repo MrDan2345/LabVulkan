@@ -1484,44 +1484,6 @@ constructor TLabSceneGeometry.TSubset.Create(
   end;
   var index_stride: TVkUInt32;
   var v_attr: TVkInt32;
-  var adj: array of array[0..2] of TVkInt32;
-  procedure GenerateAdjacency;
-    function CmpEdges(const e0v0, e0v1, e1v0, e1v1: TVkUInt32): Boolean; inline;
-    begin
-      Result := ((e0v0 = e1v0) and (e0v1 = e1v1)) or ((e0v0 = e1v1) and (e0v1 = e1v0));
-    end;
-    var i, j, n, e0, e1: TVkInt32;
-    var t0, t1: array[0..2] of TVkUInt32;
-  begin
-    if Length(adj) > 0 then Exit;
-    SetLength(adj, Triangles.Count);
-    FillDWord(adj[0], Length(adj) * 3, $ffffffff);
-    for i := 0 to Triangles.Count - 2 do
-    begin
-      for n := 0 to 2 do
-      begin
-        t0[n] := Triangles.Indices^[(i * 3 + n) * index_stride + Triangles.Inputs[v_attr].Offset];
-      end;
-      for j := i + 1 to Triangles.Count - 1 do
-      begin
-        for n := 0 to 2 do
-        begin
-          t1[n] := Triangles.Indices^[(j * 3 + n) * index_stride + Triangles.Inputs[v_attr].Offset];
-        end;
-        for e0 := 0 to 2 do
-        begin
-          for e1 := 0 to 2 do
-          begin
-            if CmpEdges(t0[e0], t0[(e0 + 1) mod 3], t1[e1], t1[(e1 + 1) mod 3]) then
-            begin
-              adj[i][e0] := j;
-              adj[j][e1] := i;
-            end;
-          end;
-        end;
-      end;
-    end;
-  end;
   var v_count: TVkUInt32;
   var normals: array of TLabVec3;
   var face_normals: array of TLabVec3;
@@ -1530,18 +1492,14 @@ constructor TLabSceneGeometry.TSubset.Create(
     var normals_remap: array of TVkUInt32;
     var ind: TVkUInt32;
     var pos: array[0..2] of TLabVec4;
-    var share_count: array of TVkFloat;
     var shared_normals: array of TLabVec3;
   begin
     if Length(normals) > 0 then Exit;
-    GenerateAdjacency;
     SetLength(face_normals, Triangles.Count);
     SetLength(normals, Triangles.Count * 3);
     FillChar(normals[0], Length(normals) * SizeOf(TLabVec3), 0);
     SetLength(normals_remap, Triangles.Count * 3);
     FillChar(normals_remap[0], SizeOf(TVkUInt32) * Length(normals_remap), 0);
-    SetLength(share_count, v_count);
-    FillChar(share_count[0], SizeOf(TVkFloat) * Length(share_count), 0);
     SetLength(shared_normals, v_count);
     FillChar(shared_normals[0], SizeOf(TLabVec3) * Length(shared_normals), 0);
     {$Push}{$Hints off}
@@ -1554,7 +1512,6 @@ constructor TLabSceneGeometry.TSubset.Create(
         ind := Triangles.Indices^[index_stride * (i * 3 + j) + Triangles.Inputs[v_attr].Offset];
         Triangles.CopyInputData(@pos[j], Triangles.Inputs[v_attr], ind);
         normals_remap[i * 3 + j] := ind;
-        share_count[ind] := share_count[ind] + 1;
       end;
       face_normals[i] := LabTriangleNormal(pos[0].xyz, pos[1].xyz, pos[2].xyz);
       for j := 0 to 2 do
