@@ -162,7 +162,10 @@ type
     function Transform3x3(const m: TLabMat): TLabVec3;
     function Transform4x3(const m: TLabMat): TLabVec3;
     function Transform4x4(const m: TLabMat): TLabVec3;
+    function TransformQuat(const q: TLabQuatRef): TLabVec3; inline;
     function AsVec4: TLabVec4Ref; inline;
+    function AngleTo(const v: TLabVec3): TLabFloat; inline;
+    function RotationTo(const v: TLabVec3): TLabQuatRef; inline;
     function Swizzle(const Remap: TLabSwizzle): TLabVec3; inline;
   end;
 
@@ -176,6 +179,8 @@ type
     property Arr[const Index: TLabInt32]: TLabFloat read GetArr write SetArr; default;
     procedure SetValue(const vx, vy, vz, vw: TLabFloat); inline;
     function Swizzle(const Remap: TLabSwizzle): TLabVec4; inline;
+    function xyz: TLabVec3; inline;
+    function xy: TLabVec2; inline;
   end;
 
   PLabQuat = ^TLabQuat;
@@ -401,6 +406,8 @@ type
   operator := (vr: TLabVec4Ref): TLabVec4; inline;
   operator := (m: TLabMat): TLabMatRef; inline;
   operator := (mr: TLabMatRef): TLabMat; inline;
+  operator := (q: TLabQuat): TLabQuatRef; inline;
+  operator := (qr: TLabQuatRef): TLabQuat; inline;
   operator := (r: TLabRect): TRect; inline;
   operator := (r: TRect): TLabRect; inline;
   operator := (b: TLabBox): TLabAABox; inline;
@@ -597,6 +604,7 @@ procedure LabVec2Transform2MulInv(const OutV, InV: PLabVec2; const InT: PLabTran
 procedure LabVec3MatMul3x3(const OutV, InV: PLabVec3; const InM: PLabMat);
 procedure LabVec3MatMul4x3(const OutV, InV: PLabVec3; const InM: PLabMat);
 procedure LabVec3MatMul4x4(const OutV, InV: PLabVec3; const InM: PLabMat);
+procedure LabVec3QuatMul(const OutV, InV: PLabVec3; const InQ: PLabQuat);
 procedure LabVec4MatMul(const OutV, InV: PLabVec4; const InM: PLabMat);
 function LabVec3Len(const InV: PLabVec3): TLabFloat;
 function LabVec4Len(const InV: PLabVec4): TLabFloat;
@@ -935,9 +943,33 @@ begin
   LabVec3MatMul4x4(@Result, @Self, @m);
 end;
 
+function TLabVec3.TransformQuat(const q: TLabQuatRef): TLabVec3;
+begin
+  LabVec3QuatMul(@Result, @Self, @q);
+end;
+
 function TLabVec3.AsVec4: TLabVec4Ref;
 begin
   Result := LabVec4(x, y, z, 0);
+end;
+
+function TLabVec3.AngleTo(const v: TLabVec3): TLabFloat;
+  var v_len: TLabFloat;
+begin
+  v_len := Len * v.Len;
+  if v_len > 0 then Result := LabArcCos(Dot(v) / v_len) else Result := 0;
+end;
+
+function TLabVec3.RotationTo(const v: TLabVec3): TLabQuatRef;
+  var q: TLabQuat;
+  var cp: TLabVec3;
+begin
+  cp := Cross(v);
+  q.SetValue(
+    cp.x, cp.y, cp.z,
+    Sqrt((LenSq) * (v.LenSq)) + Dot(v)
+  );
+  Result := q.Norm;
 end;
 
 function TLabVec3.Swizzle(const Remap: TLabSwizzle): TLabVec3;
@@ -966,6 +998,22 @@ function TLabVec4.Swizzle(const Remap: TLabSwizzle): TLabVec4;
 begin
   Result := LabVec4(Arr[Remap[0]], Arr[Remap[1]], Arr[Remap[2]], Arr[Remap[3]]);
 end;
+
+{$Push}
+{$Warnings off}
+function TLabVec4.xyz: TLabVec3;
+begin
+  Result.SetValue(x, y, z);
+end;
+{$Pop}
+
+{$Push}
+{$Warnings off}
+function TLabVec4.xy: TLabVec2;
+begin
+  Result.SetValue(x, y);
+end;
+{$Pop}
 //TLabVec4 END
 
 //TLabQuat BEGIN
@@ -1653,6 +1701,22 @@ begin
   Result.e01 := mr[4]; Result.e11 := mr[5]; Result.e21 := mr[6]; Result.e31 := mr[7];
   Result.e02 := mr[8]; Result.e12 := mr[9]; Result.e22 := mr[10]; Result.e32 := mr[11];
   Result.e03 := mr[12]; Result.e13 := mr[13]; Result.e23 := mr[14]; Result.e33 := mr[15];
+end;
+
+operator := (q: TLabQuat): TLabQuatRef;
+begin
+  Result[0] := q.x;
+  Result[1] := q.y;
+  Result[2] := q.z;
+  Result[3] := q.w;
+end;
+
+operator := (qr: TLabQuatRef): TLabQuat;
+begin
+  Result.x := qr[0];
+  Result.y := qr[1];
+  Result.z := qr[2];
+  Result.w := qr[3];
 end;
 
 operator := (r: TLabRect): TRect;
@@ -4386,6 +4450,17 @@ begin
   OutV^.x := vr.x * w;
   OutV^.y := vr.y * w;
   OutV^.z := vr.z * w;
+end;
+
+procedure LabVec3QuatMul(const OutV, InV: PLabVec3; const InQ: PLabQuat);
+  var u: TLabVec3;
+  var v: TLabVec3;
+  var s: TLabFloat;
+begin
+  v := InV^;
+  u.SetValue(InQ^.x, InQ^.y, InQ^.z);
+  s := InQ^.w;
+  OutV^ := 2 * u.Dot(v) * u + (s * s - u.Dot(u)) * v + 2 * s * u.Cross(v);
 end;
 
 procedure LabVec4MatMul(const OutV, InV: PLabVec4; const InM: PLabMat);

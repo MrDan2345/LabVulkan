@@ -82,6 +82,7 @@ type
     _Source: TLabColladaObject;
     _Offset: TVkInt32;
     _Set: TVkInt32;
+    function GetSize: TVkUInt32; inline;
   protected
     procedure ResolveLinks; override;
   public
@@ -89,6 +90,7 @@ type
     property Source: TLabColladaObject read _Source;
     property Offset: TVkInt32 read _Offset;
     property InputSet: TVkInt32 read _Set;
+    property Size: TVkUInt32 read GetSize;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -206,6 +208,7 @@ type
     function GetVertexSize: TVkInt32;
     function GetIndices: PLabInt32Arr; inline;
     function GetVertexDescriptor: TLabColladaVertexDescriptor;
+    function GetInputSourceCount(const Index: TVkUInt32): TVkUInt32; inline;
   protected
     procedure InitializeObject; override;
   public
@@ -216,6 +219,7 @@ type
     property VertexSize: TVkInt32 read GetVertexSize;
     property VertexDescriptor: TLabColladaVertexDescriptor read GetVertexDescriptor;
     property Material: DOMString read _MaterialRef;
+    property InputSourceCount[const Index: TVkUInt32]: TVkUInt32 read GetInputSourceCount;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
     function CopyInputData(const Target: Pointer; const Input: TLabColladaInput; const Index: TVkInt32): Pointer;
@@ -1679,6 +1683,24 @@ begin
   inherited Destroy;
 end;
 
+function TLabColladaInput.GetSize: TVkUInt32;
+  var src: TLabColladaSource;
+begin
+  if Source is TLabColladaSource then
+  begin
+    src := TLabColladaSource(Source);
+  end
+  else if Source is TLabColladaVertices then
+  begin
+    src := TLabColladaSource(TLabColladaVertices(Source).Inputs[0].Source);
+  end
+  else
+  begin
+    Exit(0);
+  end;
+  Result := src.DataArray.ItemSize * src.Accessor.Stride;
+end;
+
 procedure TLabColladaInput.ResolveLinks;
   var Obj: TLabColladaObject;
 begin
@@ -1974,8 +1996,8 @@ function TLabColladaTriangles.GetVertexDescriptor: TLabColladaVertexDescriptor;
       (Name: 'POSITION'; Value: as_position),
       (Name: 'COLOR'; Value: as_color),
       (Name: 'NORMAL'; Value: as_normal),
-      (Name: 'TANGENT'; Value: as_tangent),
-      (Name: 'BINORMAL'; Value: as_binormal),
+      (Name: 'TEXTANGENT'; Value: as_tangent),
+      (Name: 'TEXBINORMAL'; Value: as_binormal),
       (Name: 'TEXCOORD'; Value: as_texcoord)
     );
     var Vertices: TLabColladaVertices;
@@ -2021,6 +2043,24 @@ begin
   begin
     SetLength(Result, CurAttr);
   end;
+end;
+
+function TLabColladaTriangles.GetInputSourceCount(const Index: TVkUInt32): TVkUInt32;
+  var Source: TLabColladaSource;
+begin
+  if _Inputs[Index].Source is TLabColladaSource then
+  begin
+    Source := TLabColladaSource(_Inputs[Index].Source);
+  end
+  else if _Inputs[Index].Source is TLabColladaVertices then
+  begin
+    Source := TLabColladaSource(TLabColladaVertices(_Inputs[Index].Source).Inputs[0].Source);
+  end
+  else
+  begin
+    Exit(0);
+  end;
+  Result := Source.Accessor.Count;
 end;
 
 procedure TLabColladaTriangles.InitializeObject;

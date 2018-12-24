@@ -79,8 +79,11 @@ type
   TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
 
   TLabSceneShaderParameterType = (spt_uniform = 0, spt_uniform_dynamic, spt_image);
+  TLabSceneShaderParameterSemantic = (sps_color_map, sps_normal_map);
+  TLabSceneShaderParameterSemanticSet = set of TLabSceneShaderParameterSemantic;
   TLabSceneShaderParameter = record
     ShaderStage: TVkShaderStageFlags;
+    Semantics: TLabSceneShaderParameterSemanticSet;
     case ParamType: TLabSceneShaderParameterType of
     spt_uniform, spt_uniform_dynamic: (
        UniformBufferHandle: TVkBuffer;
@@ -126,6 +129,45 @@ type
   public
     type TSubset = class
     private
+      type TVertexChannel = class
+      private
+        type TCmpFunc = function (const a, b: Pointer): Boolean of Object;
+        function CmpRaw(const a, b: Pointer): Boolean;
+        function CmpFloats(const a, b: Pointer): Boolean;
+        var CmpFunc: TCmpFunc;
+      public
+        Attribute: TLabColladaVertexAttribute;
+        Size: TVkUInt32;
+        Offset: TVkUInt32;
+        constructor Create(const AAttribute: TLabColladaVertexAttribute);
+        procedure WriteData(const Dst: Pointer; const Index: TVkUInt32); virtual; abstract;
+        function Compare(const a, b: Pointer): Boolean;
+      end;
+      type TVertexChannelInput = class (TVertexChannel)
+      public
+        Input: TLabColladaInput;
+        Triangles: TLabColladaTriangles;
+        IndexStride: TVkUInt32;
+        constructor Create(
+          const AAttribute: TLabColladaVertexAttribute;
+          const AInput: TLabColladaInput;
+          const ATriangles: TLabColladaTriangles;
+          const AOffset: TVkUInt32
+        );
+        procedure WriteData(const Dst: Pointer; const Index: TVkUInt32); override;
+      end;
+      type TVertexChannelArray = class (TVertexChannel)
+      public
+        Data: Pointer;
+        Stride: TVkUInt32;
+        constructor Create(
+          const AAttribute: TLabColladaVertexAttribute;
+          const AData: Pointer;
+          const AItemStride: TVkUInt32;
+          const AOffset: TVkUInt32
+        );
+        procedure WriteData(const Dst: Pointer; const Index: TVkUInt32); override;
+      end;
       var _Geometry: TLabSceneGeometry;
       var _UserData: TObject;
     public
@@ -234,6 +276,7 @@ type
     var _Scene: TLabScene;
     var _ParameterType: TLabColladaEffectProfileParamType;
     var _Name: String;
+    function ExtractName(const Param: TLabColladaEffectProfileParam): AnsiString;
   public
     property ParameterType: TLabColladaEffectProfileParamType read _ParameterType;
     property Name: String read _Name;
@@ -538,12 +581,14 @@ type
 
 function LabSceneShaderParameterUniform(
   const UniformBuffer: TVkBuffer;
+  const Semantics: TLabSceneShaderParameterSemanticSet = [];
   const ShaderStage: TVkShaderStageFlags = (
     TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
   )
 ): TLabSceneShaderParameter; inline;
 function LabSceneShaderParameterUniformDynamic(
   const UniformBuffer: TVkBuffer;
+  const Semantics: TLabSceneShaderParameterSemanticSet = [];
   const ShaderStage: TVkShaderStageFlags = (
     TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
   )
@@ -551,6 +596,7 @@ function LabSceneShaderParameterUniformDynamic(
 function LabSceneShaderParameterImage(
   const ImageView: TVkImageView;
   const Sampler: TVkSampler;
+  const Semantics: TLabSceneShaderParameterSemanticSet = [];
   const ShaderStage: TVkShaderStageFlags = (
     TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
   );
@@ -561,27 +607,32 @@ implementation
 
 function LabSceneShaderParameterUniform(
   const UniformBuffer: TVkBuffer;
+  const Semantics: TLabSceneShaderParameterSemanticSet;
   const ShaderStage: TVkShaderStageFlags
 ): TLabSceneShaderParameter;
 begin
   Result.ParamType := spt_uniform;
   Result.ShaderStage := ShaderStage;
   Result.UniformBufferHandle := UniformBuffer;
+  Result.Semantics := Semantics;
 end;
 
 function LabSceneShaderParameterUniformDynamic(
   const UniformBuffer: TVkBuffer;
+  const Semantics: TLabSceneShaderParameterSemanticSet;
   const ShaderStage: TVkShaderStageFlags
 ): TLabSceneShaderParameter;
 begin
   Result.ParamType := spt_uniform_dynamic;
   Result.ShaderStage := ShaderStage;
   Result.UniformBufferHandle := UniformBuffer;
+  Result.Semantics := Semantics;
 end;
 
 function LabSceneShaderParameterImage(
   const ImageView: TVkImageView;
   const Sampler: TVkSampler;
+  const Semantics: TLabSceneShaderParameterSemanticSet;
   const ShaderStage: TVkShaderStageFlags;
   const Layout: TVkImageLayout
 ): TLabSceneShaderParameter;
@@ -591,6 +642,102 @@ begin
   Result.ImageViewHandle := ImageView;
   Result.SamplerHandle := Sampler;
   Result.Layout := Layout;
+  Result.Semantics := Semantics;
+end;
+
+function TLabSceneGeometry.TSubset.TVertexChannel.CmpRaw(const a, b: Pointer): Boolean;
+begin
+  Result := CompareMem(a, b, Size);
+end;
+
+function TLabSceneGeometry.TSubset.TVertexChannel.CmpFloats(const a, b: Pointer): Boolean;
+  var arr_a: PLabFloatArr absolute a;
+  var arr_b: PLabFloatArr absolute b;
+  var i: TVkUInt32;
+begin
+  for i := 0 to Attribute.DataCount - 1 do
+  begin
+    if Abs(arr_a^[i] - arr_b^[i]) > LabEPS then Exit(False);
+  end;
+  Result := True;
+end;
+
+constructor TLabSceneGeometry.TSubset.TVertexChannel.Create(const AAttribute: TLabColladaVertexAttribute);
+begin
+  Attribute := AAttribute;
+  if Attribute.DataType = at_float then
+  begin
+    case Attribute.Semantic of
+      as_position,
+      as_normal,
+      as_tangent,
+      as_binormal:
+      begin
+        CmpFunc := @CmpFloats;
+      end;
+      else
+      begin
+        CmpFunc := @CmpRaw;
+      end;
+    end;
+  end
+  else
+  begin
+    CmpFunc := @CmpRaw;
+  end;
+end;
+
+function TLabSceneGeometry.TSubset.TVertexChannel.Compare(const a, b: Pointer): Boolean;
+begin
+  Result := CmpFunc(a + Offset, b + Offset);
+end;
+
+constructor TLabSceneGeometry.TSubset.TVertexChannelArray.Create(
+  const AAttribute: TLabColladaVertexAttribute; const AData: Pointer;
+  const AItemStride: TVkUInt32; const AOffset: TVkUInt32);
+begin
+  inherited Create(AAttribute);
+  case Attribute.DataType of
+    at_float: Size := SizeOf(TVkFloat) * Attribute.DataCount;
+    at_int: Size := SizeOf(TVkInt32) * Attribute.DataCount;
+    at_bool: Size := SizeOf(Boolean) * Attribute.DataCount;
+    else Size := 0;
+  end;
+  Offset := AOffset;
+  Data := AData;
+  Stride := AItemStride;
+end;
+
+procedure TLabSceneGeometry.TSubset.TVertexChannelArray.WriteData(const Dst: Pointer; const Index: TVkUInt32);
+begin
+  Move((Data + Stride * Index)^, (Dst + Offset)^, Size);
+end;
+
+constructor TLabSceneGeometry.TSubset.TVertexChannelInput.Create(
+  const AAttribute: TLabColladaVertexAttribute;
+  const AInput: TLabColladaInput;
+  const ATriangles: TLabColladaTriangles;
+  const AOffset: TVkUInt32
+);
+  var i: TVkInt32;
+begin
+  inherited Create(AAttribute);
+  Input := AInput;
+  Triangles := ATriangles;
+  Size := Input.Size;
+  Offset := AOffset;
+  IndexStride := 0;
+  for i := 0 to Triangles.Inputs.Count - 1 do
+  if Triangles.Inputs[i].Offset > IndexStride then
+  begin
+    IndexStride := Triangles.Inputs[i].Offset;
+  end;
+  IndexStride += 1;
+end;
+
+procedure TLabSceneGeometry.TSubset.TVertexChannelInput.WriteData(const Dst: Pointer; const Index: TVkUInt32);
+begin
+  Triangles.CopyInputData(Dst + Offset, Input, Triangles.Indices^[Index * IndexStride + Input.Offset]);
 end;
 
 class function TLabSceneShaderFactory.GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
@@ -654,11 +801,13 @@ class function TLabSceneShaderFactory.MakeShader(
   var Code: String;
   var Sem: String;
   var binding, i, loc, loc_in, loc_out, samp: Integer;
-  var Texture: String;
+  var TexColor: String;
+  var TexNormal: String;
   var TexCoord: String;
   var Bindings: array of TVkDescriptorSetLayoutBinding;
   var DescPoolSizes: array of TVkDescriptorPoolSize;
   var DescWrites: array of TLabWriteDescriptorSet;
+  var has_normal, has_tangent, has_binormal, tangent_space: Boolean;
 begin
   Result := TLabSceneShader.Create;
   binding := 0;
@@ -691,47 +840,61 @@ begin
       if i < SkinInfo^.MaxJointWeights - 1 then StrCode += ' + ' else StrCode += ';'#$D#$A;
     end;
   end;
+  has_normal := False;
+  has_tangent := False;
+  has_binormal := False;
+  for i := 0 to High(Desc) do
+  case Desc[i].Semantic of
+    as_normal: has_normal := True;
+    as_tangent: has_tangent := True;
+    as_binormal: has_binormal := True;
+  end;
+  tangent_space := has_normal and has_tangent and has_binormal;
   for i := 0 to High(Desc) do
   begin
     Sem := GetSemanticName(Desc[i].Semantic) + IntToStr(Desc[i].SetNumber);
     StrAttrIn += 'layout (location = ' + IntToStr(loc_in) + ') in vec' + IntToStr(Desc[i].DataCount) + ' in_' + Sem + ';'#$D#$A;
     Inc(loc_in);
-    if (Desc[i].Semantic = as_position) then
-    begin
-      case Desc[i].DataCount of
-        1: StrCode += '  vec4 position = vec4(in_position0, 0, 0, 1);'#$D#$A;
-        2: StrCode += '  vec4 position = vec4(in_position0, 0, 1);'#$D#$A;
-        3: StrCode += '  vec4 position = vec4(in_position0, 1);'#$D#$A;
-        4: StrCode += '  vec4 position = in_position0;'#$D#$A;
-        else StrCode += '  vec4 position = vec4(0, 0, 0, 1);'#$D#$A;
-      end;
-      if Assigned(SkinInfo) then
+    case Desc[i].Semantic of
+      as_position:
       begin
-        StrCode += '  position = vec4((joint * position).xyz, 1);'#$D#$A;
+        case Desc[i].DataCount of
+          1: StrCode += '  vec4 position = vec4(in_position0, 0, 0, 1);'#$D#$A;
+          2: StrCode += '  vec4 position = vec4(in_position0, 0, 1);'#$D#$A;
+          3: StrCode += '  vec4 position = vec4(in_position0, 1);'#$D#$A;
+          4: StrCode += '  vec4 position = in_position0;'#$D#$A;
+          else StrCode += '  vec4 position = vec4(0, 0, 0, 1);'#$D#$A;
+        end;
+        if Assigned(SkinInfo) then
+        begin
+          StrCode += '  position = vec4((joint * position).xyz, 1);'#$D#$A;
+        end;
+        StrCode += '  gl_Position = xf.wvp * position;'#$D#$A;
       end;
-      StrCode += '  gl_Position = xf.wvp * position;'#$D#$A;
-    end
-    else if (Desc[i].Semantic = as_normal) then
-    begin
-      case Desc[i].DataCount of
-        1: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0, 0);'#$D#$A;
-        2: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0);'#$D#$A;
-        3: StrCode += '  vec3 ' + Sem + ' = in_' + Sem + ';'#$D#$A;
-        4: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + '.xyz);'#$D#$A;
-      end;
-      if Assigned(SkinInfo) then
+      as_normal,
+      as_tangent,
+      as_binormal:
       begin
-        StrCode += '  ' + Sem + ' = mat3(joint) * ' + Sem + ';'#$D#$A;
+        case Desc[i].DataCount of
+          1: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0, 0);'#$D#$A;
+          2: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + ', 0);'#$D#$A;
+          3: StrCode += '  vec3 ' + Sem + ' = in_' + Sem + ';'#$D#$A;
+          4: StrCode += '  vec3 ' + Sem + ' = vec3(in_' + Sem + '.xyz);'#$D#$A;
+        end;
+        if Assigned(SkinInfo) then
+        begin
+          StrCode += '  ' + Sem + ' = mat3(joint) * ' + Sem + ';'#$D#$A;
+        end;
+        StrCode += '  out_' + Sem + ' = mat3(xf.w) * ' + Sem + ';'#$D#$A;
+        StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec3 out_' + Sem + ';'#$D#$A;
+        Inc(loc_out);
       end;
-      StrCode += '  out_' + Sem + ' = mat3(xf.w) * ' + Sem + ';'#$D#$A;
-      StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec3 out_' + Sem + ';'#$D#$A;
-      Inc(loc_out);
-    end
-    else
-    begin
-      StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec' + IntToStr(Desc[i].DataCount) + ' out_' + Sem + ';'#$D#$A;
-      Inc(loc_out);
-      StrCode += '  out_' + Sem + ' = in_' + Sem + ';'#$D#$A;
+      else
+      begin
+        StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec' + IntToStr(Desc[i].DataCount) + ' out_' + Sem + ';'#$D#$A;
+        Inc(loc_out);
+        StrCode += '  out_' + Sem + ' = in_' + Sem + ';'#$D#$A;
+      end;
     end;
   end;
   if Assigned(SkinInfo) then
@@ -756,13 +919,21 @@ begin
     //StrAttr += 'layout (location = 10) in vec4 tmp_color;'#$D#$A;
   end;
 
-  Texture := '';
+  TexColor := '';
+  TexNormal := '';
   TexCoord := '';
   samp := 0;
   for i := 0 to High(Parameters) do
   if Parameters[i].ParamType = spt_image then
   begin
-    if Length(Texture) = 0 then Texture := 'tex_sampler' + IntToStr(samp);
+    if (Length(TexColor) = 0) or (sps_color_map in Parameters[i].Semantics) then
+    begin
+      TexColor := 'tex_sampler' + IntToStr(samp);
+    end;
+    if (sps_normal_map in Parameters[i].Semantics) then
+    begin
+      TexNormal := 'tex_sampler' + IntToStr(samp);
+    end;
     StrAttr += 'layout (binding = ' + IntToStr(binding) + ') uniform sampler2D tex_sampler' + IntToStr(samp) + ';'#$D#$A;
     Inc(binding);
     Inc(samp);
@@ -784,7 +955,24 @@ begin
           4: StrCode += '  vec3 normal = normalize(in_' + Sem + '.xyz);'#$D#$A;
           else StrCode += '  vec3 normal = normalize(in_' + Sem + ');'#$D#$A;
         end;
-        StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
+      end;
+      as_tangent:
+      begin
+        case Desc[i].DataCount of
+          1: StrCode += '  vec3 tangent = normalize(vec3(in_' + Sem + ', 0, 0));'#$D#$A;
+          2: StrCode += '  vec3 tangent = normalize(vec3(in_' + Sem + ', 0));'#$D#$A;
+          4: StrCode += '  vec3 tangent = normalize(in_' + Sem + '.xyz);'#$D#$A;
+          else StrCode += '  vec3 tangent = normalize(in_' + Sem + ');'#$D#$A;
+        end;
+      end;
+      as_binormal:
+      begin
+        case Desc[i].DataCount of
+          1: StrCode += '  vec3 binormal = normalize(vec3(in_' + Sem + ', 0, 0));'#$D#$A;
+          2: StrCode += '  vec3 binormal = normalize(vec3(in_' + Sem + ', 0));'#$D#$A;
+          4: StrCode += '  vec3 binormal = normalize(in_' + Sem + '.xyz);'#$D#$A;
+          else StrCode += '  vec3 binormal = normalize(in_' + Sem + ');'#$D#$A;
+        end;
       end;
       as_color:
       begin
@@ -801,11 +989,27 @@ begin
       end;
     end;
   end;
-  StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
-  if (Length(Texture) > 0)
+  if Length(TexCoord) > 0 then
+  begin
+    StrCode += '  vec2 tex_coord = vec2(' + TexCoord + '.x, -' + TexCoord + '.y);'#$D#$A;
+  end;
+  if tangent_space
+  and (Length(TexNormal) > 0)
   and (Length(TexCoord) > 0) then
   begin
-    StrCode += '  color *= texture(' + Texture + ', vec2(' + TexCoord + '.x, -' + TexCoord + '.y));'#$D#$A;
+    StrCode += '  mat3 tbn = mat3(tangent, -binormal, normal);'#$D#$A;
+    StrCode += '  normal = normalize(tbn * (texture(' + TexNormal + ', tex_coord).xyz * 2 - 1));'#$D#$A;
+  end;
+  if has_normal then
+  begin
+    //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
+    StrCode += '  color.xyz *= 1.4 * clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1);'#$D#$A;
+  end;
+  StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
+  if (Length(TexColor) > 0)
+  and (Length(TexCoord) > 0) then
+  begin
+    StrCode += '  color *= texture(' + TexColor + ', tex_coord);'#$D#$A;
   end;
   StrCode += '  out_color = color;'#$D#$A;
 
@@ -1228,12 +1432,12 @@ constructor TLabSceneGeometry.TSubset.Create(
   const AGeometry: TLabSceneGeometry;
   const Triangles: TLabColladaTriangles
 );
-  function GetFormat(const Source: TLabColladaSource): TVkFormat;
+  function GetFormat(const Attrib: TLabColladaVertexAttribute): TVkFormat;
   begin
-    case Source.DataArray.ArrayType of
+    case Attrib.DataType of
       at_float:
       begin
-        case Source.Accessor.Stride of
+        case Attrib.DataCount of
           1: Result := VK_FORMAT_R32_SFLOAT;
           2: Result := VK_FORMAT_R32G32_SFLOAT;
           3: Result := VK_FORMAT_R32G32B32_SFLOAT;
@@ -1243,7 +1447,7 @@ constructor TLabSceneGeometry.TSubset.Create(
       end;
       at_int:
       begin
-        case Source.Accessor.Stride of
+        case Attrib.DataCount of
           1: Result := VK_FORMAT_R32_SINT;
           2: Result := VK_FORMAT_R32G32_SINT;
           3: Result := VK_FORMAT_R32G32B32_SINT;
@@ -1253,7 +1457,7 @@ constructor TLabSceneGeometry.TSubset.Create(
       end;
       at_bool:
       begin
-        case Source.Accessor.Stride of
+        case Attrib.DataCount of
           1: Result := VK_FORMAT_R8_UINT;
           2: Result := VK_FORMAT_R8G8_UINT;
           3: Result := VK_FORMAT_R8G8B8_UINT;
@@ -1263,23 +1467,6 @@ constructor TLabSceneGeometry.TSubset.Create(
       end
       else Result := VK_FORMAT_UNDEFINED;
     end;
-  end;
-  type TVertexRemap = record
-    VertexIndex: TVkUInt32;
-    crc: TVkUInt32;
-  end;
-  type TVertexRemapArr = array[0..High(Word)] of TVertexRemap;
-  type PVertexRemapArr = ^TVertexRemapArr;
-  var VertexRemap: PVertexRemapArr;
-  function FindRemap(const crc: TVkUInt32): TVkInt32;
-    var i: TVkInt32;
-  begin
-    for i := 0 to VertexCount - 1 do
-    if VertexRemap^[i].crc = crc then
-    begin
-      Exit(VertexRemap^[i].VertexIndex);
-    end;
-    Exit(-1);
   end;
   var BufferPtrVert, BufferPtrInd: Pointer;
   procedure AddIndex(const Index: TVkUInt32);
@@ -1295,20 +1482,268 @@ constructor TLabSceneGeometry.TSubset.Create(
     Inc(BufferPtrInd, IndexStride);
     Inc(IndexCount);
   end;
-  var AttribIndices: array of TVkInt32;
+  var index_stride: TVkUInt32;
+  var v_attr: TVkInt32;
+  var adj: array of array[0..2] of TVkInt32;
+  procedure GenerateAdjacency;
+    function CmpEdges(const e0v0, e0v1, e1v0, e1v1: TVkUInt32): Boolean; inline;
+    begin
+      Result := ((e0v0 = e1v0) and (e0v1 = e1v1)) or ((e0v0 = e1v1) and (e0v1 = e1v0));
+    end;
+    var i, j, n, e0, e1: TVkInt32;
+    var t0, t1: array[0..2] of TVkUInt32;
+  begin
+    if Length(adj) > 0 then Exit;
+    SetLength(adj, Triangles.Count);
+    FillDWord(adj[0], Length(adj) * 3, $ffffffff);
+    for i := 0 to Triangles.Count - 2 do
+    begin
+      for n := 0 to 2 do
+      begin
+        t0[n] := Triangles.Indices^[(i * 3 + n) * index_stride + Triangles.Inputs[v_attr].Offset];
+      end;
+      for j := i + 1 to Triangles.Count - 1 do
+      begin
+        for n := 0 to 2 do
+        begin
+          t1[n] := Triangles.Indices^[(j * 3 + n) * index_stride + Triangles.Inputs[v_attr].Offset];
+        end;
+        for e0 := 0 to 2 do
+        begin
+          for e1 := 0 to 2 do
+          begin
+            if CmpEdges(t0[e0], t0[(e0 + 1) mod 3], t1[e1], t1[(e1 + 1) mod 3]) then
+            begin
+              adj[i][e0] := j;
+              adj[j][e1] := i;
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+  var v_count: TVkUInt32;
+  var normals: array of TLabVec3;
+  var face_normals: array of TLabVec3;
+  procedure GenerateNormals;
+    var i, j: TVkInt32;
+    var normals_remap: array of TVkUInt32;
+    var ind: TVkUInt32;
+    var pos: array[0..2] of TLabVec4;
+    var share_count: array of TVkFloat;
+    var shared_normals: array of TLabVec3;
+  begin
+    if Length(normals) > 0 then Exit;
+    GenerateAdjacency;
+    SetLength(face_normals, Triangles.Count);
+    SetLength(normals, Triangles.Count * 3);
+    FillChar(normals[0], Length(normals) * SizeOf(TLabVec3), 0);
+    SetLength(normals_remap, Triangles.Count * 3);
+    FillChar(normals_remap[0], SizeOf(TVkUInt32) * Length(normals_remap), 0);
+    SetLength(share_count, v_count);
+    FillChar(share_count[0], SizeOf(TVkFloat) * Length(share_count), 0);
+    SetLength(shared_normals, v_count);
+    FillChar(shared_normals[0], SizeOf(TLabVec3) * Length(shared_normals), 0);
+    FillChar(pos, SizeOf(pos), 0);
+    for i := 0 to Triangles.Count - 1 do
+    begin
+      for j := 0 to 2 do
+      begin
+        ind := Triangles.Indices^[index_stride * (i * 3 + j) + Triangles.Inputs[v_attr].Offset];
+        Triangles.CopyInputData(@pos[j], Triangles.Inputs[v_attr], ind);
+        normals_remap[i * 3 + j] := ind;
+        share_count[ind] := share_count[ind] + 1;
+      end;
+      face_normals[i] := LabTriangleNormal(pos[0].xyz, pos[1].xyz, pos[2].xyz);
+      for j := 0 to 2 do
+      begin
+        ind := normals_remap[i * 3 + j];
+        shared_normals[ind] := shared_normals[ind] + face_normals[i];
+      end;
+    end;
+    for i := 0 to v_count - 1 do
+    begin
+      shared_normals[i] := shared_normals[i].Norm;
+    end;
+    for i := 0 to High(normals) do
+    begin
+      normals[i] := shared_normals[normals_remap[i]];
+    end;
+  end;
+  type TVecTangent = record
+    Tangent: TLabVec3;
+    Binormal: TLabVec3;
+  end;
+  var tc_attr: TVkInt32;
+  var tangents: array of TVecTangent;
+  var face_tangents: array of TVecTangent;
+  procedure GenerateTangents;
+    function CalculateFaceTB(
+      const v1, v2, v3: TLabVec3;
+      const uv1, uv2, uv3: TLabVec2
+    ): TVecTangent;
+    var
+      Side1, Side2, cp: TLabVec3;
+    begin
+      Side1.SetValue(v2.x - v1.x, uv2.x - uv1.x, uv2.y - uv1.y);
+      Side2.SetValue(v3.x - v1.x, uv3.x - uv1.x, uv3.y - uv1.y);
+      cp := Side1.Cross(Side2);
+      Result.Tangent.x := -cp.y / cp.x;
+      Result.Binormal.x := -cp.z / cp.x;
+      Side1.x := v2.y - v1.y;
+      Side2.x := v3.y - v1.y;
+      cp := Side1.Cross(Side2);
+      Result.Tangent.y := -cp.y / cp.x;
+      Result.Binormal.y := -cp.z / cp.x;
+      Side1.x := v2.z - v1.z;
+      Side2.x := v3.z - v1.z;
+      cp := Side1.Cross(Side2);
+      Result.Tangent.z := -cp.y / cp.x;
+      Result.Binormal.z := -cp.z / cp.x;
+      Result.Tangent := Result.Tangent.Norm;
+      Result.Binormal := Result.Binormal.Norm;
+    end;
+    var i, j: TVkInt32;
+    var ind: TVkUInt32;
+    var pos: array[0..2] of TLabVec4;
+    var uv: array[0..2] of TLabVec4;
+    var q: TLabQuat;
+  begin
+    if Length(tangents) > 0 then Exit;
+    SetLength(face_tangents, Triangles.Count);
+    SetLength(tangents, Triangles.Count * 3);
+    FillChar(pos, SizeOf(pos), 0);
+    FillChar(uv, SizeOf(uv), 0);
+    for i := 0 to Triangles.Count - 1 do
+    begin
+      for j := 0 to 2 do
+      begin
+        ind := Triangles.Indices^[index_stride * (i * 3 + j) + Triangles.Inputs[v_attr].Offset];
+        Triangles.CopyInputData(@pos[j], Triangles.Inputs[v_attr], ind);
+        ind := Triangles.Indices^[index_stride * (i * 3 + j) + Triangles.Inputs[tc_attr].Offset];
+        Triangles.CopyInputData(@uv[j], Triangles.Inputs[tc_attr], ind);
+      end;
+      face_tangents[i] := CalculateFaceTB(
+        pos[0].xyz, pos[1].xyz, pos[2].xyz,
+        uv[0].xy, uv[1].xy, uv[2].xy
+      );
+      for j := 0 to 2 do
+      begin
+        q := face_normals[i].RotationTo(normals[i * 3 + j]);
+        tangents[i * 3 + j].Tangent := face_tangents[i].Tangent.TransformQuat(q);
+        tangents[i * 3 + j].Binormal := face_tangents[i].Binormal.TransformQuat(q);
+      end;
+    end;
+  end;
   var AttribSwizzles: array of TLabSwizzle;
-  var Source: TLabColladaSource;
-  var i, j, Offset, ind, v_attr: TVkInt32;
-  var crc, max_offset: TVkUInt32;
+  var i, j, n, ind, v_ind: TVkInt32;
   var AssetSwizzle: TLabSwizzle;
-  var Root: TLabColladaRoot;
+  var has_normals, has_tangents, has_binormals, has_texcoord, gen_tangents: Boolean;
+  var channels: array of TVertexChannel;
+  var unique_v, cmp_v: Boolean;
 begin
   _Geometry := AGeometry;
-  VertexCount := 0;
-  IndexCount := 0;
+  VertexDescriptor := Triangles.VertexDescriptor;
   Triangles.UserData := Self;
-  VertexStride := Triangles.VertexSize;
+  VertexStride := 0;
   Material := AnsiString(Triangles.Material);
+  has_normals := False;
+  has_tangents := False;
+  has_binormals := False;
+  has_texcoord := False;
+  index_stride := 0;
+  v_attr := -1;
+  tc_attr := -1;
+  SetLength(channels, Triangles.Inputs.Count);
+  for i := 0 to Triangles.Inputs.Count - 1 do
+  begin
+    if Triangles.Inputs[i].Offset > index_stride then
+    begin
+      index_stride := Triangles.Inputs[i].Offset;
+    end;
+    channels[i] := TVertexChannelInput.Create(VertexDescriptor[i], Triangles.Inputs[i], Triangles, VertexStride);
+    VertexStride += channels[i].Size;
+  end;
+  index_stride += 1;
+  for i := 0 to High(VertexDescriptor) do
+  begin
+    if VertexDescriptor[i].Semantic = as_position then
+    begin
+      v_attr := i;
+    end
+    else if VertexDescriptor[i].Semantic = as_tangent then
+    begin
+      has_tangents := True;
+    end
+    else if VertexDescriptor[i].Semantic = as_binormal then
+    begin
+      has_binormals := True;
+    end
+    else if VertexDescriptor[i].Semantic = as_normal then
+    begin
+      has_normals := True;
+    end
+    else if VertexDescriptor[i].Semantic = as_texcoord then
+    begin
+      has_texcoord := True;
+      if (tc_attr = -1) then tc_attr := i;
+    end;
+  end;
+  v_count := Triangles.InputSourceCount[v_attr];
+  gen_tangents := (not has_tangents or not has_binormals) and has_texcoord;
+  if not has_normals or gen_tangents then
+  begin
+    GenerateNormals;
+    if not has_normals then
+    begin
+      i := Length(channels);
+      SetLength(channels, i + 1);
+      channels[i] := TVertexChannelArray.Create(
+        LabColladaVertexAttribute(as_normal, at_float, 3),
+        @normals[0],
+        SizeOf(normals[0]),
+        VertexStride
+      );
+      VertexStride += channels[i].Size;
+      i := Length(VertexDescriptor);
+      SetLength(VertexDescriptor, i + 1);
+      VertexDescriptor[i] := channels[i].Attribute;
+    end;
+  end;
+  if gen_tangents then
+  begin
+    GenerateTangents;
+    if not has_tangents then
+    begin
+      i := Length(channels);
+      SetLength(channels, i + 1);
+      channels[i] := TVertexChannelArray.Create(
+        LabColladaVertexAttribute(as_tangent, at_float, 3),
+        @tangents[0].Tangent,
+        SizeOf(tangents[0]),
+        VertexStride
+      );
+      VertexStride += channels[i].Size;
+      i := Length(VertexDescriptor);
+      SetLength(VertexDescriptor, i + 1);
+      VertexDescriptor[i] := channels[i].Attribute;
+    end;
+    if not has_binormals then
+    begin
+      i := Length(channels);
+      SetLength(channels, i + 1);
+      channels[i] := TVertexChannelArray.Create(
+        LabColladaVertexAttribute(as_binormal, at_float, 3),
+        @tangents[0].Binormal,
+        SizeOf(tangents[0]),
+        VertexStride
+      );
+      VertexStride += channels[i].Size;
+      i := Length(VertexDescriptor);
+      SetLength(VertexDescriptor, i + 1);
+      VertexDescriptor[i] := channels[i].Attribute;
+    end;
+  end;
   if Triangles.Count * 3 > High(TVkUInt16) then
   begin
     IndexStride := 4;
@@ -1321,68 +1756,56 @@ begin
   end;
   VertexData := GetMemory(VertexStride * Triangles.Count * 3);
   IndexData := GetMemory(IndexStride * Triangles.Count * 3);
-  SetLength(Remap, Triangles.Count * 3);
-  VertexRemap := PVertexRemapArr(GetMemory(SizeOf(TVertexRemap) * Triangles.Count * 3));
+  SetLength(Remap, v_count);
   BufferPtrVert := VertexData;
   BufferPtrInd := IndexData;
-  max_offset := 0;
-  v_attr := -1;
-  for i := 0 to Triangles.Inputs.Count - 1 do
-  begin
-    if Triangles.Inputs[i].Semantic = 'VERTEX' then v_attr := i;
-    if Triangles.Inputs[i].Offset > max_offset then
-    begin
-      max_offset := Triangles.Inputs[i].Offset;
-    end;
-  end;
-  SetLength(AttribIndices, Triangles.Inputs.Count);
+  VertexCount := 0;
+  IndexCount := 0;
   for i := 0 to Triangles.Count * 3 - 1 do
   begin
-    crc := 0;
-    for j := 0 to Triangles.Inputs.Count - 1 do
+    v_ind := Triangles.Indices^[i * index_stride + Triangles.Inputs[v_attr].Offset];
+    for j := 0 to High(channels) do
     begin
-      Offset := Triangles.Inputs[j].Offset;
-      AttribIndices[j] := Triangles.Indices^[i * (max_offset + 1) + Offset];
-      crc := LabCRC32(crc, @AttribIndices[j], SizeOf(TVkInt32));
+      channels[j].WriteData(BufferPtrVert, i);
     end;
-    //ind := FindRemap(crc);
-    //if ind > -1 then
-    //begin
-    //  AddIndex(ind);
-    //end
-    //else
+    unique_v := True;
+    for n := 0 to VertexCount - 1 do
     begin
-      for j := 0 to Triangles.Inputs.Count - 1 do
+      cmp_v := True;
+      for j := 0 to High(channels) do
+      if not channels[j].Compare(BufferPtrVert, VertexData + VertexStride * n) then
       begin
-        BufferPtrVert := Triangles.CopyInputData(BufferPtrVert, Triangles.Inputs[j], AttribIndices[j]);
+        cmp_v := False;
+        Break;
       end;
-      ind := VertexCount;
-      VertexRemap^[VertexCount].crc := crc;
-      VertexRemap^[VertexCount].VertexIndex := VertexCount;
-      AddIndex(VertexCount);
-      Inc(VertexCount);
+      if cmp_v then
+      begin
+        unique_v := False;
+        ind := n;
+        Break;
+      end;
     end;
-    Remap[ind] := AttribIndices[v_attr];
+    if unique_v then
+    begin
+      ind := VertexCount;
+      VertexCount += 1;
+      Inc(BufferPtrVert, VertexStride);
+    end;
+    AddIndex(ind);
+    Remap[v_ind] := ind;
   end;
-  if Length(Remap) > VertexCount then SetLength(Remap, VertexCount);
-  Freememory(VertexRemap);
-  SetLength(VertexAttributes, Triangles.VertexLayout.Count);
-  Offset := 0;
-  for i := 0 to Triangles.VertexLayout.Count - 1 do
+  SetLength(VertexAttributes, Length(channels));
+  for i := 0 to High(channels) do
   begin
-    Source := Triangles.VertexLayout[i].Source as TLabColladaSource;
     VertexAttributes[i] := LabVertexBufferAttributeFormat(
-      GetFormat(Source), Offset
+      GetFormat(channels[i].Attribute), channels[i].Offset
     );
-    Offset += Source.DataArray.ItemSize * Source.Accessor.Stride;
   end;
-  VertexDescriptor := Triangles.VertexDescriptor;
   AssetSwizzle := _Geometry.Scene.AxisRemap;
-  SetLength(AttribSwizzles, Length(VertexDescriptor));
-  Root := TLabColladaRoot(Triangles.GetRoot);
-  for i := 0 to High(VertexDescriptor) do
+  SetLength(AttribSwizzles, Length(channels));
+  for i := 0 to High(channels) do
   begin
-    if (VertexDescriptor[i].Semantic in [as_position, as_normal, as_tangent, as_binormal]) then
+    if (channels[i].Attribute.Semantic in [as_position, as_normal, as_tangent, as_binormal]) then
     begin
       AttribSwizzles[i] := AssetSwizzle;
     end
@@ -1393,12 +1816,12 @@ begin
   end;
   for i := 0 to VertexCount - 1 do
   begin
-    for j := 0 to High(VertexAttributes) do
+    for j := 0 to High(channels) do
     begin
       BufferPtrVert := VertexData + VertexStride * i + VertexAttributes[j].Offset;
-      if VertexDescriptor[j].DataType = at_float then
+      if channels[j].Attribute.DataType = at_float then
       begin
-        case VertexDescriptor[j].DataCount of
+        case channels[j].Attribute.DataCount of
           2: PLabVec2(BufferPtrVert)^ := PLabVec2(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
           3: PLabVec3(BufferPtrVert)^ := PLabVec3(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
           4: PLabVec4(BufferPtrVert)^ := PLabVec4(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);
@@ -1609,6 +2032,15 @@ begin
   inherited Destroy;
 end;
 
+function TLabSceneEffectParameter.ExtractName(
+  const Param: TLabColladaEffectProfileParam
+): AnsiString;
+begin
+  if Length(Param.sid) > 0 then Exit(AnsiString(Param.sid));
+  if Length(Param.id) > 0 then Exit(AnsiString(Param.id));
+  if Length(Param.Name) > 0 then Exit(AnsiString(Param.Name));
+end;
+
 constructor TLabSceneEffectParameter.Create(const AScene: TLabScene; const AName: String);
 begin
   _Scene := AScene;
@@ -1621,7 +2053,7 @@ constructor TLabSceneEffectParameterSampler.Create(
 );
 begin
   _ParameterType := pt_sampler;
-  inherited Create(AScene, AnsiString(Param.id));
+  inherited Create(AScene, ExtractName(Param));
   if Assigned(Param.AsSampler.Surface)
   and Assigned(Param.AsSampler.Surface.Image) then
   begin
@@ -1635,7 +2067,7 @@ constructor TLabSceneEffectParameterFloat.Create(
 );
 begin
   _ParameterType := pt_float;
-  inherited Create(AScene, AnsiString(Param.id));
+  inherited Create(AScene, ExtractName(Param));
 end;
 
 constructor TLabSceneEffectParameterFloat2.Create(
@@ -1644,7 +2076,7 @@ constructor TLabSceneEffectParameterFloat2.Create(
 );
 begin
   _ParameterType := pt_float2;
-  inherited Create(AScene, AnsiString(Param.id));
+  inherited Create(AScene, ExtractName(Param));
 end;
 
 constructor TLabSceneEffectParameterFloat3.Create(
@@ -1653,7 +2085,7 @@ constructor TLabSceneEffectParameterFloat3.Create(
 );
 begin
   _ParameterType := pt_float3;
-  inherited Create(AScene, AnsiString(Param.id));
+  inherited Create(AScene, ExtractName(Param));
 end;
 
 constructor TLabSceneEffectParameterFloat4.Create(
@@ -1662,7 +2094,7 @@ constructor TLabSceneEffectParameterFloat4.Create(
 );
 begin
   _ParameterType := pt_float4;
-  inherited Create(AScene, AnsiString(Param.id));
+  inherited Create(AScene, ExtractName(Param));
 end;
 
 constructor TLabSceneEffect.Create(

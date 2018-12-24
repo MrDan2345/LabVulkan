@@ -103,7 +103,7 @@ begin
     ],
     [
       LabSceneShaderParameterUniform(
-        _UniformBuffer.VkHandle, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+        _UniformBuffer.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
       )
     ]
   );

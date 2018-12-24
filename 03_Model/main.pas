@@ -452,6 +452,7 @@ procedure TInstanceData.SetupGeometry(
   var Params: TLabSceneShaderParameters;
   var SkinInfo: TLabSceneShaderSkinInfo;
   var si_ptr: PLabSceneShaderSkinInfo;
+  var sem: TLabSceneShaderParameterSemanticSet;
 begin
   if Assigned(Skin) then
   begin
@@ -486,13 +487,13 @@ begin
     SetLength(Params, pc);
     pc := 0;
     Params[pc] := LabSceneShaderParameterUniformDynamic(
-      App.UniformBuffer.Ptr.VkHandle, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+      App.UniformBuffer.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
     );
     Inc(pc);
     if Assigned(Skin) then
     begin
       Params[pc] := LabSceneShaderParameterUniform(
-        JointUniformBuffer.VkHandle, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+        JointUniformBuffer.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
       );
       Inc(pc);
     end;
@@ -501,13 +502,18 @@ begin
       for j := 0 to Pass.Material.Effect.Params.Count - 1 do
       if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
       begin
+        sem := [];
+        if Pos('_c_', LowerCase(Pass.Material.Effect.Params[j].Name)) > 0 then sem += [sps_color_map];
+        if Pos('_n_', LowerCase(Pass.Material.Effect.Params[j].Name)) > 0 then sem += [sps_normal_map];
         Image := TImageData(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
         Pass.Images.Add(Image);
         Params[pc] := LabSceneShaderParameterImage(
           Image.TextureView.Ptr.VkHandle,
           Image.TextureSampler.Ptr.VkHandle,
+          sem,
           TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
         );
+        Inc(pc);
       end;
     end;
     Pass.GeomSubset := r_s;
@@ -875,7 +881,7 @@ begin
     GlobalWorld := GlobalWorld * LabMatRotationY((LabTimeLoopSec(rot_loop) / rot_loop) * Pi * 2);
   end;
   GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-  GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
+  GlobalView := LabMatView(LabVec3(0, 3, -5), LabVec3(0, 0, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
     1, 0, 0, 0,
     0, -1, 0, 0,
@@ -1001,9 +1007,9 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/maya/maya_anim.dae');
+  //Scene.Add('../Models/maya/maya_anim.dae');
   Scene.Add('../Models/box.dae');
-  Scene.Add('../Models/skin.dae');
+  //Scene.Add('../Models/skin.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);
   Semaphore := TLabSemaphore.Create(Device);

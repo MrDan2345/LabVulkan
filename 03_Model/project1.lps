@@ -14,4 +14,11 @@
       </Unit0>
     </Units>
   </ProjectSession>
+  <Debugging>
+    <Watches Count="1">
+      <Item1>
+        <Expression Value="face_tangents"/>
+      </Item1>
+    </Watches>
+  </Debugging>
 </CONFIG>
