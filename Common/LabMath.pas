@@ -167,6 +167,7 @@ type
     function AngleTo(const v: TLabVec3): TLabFloat; inline;
     function RotationTo(const v: TLabVec3): TLabQuatRef; inline;
     function Swizzle(const Remap: TLabSwizzle): TLabVec3; inline;
+    function IsZero: Boolean; inline;
   end;
 
   PLabVec4 = ^TLabVec4;
@@ -975,6 +976,11 @@ end;
 function TLabVec3.Swizzle(const Remap: TLabSwizzle): TLabVec3;
 begin
   Result := LabVec3(Arr[Remap[0]], Arr[Remap[1]], Arr[Remap[2]]);
+end;
+
+function TLabVec3.IsZero: Boolean;
+begin
+  Result := (x = 0) and (y = 0) and (z = 0);
 end;
 //TLabVec3 END
 

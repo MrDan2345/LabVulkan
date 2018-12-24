@@ -881,7 +881,7 @@ begin
     GlobalWorld := GlobalWorld * LabMatRotationY((LabTimeLoopSec(rot_loop) / rot_loop) * Pi * 2);
   end;
   GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
-  GlobalView := LabMatView(LabVec3(0, 3, -5), LabVec3(0, 0, 0), LabVec3(0, 1, 0));
+  GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
     1, 0, 0, 0,
     0, -1, 0, 0,
@@ -1007,8 +1007,8 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  //Scene.Add('../Models/maya/maya_anim.dae');
-  Scene.Add('../Models/box.dae');
+  Scene.Add('../Models/maya/maya_anim.dae');
+  //Scene.Add('../Models/box.dae');
   //Scene.Add('../Models/skin.dae');
   ProcessScene;
   PipelineCache := TLabPipelineCache.Create(Device);

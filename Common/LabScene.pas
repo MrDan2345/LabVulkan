@@ -1003,7 +1003,7 @@ begin
   if has_normal then
   begin
     //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
-    StrCode += '  color.xyz *= 1.4 * clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1);'#$D#$A;
+    StrCode += '  color.xyz *= 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1), 2);'#$D#$A;
   end;
   StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
   if (Length(TexColor) > 0)
@@ -1547,20 +1547,44 @@ constructor TLabSceneGeometry.TSubset.Create(
       Side1.SetValue(v2.x - v1.x, uv2.x - uv1.x, uv2.y - uv1.y);
       Side2.SetValue(v3.x - v1.x, uv3.x - uv1.x, uv3.y - uv1.y);
       cp := Side1.Cross(Side2);
-      Result.Tangent.x := -cp.y / cp.x;
-      Result.Binormal.x := -cp.z / cp.x;
+      if cp.x = 0 then
+      begin
+        Result.Tangent.x := 0;
+        Result.Binormal.x := 0;
+      end
+      else
+      begin
+        Result.Tangent.x := -cp.y / cp.x;
+        Result.Binormal.x := -cp.z / cp.x;
+      end;
       Side1.x := v2.y - v1.y;
       Side2.x := v3.y - v1.y;
       cp := Side1.Cross(Side2);
-      Result.Tangent.y := -cp.y / cp.x;
-      Result.Binormal.y := -cp.z / cp.x;
+      if cp.x = 0 then
+      begin
+        Result.Tangent.z := 0;
+        Result.Binormal.z := 0;
+      end
+      else
+      begin
+        Result.Tangent.y := -cp.y / cp.x;
+        Result.Binormal.y := -cp.z / cp.x;
+      end;
       Side1.x := v2.z - v1.z;
       Side2.x := v3.z - v1.z;
       cp := Side1.Cross(Side2);
-      Result.Tangent.z := -cp.y / cp.x;
-      Result.Binormal.z := -cp.z / cp.x;
-      Result.Tangent := Result.Tangent.Norm;
-      Result.Binormal := Result.Binormal.Norm;
+      if cp.x = 0 then
+      begin
+        Result.Tangent.z := 0;
+        Result.Binormal.z := 0;
+      end
+      else
+      begin
+        Result.Tangent.z := -cp.y / cp.x;
+        Result.Binormal.z := -cp.z / cp.x;
+      end;
+      if not Result.Tangent.IsZero then Result.Tangent := Result.Tangent.Norm;
+      if not Result.Binormal.IsZero then Result.Binormal := Result.Binormal.Norm;
     end;
     var i, j: TVkInt32;
     var ind: TVkUInt32;
@@ -1717,7 +1741,7 @@ begin
   end;
   VertexData := GetMemory(VertexStride * Triangles.Count * 3);
   IndexData := GetMemory(IndexStride * Triangles.Count * 3);
-  SetLength(Remap, v_count);
+  SetLength(Remap, Triangles.Count * 3);
   BufferPtrVert := VertexData;
   BufferPtrInd := IndexData;
   VertexCount := 0;
@@ -1734,7 +1758,8 @@ begin
     begin
       cmp_v := True;
       for j := 0 to High(channels) do
-      if not channels[j].Compare(BufferPtrVert, VertexData + VertexStride * n) then
+      if (Remap[n] <> v_ind)
+      or not channels[j].Compare(BufferPtrVert, VertexData + VertexStride * n) then
       begin
         cmp_v := False;
         Break;
@@ -1753,8 +1778,9 @@ begin
       Inc(BufferPtrVert, VertexStride);
     end;
     AddIndex(ind);
-    Remap[v_ind] := ind;
+    Remap[ind] := v_ind;
   end;
+  if Length(Remap) > VertexCount then SetLength(Remap, VertexCount);
   SetLength(VertexAttributes, Length(channels));
   for i := 0 to High(channels) do
   begin
