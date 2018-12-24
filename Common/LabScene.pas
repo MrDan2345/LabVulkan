@@ -1544,7 +1544,9 @@ constructor TLabSceneGeometry.TSubset.Create(
     FillChar(share_count[0], SizeOf(TVkFloat) * Length(share_count), 0);
     SetLength(shared_normals, v_count);
     FillChar(shared_normals[0], SizeOf(TLabVec3) * Length(shared_normals), 0);
+    {$Push}{$Hints off}
     FillChar(pos, SizeOf(pos), 0);
+    {$Pop}
     for i := 0 to Triangles.Count - 1 do
     begin
       for j := 0 to 2 do
@@ -1612,8 +1614,10 @@ constructor TLabSceneGeometry.TSubset.Create(
     if Length(tangents) > 0 then Exit;
     SetLength(face_tangents, Triangles.Count);
     SetLength(tangents, Triangles.Count * 3);
+    {$Push}{$Hints off}
     FillChar(pos, SizeOf(pos), 0);
     FillChar(uv, SizeOf(uv), 0);
+    {$Pop}
     for i := 0 to Triangles.Count - 1 do
     begin
       for j := 0 to 2 do
@@ -1828,6 +1832,10 @@ begin
         end;
       end;
     end;
+  end;
+  for i := 0 to High(channels) do
+  begin
+    channels[i].Free;
   end;
 end;
 
@@ -2163,7 +2171,7 @@ begin
   end;
   Result := High(_Keys);
   for i := 0 to High(_Keys) do
-  if _Keys[i].Time <= Time then
+  if _Keys[i].Time <= t then
   begin
     Result := i;
   end
@@ -2179,8 +2187,8 @@ procedure TLabSceneAnimationTrack.SampleData(
   var OutFloat: PVkFloat;
   procedure LerpTransforms(const t: TVkFloat);
     var OutMat, InMat0, InMat1: PLabMat;
-    var r0, r1, out_r: TLabQuat;
-    var t0, t1, out_t: TLabVec3;
+    var r0, r1: TLabQuat;
+    var t0, t1: TLabVec3;
     var s0, s1, out_s: TLabVec3;
   begin
     OutMat := PLabMat(OutFloat);
@@ -2202,8 +2210,8 @@ procedure TLabSceneAnimationTrack.SampleData(
     //out_r := LabQuatSlerp(r0, r1, t);
     //OutMat^ := LabMatCompose(out_s, out_r, out_t);
   end;
-  var k0, k1, i, j: TVkInt32;
-  var t, tgt0, tgt1: TVkFloat;
+  var k0, k1, i: TVkInt32;
+  var t: TVkFloat;
 begin
   if not Loop then
   begin
@@ -2273,7 +2281,6 @@ end;
 
 procedure TLabSceneAnimationTrack.Sample(const Time: TVkFloat; const Loop: Boolean);
   var Scaling, Rotation, Translation: TLabVec3;
-  var p: TLabSceneNode;
 begin
   if not Assigned(_Target) then Exit;
   SampleData(_Sample, Time, Loop);
@@ -2588,7 +2595,6 @@ constructor TLabSceneNode.Create(
   const ANode: TLabColladaNode
 );
   var i: TVkInt32;
-  var Root: TLabColladaRoot;
 begin
   _Scene := AScene;
   _Children := TNodeList.Create;
