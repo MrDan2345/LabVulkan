@@ -3132,7 +3132,7 @@ begin
       _UpAxis.SetValue(0, 2, 1);
     end;
   end;
-  _UpAxis.SetIdentity;
+  //_UpAxis.SetIdentity;
 end;
 
 destructor TLabColladaAsset.Destroy;
@@ -3147,15 +3147,16 @@ constructor TLabColladaRoot.Create(
   var NodeName: DOMString;
 begin
   inherited Create(XMLNode, nil);
+  CurNode := XMLNode.FindNode('asset');
+  if Assigned(CurNode) then
+  begin
+    _Asset := TLabColladaAsset.Create(CurNode, Self);
+  end;
   CurNode := XMLNode.FirstChild;
   while Assigned(CurNode) do
   begin
     NodeName := LowerCase(CurNode.NodeName);
-    if NodeName = 'asset' then
-    begin
-      _Asset := TLabColladaAsset.Create(CurNode, Self);
-    end
-    else if NodeName = 'library_cameras' then
+    if NodeName = 'library_cameras' then
     begin
       _LibCameras := TLabColladaLibraryCameras.Create(CurNode, Self);
     end

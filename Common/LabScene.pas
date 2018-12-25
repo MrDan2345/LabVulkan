@@ -1003,7 +1003,9 @@ begin
   if has_normal then
   begin
     //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
-    StrCode += '  color.xyz *= 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, -1))), 0, 1), 1.5);'#$D#$A;
+    StrCode += '  vec3 light = 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, 1))), 0, 1), 1.5) * vec3(1, 1, 1);'#$D#$A;
+    StrCode += '  light += clamp(dot(normal, normalize(vec3(-1, -1, -1))), 0, 1) * vec3(0.1, 0.1, 0.5);'#$D#$A;
+    StrCode += '  color.xyz *= light;'#$D#$A;
   end;
   StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
   if (Length(TexColor) > 0)
@@ -1377,7 +1379,7 @@ function TLabSceneNodeAttachmentCamera.GetView: TLabMat;
   var xf: TLabMat;
 begin
   xf := _Node.Transform;
-  Result := LabMatView(xf.Translation, xf.Translation - xf.AxisZ, LabVec3(0, 0, 1));
+  Result := LabMatView(xf.Translation, xf.Translation - xf.AxisY, LabVec3(0, 1, 0));
 end;
 
 constructor TLabSceneNodeAttachmentCamera.Create(
@@ -1928,13 +1930,13 @@ begin
   inherited Create(AScene);
   ColladaSkin.UserData := Self;
   _Subsets := TSubsetList.Create;
-  _BindShapeMatrix := ColladaSkin.BindShapeMatrix;//Swizzle(AScene.AxisRemap);
+  _BindShapeMatrix := ColladaSkin.BindShapeMatrix.Swizzle(AScene.AxisRemap);
   _Geometry := TLabSceneGeometry(ColladaSkin.Geometry.UserData);
   SetLength(_Joints, Length(ColladaSkin.Joints.Joints));
   for i := 0 to High(_Joints) do
   begin
     _Joints[i].JointName := AnsiString(ColladaSkin.Joints.Joints[i].JointName);
-    _Joints[i].BindPose := ColladaSkin.Joints.Joints[i].BindPose// Swizzle(AScene.AxisRemap);
+    _Joints[i].BindPose := ColladaSkin.Joints.Joints[i].BindPose.Swizzle(AScene.AxisRemap);
   end;
   _MaxWeightCount := 0;
   SetLength(_Weights, ColladaSkin.VertexWeights.VCount);
@@ -2333,7 +2335,7 @@ begin
     if _SampleType = st_transform then
     begin
       m := PLabMat(ColladaChannel.Sampler.Keys[i]^.Value)^;
-      m := m.Transpose;//.Swizzle(AScene.AxisRemap);
+      m := m.Transpose.Swizzle(AScene.AxisRemap);
       PLabMat(_Keys[i].Value)^ := m;
     end
     else
@@ -2578,6 +2580,7 @@ constructor TLabSceneNode.Create(
   const ANode: TLabColladaNode
 );
   var i: TVkInt32;
+  AxisRemap: TLabSwizzle;
 begin
   _Scene := AScene;
   _Children := TNodeList.Create;
@@ -2585,6 +2588,7 @@ begin
   _CachedTransform := LabMatIdentity;
   _IsTransformCached := False;
   _Attachments := TLabSceneNodeAttachmentList.Create;
+  AxisRemap := _Scene.AxisRemap;
   Parent := AParent;
   if Assigned(ANode) then
   begin
@@ -2599,7 +2603,7 @@ begin
     end;
     _ID := AnsiString(ANode.id);
     _SID := AnsiString(ANode.sid);
-    CacheTransform(ANode.Matrix);
+    CacheTransform(ANode.Matrix.Swizzle(AxisRemap));
     //TransformLocal := ANode.Matrix.Swizzle(_Scene.AxisRemap);
     for i := 0 to ANode.Children.Count - 1 do
     begin
