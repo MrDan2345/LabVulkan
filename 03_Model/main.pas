@@ -875,13 +875,13 @@ procedure TLabApp.UpdateTransforms;
   const rot_loop = 45;
 begin
   fov := LabDegToRad * 45;
-  GlobalWorld := LabMatRotationX(-LabHalfPi);//LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+  GlobalWorld := LabMatIdentity;// LabMatRotationX(LabHalfPi); LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
   if rot_loop > LabEPS then
   begin
     GlobalWorld := GlobalWorld * LabMatRotationY((LabTimeLoopSec(rot_loop) / rot_loop) * Pi * 2);
   end;
   GlobalProjection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
-  GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
+  GlobalView := LabMatView(LabVec3(13, 7, -6), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
     1, 0, 0, 0,
     0, -1, 0, 0,
@@ -1108,7 +1108,7 @@ procedure TLabApp.Loop;
               VK_FALSE, VK_FALSE,
               VK_POLYGON_MODE_FILL,
               TVkFlags(VK_CULL_MODE_BACK_BIT),
-              VK_FRONT_FACE_CLOCKWISE
+              VK_FRONT_FACE_COUNTER_CLOCKWISE
             ),
             LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
             LabPipelineMultisampleState(SampleCount),
