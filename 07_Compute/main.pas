@@ -57,7 +57,7 @@ type
 
   TLabApp = class (TLabVulkan)
   public
-    var Window: TLabWindow;
+    var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
@@ -286,7 +286,7 @@ begin
   SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
+    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Ptr.Width, Window.Ptr.Height);
   end;
   RenderPass := TLabRenderPass.Create(
     Device,
@@ -346,8 +346,8 @@ end;
 
 procedure TLabApp.UpdateTransforms;
 begin
-  if (Window.Width = 0) or (Window.Height = 0) then Exit;
-  UniformData^ := LabMatScaling(2 / Window.Width, 2 / Window.Height, 1) * LabMatTranslation(-1, -1, 0);
+  if (Window.Ptr.Width = 0) or (Window.Ptr.Height = 0) then Exit;
+  UniformData^ := LabMatScaling(2 / Window.Ptr.Width, 2 / Window.Ptr.Height, 1) * LabMatTranslation(-1, -1, 0);
 end;
 
 procedure TLabApp.RunComputeShader;
@@ -473,7 +473,7 @@ begin
   ComputeGroups := 1024;
   ParticleCount := 256 * ComputeGroups;
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Compute';
+  Window.Ptr.Caption := 'Vulkan Compute';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -520,7 +520,7 @@ begin
   begin
     for i := 0 to ParticleCount - 1 do
     begin
-      PVertexArr(map)^[i].pos := LabVec2(Random(Window.Width), Random(Window.Height));
+      PVertexArr(map)^[i].pos := LabVec2(Random(Window.Ptr.Width), Random(Window.Ptr.Height));
       PVertexArr(map)^[i].vel := LabRandomCirclePoint;
       PVertexArr(map)^[i].scale := LabVec4(16 + Random * 64, 0, 0, 0);
     end;
@@ -641,7 +641,7 @@ begin
   CmdPool := nil;
   Surface := nil;
   Device := nil;
-  Window.Free;
+  Window := nil;
   Free;
 end;
 
@@ -649,19 +649,19 @@ procedure TLabApp.Loop;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
-  TLabVulkan.IsActive := Window.IsActive;
+  TLabVulkan.IsActive := Window.Ptr.IsActive;
   if not TLabVulkan.IsActive
-  or (Window.Mode = wm_minimized)
-  or (Window.Width * Window.Height = 0) then Exit;
-  if (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  or (Window.Ptr.Mode = wm_minimized)
+  or (Window.Ptr.Width * Window.Ptr.Height = 0) then Exit;
+  if (SwapChain.Ptr.Width <> Window.Ptr.Width)
+  or (SwapChain.Ptr.Height <> Window.Ptr.Height) then
   begin
     Device.Ptr.WaitIdle;
     SwapchainDestroy;
     SwapchainCreate;
   end;
-  ComputeUniformData^.w := Window.Width;
-  ComputeUniformData^.h := Window.Height;
+  ComputeUniformData^.w := Window.Ptr.Width;
+  ComputeUniformData^.h := Window.Ptr.Height;
   RunComputeShader;
   UpdateTransforms;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
@@ -690,8 +690,8 @@ begin
     0, [DescriptorSets.Ptr.VkHandle[0]], []
   );
   CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
+  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   CmdBuffer.Ptr.Draw(ParticleCount);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;

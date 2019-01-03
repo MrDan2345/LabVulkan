@@ -44,7 +44,7 @@ type
 
   TLabApp = class (TLabVulkan)
   public
-    var Window: TLabWindow;
+    var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
@@ -880,7 +880,7 @@ begin
   begin
     GlobalWorld := GlobalWorld * LabMatRotationY((LabTimeLoopSec(rot_loop) / rot_loop) * Pi * 2);
   end;
-  GlobalProjection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+  GlobalProjection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
   GlobalView := LabMatView(LabVec3(0, 7, -15), LabVec3(0, 5, 0), LabVec3(0, 1, 0));
   GlobalClip := LabMat(
     1, 0, 0, 0,
@@ -989,7 +989,7 @@ procedure TLabApp.Initialize;
   var ColladaParser: TLabColladaParser;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Model';
+  Window.Ptr.Caption := 'Vulkan Model';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [LabQueueFamilyRequest(PhysicalDevices[0].Ptr.GetQueueFamiliyIndex(TVkFlags(VK_QUEUE_GRAPHICS_BIT)))],
@@ -1032,7 +1032,7 @@ begin
   UniformBuffer := nil;
   Surface := nil;
   Device := nil;
-  Window.Free;
+  Window := nil;
   Free;
 end;
 
@@ -1159,12 +1159,12 @@ procedure TLabApp.Loop;
   var m: TLabMat;
   var t, anim_loop: TLabFloat;
 begin
-  TLabVulkan.IsActive := Window.IsActive;
+  TLabVulkan.IsActive := Window.Ptr.IsActive;
   if not TLabVulkan.IsActive
-  or (Window.Mode = wm_minimized)
-  or (Window.Width * Window.Height = 0) then Exit;
-  if (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  or (Window.Ptr.Mode = wm_minimized)
+  or (Window.Ptr.Width * Window.Ptr.Height = 0) then Exit;
+  if (SwapChain.Ptr.Width <> Window.Ptr.Width)
+  or (SwapChain.Ptr.Height <> Window.Ptr.Height) then
   begin
     Device.Ptr.WaitIdle;
     SwapchainDestroy;
@@ -1176,8 +1176,8 @@ begin
     t := LabTimeLoopSec(Scene.DefaultAnimationClip.MaxTime * anim_loop) / anim_loop;
     Scene.DefaultAnimationClip.Sample(t, True);
   end;
-  Viewport := LabViewport(0, 0, Window.Width, Window.Height);
-  Scissor := LabRect2D(0, 0, Window.Width, Window.Height);
+  Viewport := LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height);
+  Scissor := LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height);
   UpdateTransforms;
   DebugDraw.Flush;
   CmdBuffer.Ptr.RecordBegin();

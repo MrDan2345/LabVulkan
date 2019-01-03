@@ -477,6 +477,7 @@ begin
   end;
 end;
 
+{$Push}{$Hints off}
 procedure TScene.TInstanceData.UpdateSkinTransforms(const Params: array of const);
   var Skin: TLabSceneControllerSkin;
   var i: TVkInt32;
@@ -492,6 +493,7 @@ begin
     JointUniforms^[i] := m;
   end;
 end;
+{$Pop}
 
 constructor TScene.TInstanceData.Create(const AScene: TScene; const Attachment: TLabSceneNodeAttachmentGeometry);
 begin
@@ -558,10 +560,12 @@ begin
   );
 end;
 
+{$Push}{$Hints off}
 procedure TScene.TSkinSubsetData.StageComplete(const Params: array of const);
 begin
   FreeAndNil(VertexBufferStaging);
 end;
+{$Pop}
 
 constructor TScene.TSkinSubsetData.Create(const Subset: TLabSceneControllerSkin.TSubset);
   const FormatMap: array[1..4] of array[0..1] of TVkFormat = (
@@ -587,6 +591,7 @@ begin
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
   );
+  map := nil;
   if VertexBufferStaging.Map(map) then
   begin
     Move(Subset.WeightData^, map^, VertexBuffer.Size);
@@ -622,11 +627,13 @@ begin
   );
 end;
 
+{$Push}{$Hints off}
 procedure TScene.TGeometrySubsetData.StageComplete(const Params: array of const);
 begin
   FreeAndNil(VertexBufferStaging);
   FreeAndNil(IndexBufferStaging);
 end;
+{$Pop}
 
 constructor TScene.TGeometrySubsetData.Create(const Subset: TLabSceneGeometry.TSubset);
   var map: Pointer;
@@ -907,7 +914,6 @@ constructor TBackBuffer.Create(
   const ASwapChainDestroyCallbacks: array of TLabDelegate.TCallback;
   const AResizeCallbacks: array of TLabDelegate.TCallback
 );
-  var i: TVkInt32;
 begin
   _Window := AWindow;
   _Device := ADevice;
@@ -1056,9 +1062,8 @@ end;
 procedure TScene.UpdateTransforms(const Params: array of const);
   var xf: PTransforms;
   procedure UpdateNode(const Node: TLabSceneNode);
-    var i_n, i: Integer;
+    var i_n: Integer;
     var nd: TNodeData;
-    var id: TInstanceData;
   begin
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
@@ -1069,7 +1074,6 @@ procedure TScene.UpdateTransforms(const Params: array of const);
       W := Node.Transform * xf^.World;
       WVP := W * V * P * xf^.Clip;
     end;
-    //DebugDraw.DrawTransform(Node.Transform);
     for i_n := 0 to Node.Children.Count - 1 do
     begin
       UpdateNode(Node.Children[i_n]);
@@ -1341,10 +1345,12 @@ begin
   );
 end;
 
+{$Push}{$Hints off}
 procedure TTexture.StageComplete(const Args: array of const);
 begin
   Staging := nil;
 end;
+{$Pop}
 
 constructor TTexture.Create(const FileName: String);
   var img: TLabImageDataPNG;
@@ -1516,6 +1522,7 @@ begin
     VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
+  map := nil;
   if VertexStaging.Ptr.Map(map) then
   begin
     Move(light_vertices, map^, SizeOf(light_vertices));
@@ -1661,6 +1668,7 @@ begin
   ComputeTask.Run;
 end;
 
+{$Push}{$Hints off}
 procedure TLightData.BindOffscreenTargets(const Args: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
@@ -1711,6 +1719,7 @@ begin
     App.BackBuffer.Ptr.SwapChain.Ptr.Height / App.DeferredBuffer.Ptr.HeightRT
   );
 end;
+{$Pop}
 
 procedure TLightData.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
 begin
@@ -1886,6 +1895,7 @@ begin
   Uniforms^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
 end;
 
+{$Push}{$Hints off}
 procedure TFullscreenQuad.BindOffscreenTargets(const Args: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
@@ -1930,6 +1940,7 @@ begin
   end;
   DescriptorSets.Ptr.UpdateSets(Writes, []);
 end;
+{$Pop}
 
 procedure TFullscreenQuad.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
 begin
@@ -2052,10 +2063,12 @@ begin
   inherited Create;
 end;
 
+{$Push}{$Hints off}
 procedure TLabApp.UpdateRenderTargets(const Params: array of const);
 begin
   OnBindOffscreenTargets.Call([]);
 end;
+{$Pop}
 
 procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
@@ -2086,8 +2099,6 @@ begin
 end;
 
 procedure TLabApp.TransferBuffers;
-  var i: Integer;
-  var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
 begin
   Cmd.Ptr.RecordBegin;
   OnStage.Call([Cmd.Ptr]);
@@ -2153,7 +2164,6 @@ end;
 
 procedure TLabApp.Loop;
   var cur_buffer: TVkUInt32;
-  var r: TVkResult;
 begin
   TLabVulkan.IsActive := Window.Ptr.IsActive;
   UpdateTransforms;

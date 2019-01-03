@@ -215,7 +215,7 @@ type
 
   TLabApp = class (TLabVulkan)
   public
-    var Window: TLabWindow;
+    var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
@@ -535,12 +535,14 @@ begin
     VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
+  {$Push}{$Hints off}
   if VertexStaging.Ptr.Map(map) then
   begin
     Move(light_vertices, map^, SizeOf(light_vertices));
     VertexStaging.Ptr.FlushAll;
     VertexStaging.Ptr.Unmap;
   end;
+  {$Pop}
   IndexBuffer := TLabIndexBuffer.Create(
     App.Device, Length(light_indices), VK_INDEX_TYPE_UINT16,
     TVkFlags(VK_BUFFER_USAGE_INDEX_BUFFER_BIT) or TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT),
@@ -711,6 +713,7 @@ begin
   ComputeTask.Run;
 end;
 
+{$Push}{$Hints off}
 procedure TLightData.BindOffscreenTargets(const Args: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
@@ -761,6 +764,7 @@ begin
     App.SwapChain.Ptr.Height / App.HeightRT
   );
 end;
+{$Pop}
 
 procedure TLightData.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
 begin
@@ -919,6 +923,7 @@ begin
   Uniforms^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
 end;
 
+{$Push}{$Hints off}
 procedure TFullscreenQuad.BindOffscreenTargets(const Args: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
@@ -963,6 +968,7 @@ begin
   end;
   DescriptorSets.Ptr.UpdateSets(Writes, []);
 end;
+{$Pop}
 
 procedure TFullscreenQuad.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
 begin
@@ -1207,7 +1213,7 @@ begin
   SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
+    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Ptr.Width, Window.Ptr.Height);
   end;
   WidthRT := LabMakePOT(LabMax(App.SwapChain.Ptr.Width, 1));
   HeightRT := LabMakePOT(LabMax(App.SwapChain.Ptr.Height, 1));
@@ -1374,7 +1380,7 @@ begin
   fov := LabDegToRad * 20;
   with Transforms do
   begin
-    Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+    Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 8, -10), LabVec3, LabVec3(0, 1, 0));
     World := LabMatRotationY((LabTimeLoopSec(15) / 15) * Pi * 2);
     Clip := LabMat(
@@ -1389,8 +1395,6 @@ begin
 end;
 
 procedure TLabApp.TransferBuffers;
-  var i: Integer;
-  var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
 begin
   Cmd.Ptr.RecordBegin;
   OnStage.Call([Cmd.Ptr]);
@@ -1409,7 +1413,7 @@ end;
 procedure TLabApp.Initialize;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Deferred';
+  Window.Ptr.Caption := 'Vulkan Deferred';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -1452,7 +1456,7 @@ begin
   DescriptorSetsFactory := nil;
   Surface := nil;
   Device := nil;
-  Window.Free;
+  Window := nil;
   Free;
 end;
 
@@ -1468,12 +1472,12 @@ procedure TLabApp.Loop;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
-  TLabVulkan.IsActive := Window.IsActive;
+  TLabVulkan.IsActive := Window.Ptr.IsActive;
   if not TLabVulkan.IsActive
-  or (Window.Mode = wm_minimized)
-  or (Window.Width * Window.Height = 0) then Exit;
-  if (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  or (Window.Ptr.Mode = wm_minimized)
+  or (Window.Ptr.Width * Window.Ptr.Height = 0) then Exit;
+  if (SwapChain.Ptr.Width <> Window.Ptr.Width)
+  or (SwapChain.Ptr.Height <> Window.Ptr.Height) then
   begin
     ResetSwapChain;
   end;
@@ -1495,8 +1499,8 @@ begin
   end;
   cur_buffer := SwapChain.Ptr.CurImage;
   Cmd.Ptr.RecordBegin();
-  Cmd.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  Cmd.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  Cmd.Ptr.SetViewport([LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
+  Cmd.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   Cmd.Ptr.BeginRenderPass(
     RenderPassOffscreen.Ptr, OffscreenTargets[cur_buffer].FrameBuffer.Ptr,
     [LabClearValue(1, 0), LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0, 0, 0, 1.0), LabClearValue(1.0, 0)]

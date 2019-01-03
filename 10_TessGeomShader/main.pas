@@ -40,7 +40,7 @@ type
 
   TLabApp = class (TLabVulkan)
   public
-    var Window: TLabWindow;
+    var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
     var SwapChain: TLabSwapChainShared;
@@ -108,7 +108,7 @@ begin
   SetLength(DepthBuffers, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Width, Window.Height);
+    DepthBuffers[i] := TLabDepthBuffer.Create(Device, Window.Ptr.Width, Window.Ptr.Height);
   end;
   RenderPass := TLabRenderPass.Create(
     Device,
@@ -158,7 +158,6 @@ begin
 end;
 
 procedure TLabApp.SwapchainDestroy;
-  var i: Integer;
 begin
   FrameBuffers := nil;
   DepthBuffers := nil;
@@ -171,7 +170,7 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
 begin
   fov := LabDegToRad * 45;
-  Projection := LabMatProj(fov, Window.Width / Window.Height, 0.1, 100);
+  Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
   View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
   World := LabMatScaling(0.15) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
   Clip := LabMat(
@@ -208,7 +207,7 @@ procedure TLabApp.Initialize;
   var map: PVkVoid;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Caption := 'Vulkan Tesselation and Geometry Shader';
+  Window.Ptr.Caption := 'Vulkan Tesselation and Geometry Shader';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -351,7 +350,7 @@ begin
   CmdPool := nil;
   Surface := nil;
   Device := nil;
-  Window.Free;
+  Window := nil;
   Free;
 end;
 
@@ -359,12 +358,12 @@ procedure TLabApp.Loop;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
-  TLabVulkan.IsActive := Window.IsActive;
+  TLabVulkan.IsActive := Window.Ptr.IsActive;
   if not TLabVulkan.IsActive
-  or (Window.Mode = wm_minimized)
-  or (Window.Width * Window.Height = 0) then Exit;
-  if (SwapChain.Ptr.Width <> Window.Width)
-  or (SwapChain.Ptr.Height <> Window.Height) then
+  or (Window.Ptr.Mode = wm_minimized)
+  or (Window.Ptr.Width * Window.Ptr.Height = 0) then Exit;
+  if (SwapChain.Ptr.Width <> Window.Ptr.Width)
+  or (SwapChain.Ptr.Height <> Window.Ptr.Height) then
   begin
     Device.Ptr.WaitIdle;
     SwapchainDestroy;
@@ -397,8 +396,8 @@ begin
     0, [DescriptorSets.Ptr.VkHandle[0]], []
   );
   CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Width, Window.Height)]);
-  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Width, Window.Height)]);
+  CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
+  CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   CmdBuffer.Ptr.Draw(12 * 3);
   CmdBuffer.Ptr.BindPipeline(PipelineGeom.Ptr);
   CmdBuffer.Ptr.Draw(12 * 3);
