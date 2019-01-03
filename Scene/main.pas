@@ -1093,7 +1093,7 @@ begin
   begin
     Move(UniformArrayInstance.Ptr.Data^, UniformBufferInstanceMap^, UniformArrayInstance.Ptr.DataSize);
     UniformBufferInstance.Ptr.FlushMappedMemoryRanges(
-      [LabMappedMemoryRange(UniformBufferInstance.Ptr.Memory, 0, UniformBufferInstance.Ptr.Size)]
+      [LabMappedMemoryRange(UniformBufferInstance.Ptr.Memory, 0, VK_WHOLE_SIZE)]
     );
   end;
 end;
@@ -2077,7 +2077,7 @@ begin
   fov := LabDegToRad * 45;
   with Transforms do
   begin
-    Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
+    Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 1, 100);
     if Assigned(Scene.Ptr.CameraInst) then
     begin
       View := Scene.Ptr.CameraInst.View;
