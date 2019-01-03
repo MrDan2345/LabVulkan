@@ -102,6 +102,13 @@ type
   end;
   PLabSceneShaderSkinInfo = ^TLabSceneShaderSkinInfo;
 
+  TLabSceneShaderDeferredInfo = record
+    DepthOutput: TVkUInt8;
+    ColorOutput: TVkUInt8;
+    NormalsOutlput: TVkUInt8;
+  end;
+  PLabSceneShaderDeferredInfo = ^TLabSceneShaderDeferredInfo;
+
   TLabSceneShaderFactory = class (TLabClass)
   public
     const SemanticMap: array[0..5] of record
@@ -121,7 +128,8 @@ type
       const ADevice: TLabDeviceShared;
       const Desc: array of TLabColladaVertexAttribute;
       const Parameters: array of TLabSceneShaderParameter;
-      const SkinInfo: PLabSceneShaderSkinInfo = nil
+      const SkinInfo: PLabSceneShaderSkinInfo = nil;
+      const DeferredInfo: PLabSceneShaderDeferredInfo = nil
     ): TLabSceneShader;
   end;
 
@@ -262,10 +270,12 @@ type
     var _Scene: TLabScene;
     var _Image: TLabImageData;
     var _UserData: TObject;
+    var _Path: String;
   public
     property Scene: TLabScene read _Scene;
     property Image: TLabImageData read _Image;
     property UserData: TObject read _UserData write _UserData;
+    property Path: String read _Path;
     constructor Create(const AScene: TLabScene; const ColladaImage: TLabColladaImage);
     destructor Destroy; override;
   end;
@@ -766,7 +776,8 @@ class function TLabSceneShaderFactory.MakeShader(
   const ADevice: TLabDeviceShared;
   const Desc: array of TLabColladaVertexAttribute;
   const Parameters: array of TLabSceneShaderParameter;
-  const SkinInfo: PLabSceneShaderSkinInfo
+  const SkinInfo: PLabSceneShaderSkinInfo;
+  const DeferredInfo: PLabSceneShaderDeferredInfo = nil
 ): TLabSceneShader;
   const ParameterDescriptorRemap: array[0..2] of TVkDescriptorType = (
     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -810,6 +821,7 @@ class function TLabSceneShaderFactory.MakeShader(
   var has_normal, has_tangent, has_binormal, tangent_space: Boolean;
 begin
   Result := TLabSceneShader.Create;
+//Vertex Shader
   binding := 0;
   StrAttrIn := '';
   StrAttrOut := '';
@@ -912,8 +924,9 @@ begin
   Code := LabStrReplace(Code, '<$attribs$>', StrAttrIn + StrAttrOut);
   Code := LabStrReplace(Code, '<$code$>', StrCode);
   Result.VertexShader := TLabSceneVertexShader.FindOrCreate(ADevice, Code);
-  StrAttr := '';
 
+//Pixel Shader
+  StrAttr := '';
   if Assigned(SkinInfo) then
   begin
     //StrAttr += 'layout (location = 10) in vec4 tmp_color;'#$D#$A;
@@ -1000,20 +1013,40 @@ begin
     StrCode += '  mat3 tbn = mat3(tangent, -binormal, normal);'#$D#$A;
     StrCode += '  normal = normalize(tbn * (texture(' + TexNormal + ', tex_coord).xyz * 2 - 1));'#$D#$A;
   end;
-  if has_normal then
-  begin
-    //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
-    StrCode += '  vec3 light = 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, 1))), 0, 1), 1.5) * vec3(1, 1, 1);'#$D#$A;
-    StrCode += '  light += clamp(dot(normal, normalize(vec3(-1, -1, -1))), 0, 1) * vec3(0.1, 0.1, 0.5);'#$D#$A;
-    StrCode += '  color.xyz *= light;'#$D#$A;
-  end;
-  StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
   if (Length(TexColor) > 0)
   and (Length(TexCoord) > 0) then
   begin
     StrCode += '  color *= texture(' + TexColor + ', tex_coord);'#$D#$A;
   end;
-  StrCode += '  out_color = color;'#$D#$A;
+
+  if Assigned(DeferredInfo) then
+  begin
+    StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.DepthOutput) + ') out float out_depth;'#$D#$A;
+    StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.ColorOutput) + ') out vec4 out_color;'#$D#$A;
+    StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.NormalsOutlput) + ') out vec4 out_normal;'#$D#$A;
+    StrCode += '  out_depth = gl_FragCoord.z;'#$D#$A;
+    StrCode += '  out_color = color;'#$D#$A;
+    if has_normal then
+    begin
+      StrCode += '  out_normal = vec4(normal, 1);'#$D#$A;
+    end
+    else
+    begin
+      StrCode += '  out_normal = vec4(0, 0, 0, 1);'#$D#$A;
+    end;
+  end
+  else
+  begin
+    StrAttr += 'layout (location = 0) out vec4 out_color;'#$D#$A;
+    if has_normal and not Assigned(DeferredInfo) then
+    begin
+      //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
+      StrCode += '  vec3 light = 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, 1))), 0, 1), 1.5) * vec3(1, 1, 1);'#$D#$A;
+      StrCode += '  light += clamp(dot(normal, normalize(vec3(-1, -1, -1))), 0, 1) * vec3(0.1, 0.1, 0.5);'#$D#$A;
+      StrCode += '  color.xyz *= light;'#$D#$A;
+    end;
+    StrCode += '  out_color = color;'#$D#$A;
+  end;
 
   if Assigned(SkinInfo) then
   begin
@@ -2006,15 +2039,14 @@ constructor TLabSceneImage.Create(
   const AScene: TLabScene;
   const ColladaImage: TLabColladaImage
 );
-  var Path: String;
 begin
   _Scene := AScene;
   ColladaImage.UserData := Self;
   _Image := TLabImageDataPNG.Create;
-  Path := AScene.ResolvePath(AnsiString(ColladaImage.Source));
-  if FileExists(Path) then
+  _Path := AScene.ResolvePath(AnsiString(ColladaImage.Source));
+  if FileExists(_Path) then
   begin
-    _Image.Load(Path);
+    _Image.Load(_Path);
   end;
 end;
 

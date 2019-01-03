@@ -112,7 +112,9 @@ type
   public
     property CallbackCount: TVkInt32 read GetCallbackCount;
     procedure Add(const Callback: TCallback);
+    procedure Add(const Callbacks: array of TCallback);
     procedure Remove(const Callback: TCallback);
+    procedure Remove(const Callbacks: array of TCallback);
     procedure Call(const Args: array of const);
     procedure Clear;
   end;
@@ -826,6 +828,12 @@ begin
   _Func[High(_Func)] := Callback;
 end;
 
+procedure TLabDelegate.Add(const Callbacks: array of TCallback);
+  var i: TVkInt32;
+begin
+  for i := 0 to High(Callbacks) do Add(Callbacks[i]);
+end;
+
 procedure TLabDelegate.Remove(const Callback: TCallback);
   var i, j: TVkInt32;
 begin
@@ -839,6 +847,12 @@ begin
     SetLength(_Func, Length(_Func) - 1);
     Exit;
   end;
+end;
+
+procedure TLabDelegate.Remove(const Callbacks: array of TCallback);
+  var i: TVkInt32;
+begin
+  for i := 0 to High(Callbacks) do Remove(Callbacks[i]);
 end;
 
 procedure TLabDelegate.Call(const Args: array of const);

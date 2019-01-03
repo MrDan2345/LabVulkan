@@ -13,7 +13,7 @@ uses
 type
   TLabSurface = class (TLabClass)
   private
-    var _Window: TLabWindow;
+    var _Window: TLabWindowShared;
     var _Handle: TVkSurfaceKHR;
     function GetWidth: Integer; inline;
     function GetHeight: Integer; inline;
@@ -22,7 +22,7 @@ type
     property VkHandle: TVkSurfaceKHR read _Handle;
     property Width: Integer read GetWidth;
     property Height: Integer read GetHeight;
-    constructor Create(const AWindow: TLabWindow);
+    constructor Create(const AWindow: TLabWindowShared);
     destructor Destroy; override;
   end;
   TLabSurfaceShared = specialize TLabSharedRef<TLabSurface>;
@@ -31,12 +31,12 @@ implementation
 
 function TLabSurface.GetWidth: Integer;
 begin
-  Result := _Window.Width;
+  Result := _Window.Ptr.Width;
 end;
 
 function TLabSurface.GetHeight: Integer;
 begin
-  Result := _Window.Height;
+  Result := _Window.Ptr.Height;
 end;
 
 class function TLabSurface.GetSurfacePlatformExtension: AnsiString;
@@ -52,7 +52,7 @@ begin
 {$endif}
 end;
 
-constructor TLabSurface.Create(const AWindow: TLabWindow);
+constructor TLabSurface.Create(const AWindow: TLabWindowShared);
   var r: TVkResult;
 {$if defined(Platform_Windows)}
   var create_info: TVkWin32SurfaceCreateInfoKHR;
@@ -69,8 +69,8 @@ begin
 {$Pop}
   create_info.sType := VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
   create_info.pNext := nil;
-  create_info.hinstance_ := _Window.WndClass.hInstance;
-  create_info.hwnd_ := _Window.Handle;
+  create_info.hinstance_ := _Window.Ptr.WndClass.hInstance;
+  create_info.hwnd_ := _Window.Ptr.Handle;
   r := Vulkan.CreateWin32SurfaceKHR(VulkanInstance, @create_info, nil, @_Handle);
   LabAssertVkError(r);
 {$elseif defined(__ANDROID__)}

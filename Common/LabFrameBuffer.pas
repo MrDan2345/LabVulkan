@@ -15,6 +15,7 @@ type
   TLabFrameBuffer = class (TLabClass)
   private
     var _Device: TLabDeviceShared;
+    var _RenderPass: TLabRenderPassShared;
     var _Handle: TVkFramebuffer;
     var _Width: TVkInt32;
     var _Height: TVkInt32;
@@ -24,7 +25,7 @@ type
     property Height: TVkInt32 read _Height;
     constructor Create(
       const ADevice: TLabDeviceShared;
-      const ARenderPass: TLabRenderPass;
+      const ARenderPass: TLabRenderPassShared;
       const AWidth: TVkInt32;
       const AHeight: TVkInt32;
       const Attachments: array of TVkImageView
@@ -45,18 +46,21 @@ function LabFrameBuffers(
 
 implementation
 
-constructor TLabFrameBuffer.Create(const ADevice: TLabDeviceShared;
-  const ARenderPass: TLabRenderPass; const AWidth: TVkInt32;
-  const AHeight: TVkInt32; const Attachments: array of TVkImageView);
+constructor TLabFrameBuffer.Create(
+  const ADevice: TLabDeviceShared;
+  const ARenderPass: TLabRenderPassShared; const AWidth: TVkInt32;
+  const AHeight: TVkInt32; const Attachments: array of TVkImageView
+);
   var frame_buffer_info: TVkFramebufferCreateInfo;
 begin
   LabLog('TLabFrameBuffer.Create');
   _Device := ADevice;
+  _RenderPass := ARenderPass;
   _Width := AWidth;
   _Height := AHeight;
   LabZeroMem(@frame_buffer_info, SizeOf(frame_buffer_info));
   frame_buffer_info.sType := VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  frame_buffer_info.renderPass := ARenderPass.VkHandle;
+  frame_buffer_info.renderPass := _RenderPass.Ptr.VkHandle;
   frame_buffer_info.attachmentCount := Length(Attachments);
   frame_buffer_info.pAttachments := @Attachments[0];
   frame_buffer_info.width := _Width;

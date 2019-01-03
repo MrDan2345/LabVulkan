@@ -16,7 +16,7 @@ layout (location = 2) out vec4 out_normal;
 void main() {
   mat3 tbn = mat3(normalize(in_tangent), normalize(in_binormal), normalize(in_normal));
   vec3 normal = normalize(tbn * (texture(tex_normal, in_tc0).xyz * 2 - 1));
-  out_depth = (in_pos.z / in_pos.w);
+  out_depth = gl_FragCoord.z;
   out_color = texture(tex_color, in_tc0);
   out_normal = vec4(normal, 1);
 }
