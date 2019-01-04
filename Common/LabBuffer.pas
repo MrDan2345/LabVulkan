@@ -370,9 +370,22 @@ constructor TLabUniformBuffer.Create(
   const ABufferSize: TVkDeviceSize;
   const AMemoryFlags: TVkFlags
 );
+  var alloc_size: TVkDeviceSize;
 begin
+  alloc_size := ADevice.Ptr.PhysicalDevice.Ptr.Properties^.limits.nonCoherentAtomSize;
+  if ABufferSize < alloc_size then
+  begin
+  end
+  else if ABufferSize mod alloc_size > 0 then
+  begin
+    alloc_size := (ABufferSize div alloc_size + 1) * alloc_size;
+  end
+  else
+  begin
+    alloc_size := ABufferSize;
+  end;
   inherited Create(
-    ADevice, ABufferSize, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), [],
+    ADevice, alloc_size, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), [],
     VK_SHARING_MODE_EXCLUSIVE, AMemoryFlags
   );
 end;

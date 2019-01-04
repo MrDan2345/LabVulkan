@@ -17,16 +17,18 @@ void main() {
 	vec2 sc = gl_FragCoord.xy * data.screen_ratio.xy;
 	vec2 tc = sc * data.screen_ratio.zw;
 	
-	float depth = texture(tex_depth, tc).x;
-	vec4 color = texture(tex_color, tc);
-	vec3 normal = normalize(texture(tex_normal, tc).xyz);
+	float depth = textureLod(tex_depth, tc, 0).x;
+	vec4 color = textureLod(tex_color, tc, 0);
+	vec3 normal = normalize(textureLod(tex_normal, tc, 0).xyz);
 	
 	vec4 pos_s = vec4(sc * 2 - 1, depth, 1);
 	vec4 pos_w = data.vp_i * pos_s;
 	pos_w *= (1 / pos_w.w);
 
 	vec3 pos_to_light = light_pos.xyz - pos_w.xyz;
-	float light_att = 1 - smoothstep(light_pos.w * 0.1, light_pos.w, length(pos_to_light));
+	float dist = length(pos_to_light);
+	if (dist > light_pos.w) discard;
+	float light_att = 1 - smoothstep(light_pos.w * 0.1, light_pos.w, dist);
 	pos_to_light = normalize(pos_to_light);
 	vec4 diffuse_light = dot(normal, pos_to_light) * light_att * light_color;
 	

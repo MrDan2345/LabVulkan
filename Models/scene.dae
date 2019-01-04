@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.79.0 commit date:2018-03-22, commit time:14:10, hash:f4dc9f9d68b</authoring_tool>
     </contributor>
-    <created>2018-12-25T18:18:45</created>
-    <modified>2018-12-25T18:18:45</modified>
+    <created>2019-01-04T17:59:57</created>
+    <modified>2019-01-04T17:59:57</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -35,10 +35,10 @@
     <light id="Lamp-light" name="Lamp">
       <technique_common>
         <point>
-          <color sid="color">1 1 1</color>
+          <color sid="color">1.5 1.5 1.5</color>
           <constant_attenuation>1</constant_attenuation>
           <linear_attenuation>0</linear_attenuation>
-          <quadratic_attenuation>0.00111109</quadratic_attenuation>
+          <quadratic_attenuation>1.20071e-4</quadratic_attenuation>
         </point>
       </technique_common>
       <extra>
@@ -53,8 +53,8 @@
           <shadow_r sid="blender_shadow_r" type="float">0</shadow_r>
           <shadow_g sid="blender_shadow_g" type="float">0</shadow_g>
           <shadow_b sid="blender_shadow_b" type="float">0</shadow_b>
-          <energy sid="blender_energy" type="float">1</energy>
-          <dist sid="blender_dist" type="float">29.99998</dist>
+          <energy sid="blender_energy" type="float">1.5</energy>
+          <dist sid="blender_dist" type="float">91.25998</dist>
           <spotsize sid="spotsize" type="float">75</spotsize>
           <spotblend sid="spotblend" type="float">0.15</spotblend>
           <halo_intensity sid="blnder_halo_intensity" type="float">1</halo_intensity>
@@ -125,6 +125,12 @@
     </image>
     <image id="marble_n_png" name="marble_n_png">
       <init_from>marble_n.png</init_from>
+    </image>
+    <image id="clouds_c_png" name="clouds_c_png">
+      <init_from>clouds_c.png</init_from>
+    </image>
+    <image id="clouds_n_png" name="clouds_n_png">
+      <init_from>clouds_n.png</init_from>
     </image>
   </library_images>
   <library_effects>
@@ -340,6 +346,62 @@
         </technique>
       </profile_COMMON>
     </effect>
+    <effect id="clouds_mat-effect">
+      <profile_COMMON>
+        <newparam sid="clouds_c_png-surface">
+          <surface type="2D">
+            <init_from>clouds_c_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="clouds_c_png-sampler">
+          <sampler2D>
+            <source>clouds_c_png-surface</source>
+          </sampler2D>
+        </newparam>
+        <newparam sid="clouds_n_png-surface">
+          <surface type="2D">
+            <init_from>clouds_n_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="clouds_n_png-sampler">
+          <sampler2D>
+            <source>clouds_n_png-surface</source>
+          </sampler2D>
+        </newparam>
+        <technique sid="common">
+          <phong>
+            <emission>
+              <color sid="emission">0 0 0 1</color>
+            </emission>
+            <ambient>
+              <color sid="ambient">0 0 0 1</color>
+            </ambient>
+            <diffuse>
+              <texture texture="clouds_c_png-sampler"/>
+            </diffuse>
+            <specular>
+              <color sid="specular">0.5 0.5 0.5 1</color>
+            </specular>
+            <shininess>
+              <float sid="shininess">50</float>
+            </shininess>
+            <transparent opaque="A_ONE">
+              <texture texture="clouds_c_png-sampler"/>
+            </transparent>
+            <index_of_refraction>
+              <float sid="index_of_refraction">1</float>
+            </index_of_refraction>
+          </phong>
+          <extra>
+            <technique profile="FCOLLADA">
+              <bump>
+                <texture texture="clouds_n_png-sampler"/>
+              </bump>
+            </technique>
+          </extra>
+        </technique>
+      </profile_COMMON>
+    </effect>
   </library_effects>
   <library_materials>
     <material id="brick_mat-material" name="brick_mat">
@@ -353,6 +415,9 @@
     </material>
     <material id="marble_mat-material" name="marble_mat">
       <instance_effect url="#marble_mat-effect"/>
+    </material>
+    <material id="clouds_mat-material" name="clouds_mat">
+      <instance_effect url="#clouds_mat-effect"/>
     </material>
   </library_materials>
   <library_geometries>
@@ -734,6 +799,48 @@
         </triangles>
       </mesh>
     </geometry>
+    <geometry id="Plane_001-mesh" name="Plane.001">
+      <mesh>
+        <source id="Plane_001-mesh-positions">
+          <float_array id="Plane_001-mesh-positions-array" count="12">-1 -1 0 1 -1 0 -1 1 0 1 1 0</float_array>
+          <technique_common>
+            <accessor source="#Plane_001-mesh-positions-array" count="4" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Plane_001-mesh-normals">
+          <float_array id="Plane_001-mesh-normals-array" count="3">0 0 1</float_array>
+          <technique_common>
+            <accessor source="#Plane_001-mesh-normals-array" count="1" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Plane_001-mesh-map-0">
+          <float_array id="Plane_001-mesh-map-0-array" count="12">0.9999001 9.998e-5 9.998e-5 0.9999001 1.0004e-4 9.998e-5 0.9999001 9.998e-5 0.9999001 0.9999001 9.998e-5 0.9999001</float_array>
+          <technique_common>
+            <accessor source="#Plane_001-mesh-map-0-array" count="6" stride="2">
+              <param name="S" type="float"/>
+              <param name="T" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="Plane_001-mesh-vertices">
+          <input semantic="POSITION" source="#Plane_001-mesh-positions"/>
+        </vertices>
+        <triangles material="clouds_mat-material" count="2">
+          <input semantic="VERTEX" source="#Plane_001-mesh-vertices" offset="0"/>
+          <input semantic="NORMAL" source="#Plane_001-mesh-normals" offset="1"/>
+          <input semantic="TEXCOORD" source="#Plane_001-mesh-map-0" offset="2" set="0"/>
+          <p>1 0 0 2 0 1 0 0 2 1 0 3 3 0 4 2 0 5</p>
+        </triangles>
+      </mesh>
+    </geometry>
   </library_geometries>
   <library_controllers/>
   <library_visual_scenes>
@@ -743,7 +850,7 @@
         <instance_camera url="#Camera-camera"/>
       </node>
       <node id="Lamp" name="Lamp" type="NODE">
-        <matrix sid="transform">-0.2908646 -0.7711008 0.5663932 -2.153704 0.9551712 -0.1998834 0.2183912 1.403991 -0.05518906 0.6045247 0.7946723 9.516667 0 0 0 1</matrix>
+        <matrix sid="transform">-0.2908646 -0.7711008 0.5663932 5.857382 0.9551712 -0.1998834 0.2183912 -6.125964 -0.05518906 0.6045247 0.7946723 9.516667 0 0 0 1</matrix>
         <instance_light url="#Lamp-light"/>
       </node>
       <node id="Plane" name="Plane" type="NODE">
@@ -832,6 +939,16 @@
           <bind_material>
             <technique_common>
               <instance_material symbol="marble_mat-material" target="#marble_mat-material"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+      <node id="Plane_001" name="Plane_001" type="NODE">
+        <matrix sid="transform">1.00366e-7 0.5418592 -1.213938 4.478611 0 1.213938 0.5418592 -0.9321961 1.329382 -4.09092e-8 9.16498e-8 2.290509 0 0 0 1</matrix>
+        <instance_geometry url="#Plane_001-mesh" name="Plane_001">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="clouds_mat-material" target="#clouds_mat-material"/>
             </technique_common>
           </bind_material>
         </instance_geometry>

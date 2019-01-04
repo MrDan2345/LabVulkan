@@ -1007,7 +1007,7 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  Scene.Add('../Models/maya/maya_anim.dae');
+  //Scene.Add('../Models/maya/maya_anim.dae');
   //Scene.Add('../Models/box.dae');
   //Scene.Add('../Models/skin.dae');
   ProcessScene;
@@ -1121,8 +1121,6 @@ procedure TLabApp.Loop;
         begin
           cur_pipeline := TLabGraphicsPipeline(r_p.Pipeline.Ptr);
           CmdBuffer.Ptr.BindPipeline(cur_pipeline);
-          CmdBuffer.Ptr.SetViewport([Viewport]);
-          CmdBuffer.Ptr.SetScissor([Scissor]);
         end;
         CmdBuffer.Ptr.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1203,6 +1201,8 @@ begin
     ]
   );
   cur_pipeline := nil;
+  CmdBuffer.Ptr.SetViewport([Viewport]);
+  CmdBuffer.Ptr.SetScissor([Scissor]);
   RenderNode(Scene.Root);
   DebugDraw.Draw(CmdBuffer.Ptr, PipelineCache.Ptr, RenderPass.Ptr, Viewport, SampleCount);
   CmdBuffer.Ptr.EndRenderPass;

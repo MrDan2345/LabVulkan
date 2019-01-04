@@ -52,6 +52,7 @@ type
     var View: TLabImageViewShared;
     var Sampler: TLabSamplerShared;
     var MipLevels: TVkUInt32;
+    var Alpha: Boolean;
     constructor Create(const FileName: String);
     constructor Create(const ImageData: TLabImageData);
     destructor Destroy; override;
@@ -1367,6 +1368,14 @@ constructor TTexture.Create(const ImageData: TLabImageData);
   var x, y: TVkInt32;
 begin
   MipLevels := LabIntLog2(LabMakePOT(LabMax(ImageData.Width, ImageData.Height))) + 1;
+  Alpha := False;
+  for y := 0 to ImageData.Height - 1 do
+  for x := 0 to ImageData.Width - 1 do
+  if ImageData.Pixels[x, y].a < $ff then
+  begin
+    Alpha := True;
+    Break;
+  end;
   Image := TLabImage.Create(
     App.Device,
     VK_FORMAT_R8G8B8A8_UNORM,
