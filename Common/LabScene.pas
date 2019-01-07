@@ -79,7 +79,7 @@ type
   TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
 
   TLabSceneShaderParameterType = (spt_uniform = 0, spt_uniform_dynamic, spt_image);
-  TLabSceneShaderParameterSemantic = (sps_color_map, sps_normal_map);
+  TLabSceneShaderParameterSemantic = (sps_color_map, sps_normal_map, sps_dither_mask);
   TLabSceneShaderParameterSemanticSet = set of TLabSceneShaderParameterSemantic;
   TLabSceneShaderParameter = record
     ShaderStage: TVkShaderStageFlags;
@@ -105,7 +105,7 @@ type
   TLabSceneShaderDeferredInfo = record
     DepthOutput: TVkUInt8;
     ColorOutput: TVkUInt8;
-    NormalsOutlput: TVkUInt8;
+    NormalsOutlput: TVkUInt8
   end;
   PLabSceneShaderDeferredInfo = ^TLabSceneShaderDeferredInfo;
 
@@ -814,6 +814,7 @@ class function TLabSceneShaderFactory.MakeShader(
   var binding, i, loc, loc_in, loc_out, samp: Integer;
   var TexColor: String;
   var TexNormal: String;
+  var TexDitherMask: String;
   var TexCoord: String;
   var Bindings: array of TVkDescriptorSetLayoutBinding;
   var DescPoolSizes: array of TVkDescriptorPoolSize;
@@ -934,6 +935,7 @@ begin
 
   TexColor := '';
   TexNormal := '';
+  TexDitherMask := '';
   TexCoord := '';
   samp := 0;
   for i := 0 to High(Parameters) do
@@ -946,6 +948,10 @@ begin
     if (sps_normal_map in Parameters[i].Semantics) then
     begin
       TexNormal := 'tex_sampler' + IntToStr(samp);
+    end;
+    if (sps_dither_mask in Parameters[i].Semantics) then
+    begin
+      TexDitherMask := 'tex_sampler' + IntToStr(samp);
     end;
     StrAttr += 'layout (binding = ' + IntToStr(binding) + ') uniform sampler2D tex_sampler' + IntToStr(samp) + ';'#$D#$A;
     Inc(binding);
@@ -1024,6 +1030,11 @@ begin
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.DepthOutput) + ') out float out_depth;'#$D#$A;
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.ColorOutput) + ') out vec4 out_color;'#$D#$A;
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.NormalsOutlput) + ') out vec4 out_normal;'#$D#$A;
+    if Length(TexDitherMask) > 0 then
+    begin
+      StrCode += '  vec4 dither_mask = textureLod(' + TexDitherMask + ', gl_FragCoord.xy * (1.0 / 16.0), 0);'#$D#$A;
+      StrCode += '  if (color.w - dither_mask.x < 0.0) discard;'#$D#$A;
+    end;
     StrCode += '  out_depth = gl_FragCoord.z;'#$D#$A;
     StrCode += '  out_color = color;'#$D#$A;
     if has_normal then

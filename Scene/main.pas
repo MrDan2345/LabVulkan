@@ -53,8 +53,8 @@ type
     var Sampler: TLabSamplerShared;
     var MipLevels: TVkUInt32;
     var Alpha: Boolean;
-    constructor Create(const FileName: String);
-    constructor Create(const ImageData: TLabImageData);
+    constructor Create(const FileName: String; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
+    constructor Create(const ImageData: TLabImageData; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
     destructor Destroy; override;
   end;
   TTextureShared = specialize TLabSharedRef<TTexture>;
@@ -359,6 +359,7 @@ type
     var Scene: TSceneShared;
     var ScreenQuad: TFullscreenQuadShared;
     var LightData: TLightDataShared;
+    var DitherMask: TTextureShared;
     var OnStage: TLabDelegate;
     var OnStageComplete: TLabDelegate;
     var OnUpdateTransforms: TLabDelegate;
@@ -387,11 +388,24 @@ procedure TScene.TInstanceData.SetupRenderPasses(
   const Skin: TLabSceneControllerSkin;
   const MaterialBindings: TLabSceneMaterialBindingList
 );
-  var i, j, pc: Integer;
-  var r_s: TLabSceneGeometry.TSubset;
+  var pc: TVkInt32;
   var Pass: TPass;
-  var Image: TTexture;
   var Params: TLabSceneShaderParameters;
+  procedure AddParamImage(const Image: TTexture; const Semantics: TLabSceneShaderParameterSemanticSet);
+  begin
+    SetLength(Pass.Images, Length(Pass.Images) + 1);
+    Pass.Images[High(Pass.Images)] := Image;
+    Params[pc] := LabSceneShaderParameterImage(
+      Image.View.Ptr.VkHandle,
+      Image.Sampler.Ptr.VkHandle,
+      Semantics,
+      TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+    );
+    Inc(pc);
+  end;
+  var i, j: TVkInt32;
+  var r_s: TLabSceneGeometry.TSubset;
+  var Image: TTexture;
   var SkinInfo: TLabSceneShaderSkinInfo;
   var DeferredInfo: TLabSceneShaderDeferredInfo;
   var si_ptr: PLabSceneShaderSkinInfo;
@@ -414,7 +428,8 @@ begin
   begin
     r_s := Geom.Subsets[i];
     Pass := TPass.Create;
-    pc := 1;
+    pc := 1;//uniform buffer;
+    pc += 1;//dither mask
     if Assigned(Skin) then Inc(pc);
     for j := 0 to MaterialBindings.Count - 1 do
     if r_s.Material = MaterialBindings[j].Symbol then
@@ -452,17 +467,10 @@ begin
         if Pos('_c_', Pass.Material.Effect.Params[j].Name) > 0 then sem += [sps_color_map];
         if Pos('_n_', Pass.Material.Effect.Params[j].Name) > 0 then sem += [sps_normal_map];
         Image := TTexture(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
-        SetLength(Pass.Images, Length(Pass.Images) + 1);
-        Pass.Images[High(Pass.Images)] := Image;
-        Params[pc] := LabSceneShaderParameterImage(
-          Image.View.Ptr.VkHandle,
-          Image.Sampler.Ptr.VkHandle,
-          sem,
-          TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
-        );
-        Inc(pc);
+        AddParamImage(Image, sem);
       end;
     end;
+    AddParamImage(App.DitherMask.Ptr, [sps_dither_mask]);
     Pass.GeomSubset := r_s;
     if Assigned(Skin) then
     begin
@@ -1250,7 +1258,8 @@ end;
 
 procedure TTexture.Stage(const Args: array of const);
   var Cmd: TLabCommandBuffer;
-  var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height, i: TVkUInt32;
+  var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
+  var i: TVkInt32;
 begin
   Cmd := TLabCommandBuffer(Args[0].VObject);
   Cmd.PipelineBarrier(
@@ -1353,21 +1362,46 @@ begin
 end;
 {$Pop}
 
-constructor TTexture.Create(const FileName: String);
+constructor TTexture.Create(const FileName: String; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
   var img: TLabImageDataPNG;
 begin
   img := TLabImageDataPNG.Create;
   img.Load('../Images/' + FileName);
-  Create(img);
+  Create(img, FilterLinear, UseMipMaps);
   img.Free;
 end;
 
-constructor TTexture.Create(const ImageData: TLabImageData);
+constructor TTexture.Create(const ImageData: TLabImageData; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
   var map: PVkVoid;
   var c: PLabColor;
   var x, y: TVkInt32;
+  var Filter: TVkFilter;
+  var MipMapMode: TVkSamplerMipmapMode;
+  var AnisotropyEnabled: TVkBool32;
+  var MaxAnisotropy: TVkFloat;
 begin
-  MipLevels := LabIntLog2(LabMakePOT(LabMax(ImageData.Width, ImageData.Height))) + 1;
+  if UseMipMaps then
+  begin
+    MipLevels := LabIntLog2(LabMakePOT(LabMax(ImageData.Width, ImageData.Height))) + 1;
+    MipMapMode := VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  end
+  else
+  begin
+    MipLevels := 1;
+    MipMapMode := VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  end;
+  if FilterLinear then
+  begin
+    Filter := VK_FILTER_LINEAR;
+    AnisotropyEnabled := VK_TRUE;
+    MaxAnisotropy := 16;
+  end
+  else
+  begin
+    Filter := VK_FILTER_NEAREST;
+    AnisotropyEnabled := VK_FALSE;
+    MaxAnisotropy := 1;
+  end;
   Alpha := False;
   for y := 0 to ImageData.Height - 1 do
   for x := 0 to ImageData.Width - 1 do
@@ -1416,9 +1450,9 @@ begin
     0, MipLevels
   );
   Sampler := TLabSampler.Create(
-    App.Device, VK_FILTER_LINEAR, VK_FILTER_LINEAR,
+    App.Device, Filter, Filter,
     VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    VK_TRUE, 16, VK_SAMPLER_MIPMAP_MODE_LINEAR, 0, 0, MipLevels - 1
+    AnisotropyEnabled, MaxAnisotropy, MipMapMode, 0, 0, MipLevels - 1
   );
   App.OnStage.Add(@Stage);
   App.OnStageComplete.Add(@StageComplete);
@@ -2144,6 +2178,7 @@ begin
   CmdPoolCompute := TLabCommandPool.Create(Device, BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyIndexCompute);
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
+  DitherMask := TTexture.Create('../Images/dither_mask.png', False, False);
   Scene := TScene.Create;
   ScreenQuad := TFullscreenQuad.Create;
   LightData := TLightData.Create;
@@ -2156,6 +2191,7 @@ procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   DeferredBuffer := nil;
+  DitherMask := nil;
   BackBuffer := nil;
   Scene := nil;
   LightData := nil;
