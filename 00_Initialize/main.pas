@@ -261,7 +261,7 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [LabShaderStage(VertexShader.Ptr), LabShaderStage(PixelShader.Ptr)],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(

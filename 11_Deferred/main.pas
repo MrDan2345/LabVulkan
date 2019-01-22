@@ -640,7 +640,12 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr, PixelShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(TessControlShader.Ptr),
+      LabShaderStage(TessEvalShader.Ptr),
+      LabShaderStage(PixelShader.Ptr)
+    ],
     App.RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(
@@ -872,7 +877,7 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [LabShaderStage(VertexShader.Ptr), LabShaderStage(PixelShader.Ptr)],
     App.RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),
@@ -1088,7 +1093,7 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [LabShaderStage(VertexShader.Ptr), LabShaderStage(PixelShader.Ptr)],
     App.RenderPassOffscreen.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),

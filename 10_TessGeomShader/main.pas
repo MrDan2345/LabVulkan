@@ -274,7 +274,12 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(PixelShader.Ptr),
+      LabShaderStage(TessControlShader.Ptr),
+      LabShaderStage(TessEvalShader.Ptr)
+    ],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(
@@ -299,7 +304,13 @@ begin
   PipelineGeom := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr, GeomShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(PixelShader.Ptr),
+      LabShaderStage(TessControlShader.Ptr),
+      LabShaderStage(TessEvalShader.Ptr),
+      LabShaderStage(GeomShader.Ptr)
+    ],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(

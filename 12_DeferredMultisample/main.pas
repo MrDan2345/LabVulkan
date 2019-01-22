@@ -204,15 +204,6 @@ type
   end;
   TCubeShared = specialize TLabSharedRef<TCube>;
 
-  TScene = class (TLabClass)
-  private
-    var Scene: TLabScene;
-  public
-    constructor Create;
-    destructor Destroy; override;
-  end;
-  TSceneShared = specialize TLabSharedRef<TScene>;
-
   TLabApp = class (TLabVulkan)
   public
     var Window: TLabWindowShared;
@@ -240,12 +231,12 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Cube: TCubeShared;
-    var Scene: TSceneShared;
     var ScreenQuad: TFullscreenQuadShared;
     var LightData: TLightDataShared;
     var OnStage: TLabDelegate;
     var OnUpdateTransforms: TLabDelegate;
     var OnBindOffscreenTargets: TLabDelegate;
+    var SampleCount: TVkSampleCountFlagBits;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -265,18 +256,6 @@ var
   App: TLabApp;
 
 implementation
-
-constructor TScene.Create;
-begin
-  Scene := TLabScene.Create(App.Device);
-  Scene.Add('../Models/box.dae');
-end;
-
-destructor TScene.Destroy;
-begin
-  Scene.Free;
-  inherited Destroy;
-end;
 
 constructor TTexture.Create(const FileName: String);
   var img: TLabImageDataPNG;
@@ -517,7 +496,7 @@ constructor TLightData.Create;
   var i: TVkInt32;
   var map: PVkVoid;
 begin
-  InstanceCount := 1024;
+  InstanceCount := 256;
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
     SizeOf(light_vertices), SizeOf(TLightVertex),
@@ -585,7 +564,7 @@ begin
         (Random * 2 - 1) * 6,
         (Random * 2 - 1) * 6,
         (Random * 2 - 1) * 6,
-        0.5 * (Random * 1.5 + 0.2)
+        1.0 * (Random * 1.5 + 0.2)
       );
       PLightInstanceArr(map)^[i].color := LabVec4(
         Random * 0.8 + 0.2, Random * 0.8 + 0.2, Random * 0.8 + 0.2, 1
@@ -640,7 +619,12 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr, PixelShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(TessControlShader.Ptr),
+      LabShaderStage(TessEvalShader.Ptr),
+      LabShaderStage(PixelShader.Ptr, @App.SampleCount, SizeOf(App.SampleCount), LabSpecializationMapEntry(0, 0, SizeOf(App.SampleCount)))
+    ],
     App.RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(
@@ -872,7 +856,7 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [LabShaderStage(VertexShader.Ptr), LabShaderStage(PixelShader.Ptr)],
     App.RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),
@@ -1088,7 +1072,10 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(PixelShader.Ptr)
+    ],
     App.RenderPassOffscreen.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),
@@ -1100,7 +1087,7 @@ begin
       VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL, TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
     ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-    LabPipelineMultisampleState(),
+    LabPipelineMultisampleState(App.SampleCount),
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
     LabPipelineTesselationState(0)
   );
@@ -1174,7 +1161,7 @@ begin
     0, [DescriptorSets.Ptr.VkHandle[0]], []
   );
   Cmd.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
-  Cmd.Draw(12 * 3);
+  Cmd.Draw(24 * 3);
 end;
 
 procedure TRenderTarget.SetupImage(
@@ -1184,7 +1171,7 @@ procedure TRenderTarget.SetupImage(
 begin
   Image := TLabImage.Create(
     App.Device, Format, Usage or TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT), [],
-    App.WidthRT, App.HeightRT, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+    App.WidthRT, App.HeightRT, 1, 1, 1, App.SampleCount, VK_IMAGE_TILING_OPTIMAL,
     VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE, TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   View := TLabImageView.Create(
@@ -1225,7 +1212,7 @@ begin
     OffscreenTargets[i].Normals.SetupImage(VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     OffscreenTargets[i].ZBuffer := TLabDepthBuffer.Create(
       App.Device, App.WidthRT, App.HeightRT, VK_FORMAT_UNDEFINED,
-      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), SampleCount
     );
   end;
   RenderPassOffscreen := TLabRenderPass.Create(
@@ -1234,7 +1221,7 @@ begin
       LabAttachmentDescription(
         OffscreenTargets[0].Depth.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1243,7 +1230,7 @@ begin
       LabAttachmentDescription(
         OffscreenTargets[0].Color.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1252,7 +1239,7 @@ begin
       LabAttachmentDescription(
         OffscreenTargets[0].Normals.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1261,7 +1248,7 @@ begin
       LabAttachmentDescription(
         OffscreenTargets[0].ZBuffer.Ptr.Format,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1380,7 +1367,7 @@ begin
   fov := LabDegToRad * 20;
   with Transforms do
   begin
-    Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
+    Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 1, 1000);
     View := LabMatView(LabVec3(-5, 8, -10), LabVec3, LabVec3(0, 1, 0));
     World := LabMatRotationY((LabTimeLoopSec(15) / 15) * Pi * 2);
     Clip := LabMat(
@@ -1422,6 +1409,13 @@ begin
     ],
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
+  SampleCount := Device.Ptr.PhysicalDevice.Ptr.GetSupportedSampleCount(
+    [
+      VK_SAMPLE_COUNT_8_BIT,
+      VK_SAMPLE_COUNT_4_BIT,
+      VK_SAMPLE_COUNT_2_BIT
+    ]
+  );
   Surface := TLabSurface.Create(Window);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   SwapChainCreate;
@@ -1430,7 +1424,6 @@ begin
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
   Cube := TCube.Create;
-  Scene := TScene.Create;
   ScreenQuad := TFullscreenQuad.Create;
   LightData := TLightData.Create;
   Semaphore := TLabSemaphore.Create(Device);
@@ -1445,7 +1438,6 @@ begin
   SwapchainDestroy;
   LightData := nil;
   ScreenQuad := nil;
-  Scene := nil;
   Cube := nil;
   Fence := nil;
   Semaphore := nil;

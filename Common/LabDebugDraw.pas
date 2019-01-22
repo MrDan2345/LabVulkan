@@ -13,6 +13,7 @@ uses
   LabPipeline,
   LabRenderPass,
   LabScene,
+  LabShader,
   LabColladaParser,
   Classes,
   SysUtils;
@@ -182,7 +183,10 @@ begin
   _Pipeline := TLabGraphicsPipeline.FindOrCreate(
     _Device, PipelineCache, _PipelineLayout,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [_Shader.VertexShader.Ptr.Shader, _Shader.PixelShader.Ptr.Shader],
+    [
+      LabShaderStage(_Shader.VertexShader.Ptr.Shader),
+      LabShaderStage(_Shader.PixelShader.Ptr.Shader)
+    ],
     RenderPass, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(

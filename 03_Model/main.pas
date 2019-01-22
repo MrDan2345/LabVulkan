@@ -27,6 +27,7 @@ uses
   LabSync,
   LabColladaParser,
   LabScene,
+  LabShader,
   LabImageData,
   LabDebugDraw,
   Classes,
@@ -1007,7 +1008,7 @@ begin
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
   Scene := TLabScene.Create(Device);
-  //Scene.Add('../Models/maya/maya_anim.dae');
+  Scene.Add('../Models/maya/maya_anim.dae');
   //Scene.Add('../Models/box.dae');
   //Scene.Add('../Models/skin.dae');
   ProcessScene;
@@ -1099,7 +1100,10 @@ procedure TLabApp.Loop;
           r_p.Pipeline := TLabGraphicsPipeline.FindOrCreate(
             Device, PipelineCache, r_p.PipelineLayout.Ptr,
             [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-            [r_p.Shader.Ptr.VertexShader.Ptr.Shader, r_p.Shader.Ptr.PixelShader.Ptr.Shader],
+            [
+              LabShaderStage(r_p.Shader.Ptr.VertexShader.Ptr.Shader),
+              LabShaderStage(r_p.Shader.Ptr.PixelShader.Ptr.Shader)
+            ],
             RenderPass.Ptr, 0,
             LabPipelineViewportState(),
             LabPipelineInputAssemblyState(),

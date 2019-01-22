@@ -1200,7 +1200,10 @@ procedure TScene.Draw(const Cmd: TLabCommandBuffer);
           r_p.Pipeline := TLabGraphicsPipeline.FindOrCreate(
             App.Device, App.PipelineCache, r_p.PipelineLayout.Ptr,
             [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-            [r_p.Shader.Ptr.VertexShader.Ptr.Shader, r_p.Shader.Ptr.PixelShader.Ptr.Shader],
+            [
+              LabShaderStage(r_p.Shader.Ptr.VertexShader.Ptr.Shader),
+              LabShaderStage(r_p.Shader.Ptr.PixelShader.Ptr.Shader)
+            ],
             App.DeferredBuffer.Ptr.RenderPass.Ptr, 0,
             LabPipelineViewportState(),
             LabPipelineInputAssemblyState(),
@@ -1769,7 +1772,12 @@ begin
   Pipeline := TLabGraphicsPipeline.FindOrCreate(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, TessControlShader.Ptr, TessEvalShader.Ptr, PixelShader.Ptr],
+    [
+      LabShaderStage(VertexShader.Ptr),
+      LabShaderStage(TessControlShader.Ptr),
+      LabShaderStage(TessEvalShader.Ptr),
+      LabShaderStage(PixelShader.Ptr)
+    ],
     App.BackBuffer.Ptr.RenderPass, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(
@@ -1990,7 +1998,7 @@ begin
   Pipeline := TLabGraphicsPipeline.FindOrCreate(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [VertexShader.Ptr, PixelShader.Ptr],
+    [LabShaderStage(VertexShader.Ptr), LabShaderStage(PixelShader.Ptr)],
     App.BackBuffer.Ptr.RenderPass, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(),

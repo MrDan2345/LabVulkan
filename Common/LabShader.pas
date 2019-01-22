@@ -69,7 +69,23 @@ type
   end;
   TLabTessEvaluationShaderShared = specialize TLabSharedRef<TLabTessEvaluationShader>;
 
-  TLabShaderStages = array of TVkPipelineShaderStageCreateInfo;
+  TLabShaderStage = record
+    shader: TLabShaderShared;
+    info: TVkPipelineShaderStageCreateInfo;
+    spec: TVkSpecializationInfo;
+    entries: array of TVkSpecializationMapEntry;
+  end;
+
+  TLabShaderStages = array of TLabShaderStage;
+
+function LabSpecializationMapEntry(const ConstantID: TVkUInt32; const Offset: TVkUInt32; const Size: TVkSize): TVkSpecializationMapEntry; inline;
+function LabShaderStage(const Shader: TLabShader): TLabShaderStage; inline;
+function LabShaderStage(
+  const Shader: TLabShader;
+  const SpecData: PVkVoid;
+  const SpecDataSize: TVkSize;
+  const SpecEntries: array of TVkSpecializationMapEntry
+): TLabShaderStage;
 function LabShaderStages(const Shaders: array of TLabShader): TLabShaderStages;
 function LabShaderStages(const Shaders: array of TLabShaderShared): TLabShaderStages;
 
@@ -212,18 +228,61 @@ begin
   _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
 end;
 
+function LabSpecializationMapEntry(const ConstantID: TVkUInt32; const Offset: TVkUInt32; const Size: TVkSize): TVkSpecializationMapEntry;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.constantID := ConstantID;
+  Result.offset := Offset;
+  Result.size := Size;
+end;
+
+function LabShaderStage(const Shader: TLabShader): TLabShaderStage;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.shader := Shader;
+  Result.info := Shader.GetStageCreateInfo^;
+end;
+
+function LabShaderStage(
+  const Shader: TLabShader;
+  const SpecData: PVkVoid;
+  const SpecDataSize: TVkSize;
+  const SpecEntries: array of TVkSpecializationMapEntry
+): TLabShaderStage;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.shader := Shader;
+  Result.info := Shader.GetStageCreateInfo^;
+  if Assigned(SpecData) and (Length(SpecEntries) > 0) then
+  begin
+    Result.info.pSpecializationInfo := @Result.spec;
+    Result.spec.pData := SpecData;
+    Result.spec.dataSize := SpecDataSize;
+    Result.spec.mapEntryCount := Length(SpecEntries);
+    SetLength(Result.entries, Length(SpecEntries));
+    Move(SpecEntries[0], Result.entries[0], SizeOf(TVkSpecializationMapEntry) * Length(SpecEntries));
+    Result.spec.pMapEntries := @Result.entries[0];
+  end;
+end;
+
 function LabShaderStages(const Shaders: array of TLabShader): TLabShaderStages;
   var i: Integer;
 begin
   SetLength(Result, Length(Shaders));
-  for i := 0 to High(Shaders) do Move(Shaders[i].StageCreateInfo^, Result[i], SizeOf(TVkPipelineShaderStageCreateInfo));
+  for i := 0 to High(Shaders) do
+  begin
+    Result[i].info := Shaders[i].StageCreateInfo^;
+  end;
 end;
 
 function LabShaderStages(const Shaders: array of TLabShaderShared): TLabShaderStages;
   var i: Integer;
 begin
   SetLength(Result, Length(Shaders));
-  for i := 0 to High(Shaders) do Move(Shaders[i].Ptr.StageCreateInfo^, Result[i], SizeOf(TVkPipelineShaderStageCreateInfo));
+  for i := 0 to High(Shaders) do
+  begin
+    Result[i].info := Shaders[i].Ptr.StageCreateInfo^;
+  end;
 end;
 
 end.

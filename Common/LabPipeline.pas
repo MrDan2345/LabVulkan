@@ -93,7 +93,7 @@ type
     class function MakeHash(
       const APipelineLayout: TLabPipelineLayout;
       const ADynamicStates: array of TVkDynamicState;
-      const AShaders: array of TLabShader;
+      const AShaderStages: array of TLabShaderStage;
       const ARenderPass: TLabRenderPassShared;
       const ASubpass: TVkUInt32;
       const AViewportState: TVkPipelineViewportStateCreateInfo;
@@ -111,7 +111,7 @@ type
       const APipelineCache: TLabPipelineCacheShared;
       const APipelineLayout: TLabPipelineLayout;
       const ADynamicStates: array of TVkDynamicState;
-      const AShaders: array of TLabShader;
+      const AShaderStages: array of TLabShaderStage;
       const ARenderPass: TLabRenderPassShared;
       const ASubpass: TVkUInt32;
       const AViewportState: TVkPipelineViewportStateCreateInfo;
@@ -128,7 +128,7 @@ type
       const APipelineCache: TLabPipelineCacheShared;
       const APipelineLayout: TLabPipelineLayout;
       const ADynamicStates: array of TVkDynamicState;
-      const AShaders: array of TLabShader;
+      const AShaderStages: array of TLabShaderStage;
       const ARenderPass: TLabRenderPassShared;
       const ASubpass: TVkUInt32;
       const AViewportState: TVkPipelineViewportStateCreateInfo;
@@ -412,9 +412,8 @@ end;
 class function TLabGraphicsPipeline.MakeHash(
   const APipelineLayout: TLabPipelineLayout;
   const ADynamicStates: array of TVkDynamicState;
-  const AShaders: array of TLabShader;
-  const ARenderPass: TLabRenderPassShared;
-  const ASubpass: TVkUInt32;
+  const AShaderStages: array of TLabShaderStage;
+  const ARenderPass: TLabRenderPassShared; const ASubpass: TVkUInt32;
   const AViewportState: TVkPipelineViewportStateCreateInfo;
   const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
   const AVertexInputState: TLabPipelineVertexInputState;
@@ -424,7 +423,7 @@ class function TLabGraphicsPipeline.MakeHash(
   const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
   const ATesselationState: TVkPipelineTessellationStateCreateInfo
 ): TVkUInt32;
-  var i: TVkInt32;
+  var i, j: TVkInt32;
   var ds_hash: TVkUInt32;
 begin
   Result := APipelineLayout.Hash;
@@ -441,9 +440,17 @@ begin
     end;
   end;
   Result := LabCRC32(Result, @ds_hash, SizeOf(TVkUInt32));
-  for i := 0 to High(AShaders) do
+  for i := 0 to High(AShaderStages) do
   begin
-    Result := LabCRC32(Result, @AShaders[i].Hash, SizeOf(TVkUInt32));
+    Result := LabCRC32(Result, @AShaderStages[i].shader.Ptr.Hash, SizeOf(TVkUInt32));
+    if Assigned(AShaderStages[i].info.pSpecializationInfo) then
+    begin
+      Result := LabCRC32(Result, AShaderStages[i].spec.pData, AShaderStages[i].spec.dataSize);
+      for j := 0 to High(AShaderStages[i].entries) do
+      begin
+        Result := LabCRC32(Result, @AShaderStages[i].entries[j], SizeOf(TVkSpecializationMapEntry));
+      end;
+    end;
   end;
   Result := LabCRC32(Result, @ARenderPass.Ptr.Hash, SizeOf(TVkUInt32));
   Result := LabCRC32(Result, @ASubpass, SizeOf(ASubpass));
@@ -499,8 +506,8 @@ class function TLabGraphicsPipeline.FindOrCreate(
   const APipelineCache: TLabPipelineCacheShared;
   const APipelineLayout: TLabPipelineLayout;
   const ADynamicStates: array of TVkDynamicState;
-  const AShaders: array of TLabShader; const ARenderPass: TLabRenderPassShared;
-  const ASubpass: TVkUInt32;
+  const AShaderStages: array of TLabShaderStage;
+  const ARenderPass: TLabRenderPassShared; const ASubpass: TVkUInt32;
   const AViewportState: TVkPipelineViewportStateCreateInfo;
   const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
   const AVertexInputState: TLabPipelineVertexInputState;
@@ -509,13 +516,13 @@ class function TLabGraphicsPipeline.FindOrCreate(
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
   const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
   const ATesselationState: TVkPipelineTessellationStateCreateInfo
-): TLabGraphicsPipeline;
+  ): TLabGraphicsPipeline;
   var PipelineHash: TVkUInt32;
 begin
   PipelineHash := MakeHash(
     APipelineLayout,
     ADynamicStates,
-    AShaders,
+    AShaderStages,
     ARenderPass,
     ASubpass,
     AViewportState,
@@ -535,7 +542,7 @@ begin
       APipelineCache,
       APipelineLayout,
       ADynamicStates,
-      AShaders,
+      AShaderStages,
       ARenderPass,
       ASubpass,
       AViewportState,
@@ -551,14 +558,12 @@ begin
   end;
 end;
 
-constructor TLabGraphicsPipeline.Create(
-  const ADevice: TLabDeviceShared;
+constructor TLabGraphicsPipeline.Create(const ADevice: TLabDeviceShared;
   const APipelineCache: TLabPipelineCacheShared;
   const APipelineLayout: TLabPipelineLayout;
   const ADynamicStates: array of TVkDynamicState;
-  const AShaders: array of TLabShader;
-  const ARenderPass: TLabRenderPassShared;
-  const ASubpass: TVkUInt32;
+  const AShaderStages: array of TLabShaderStage;
+  const ARenderPass: TLabRenderPassShared; const ASubpass: TVkUInt32;
   const AViewportState: TVkPipelineViewportStateCreateInfo;
   const AInputAssemblyState: TVkPipelineInputAssemblyStateCreateInfo;
   const AVertexInputState: TLabPipelineVertexInputState;
@@ -567,17 +572,20 @@ constructor TLabGraphicsPipeline.Create(
   const AMultisampleState: TVkPipelineMultisampleStateCreateInfo;
   const AColorBlendState: TLabPipelineColorBlendStateCreateInfo;
   const ATesselationState: TVkPipelineTessellationStateCreateInfo;
-  const AHash: TVkUInt32
-);
+  const AHash: TVkUInt32);
   var i: TVkInt32;
   var dynamic_state_info: TVkPipelineDynamicStateCreateInfo;
-  var shader_stages: TLabShaderStages;
+  var shader_stages: array of TVkPipelineShaderStageCreateInfo;
   var pipeline_info: TVkGraphicsPipelineCreateInfo;
 begin
   inherited Create(ADevice, APipelineCache, VK_PIPELINE_BIND_POINT_GRAPHICS);
-  SetLength(_Shaders, Length(AShaders));
-  for i := 0 to High(_Shaders) do _Shaders[i] := AShaders[i];
-  shader_stages := LabShaderStages(_Shaders);
+  SetLength(_Shaders, Length(AShaderStages));
+  for i := 0 to High(_Shaders) do _Shaders[i] := AShaderStages[i].shader;
+  SetLength(shader_stages, Length(AShaderStages));
+  for i := 0 to High(AShaderStages) do
+  begin
+    shader_stages[i] := AShaderStages[i].info;
+  end;
   _RenderPass := ARenderPass;
   {$Push}{$Hints off}
   FillChar(dynamic_state_info, SizeOf(dynamic_state_info), 0);
@@ -625,7 +633,7 @@ begin
     _Hash := MakeHash(
       APipelineLayout,
       ADynamicStates,
-      AShaders,
+      AShaderStages,
       ARenderPass,
       ASubpass,
       AViewportState,
