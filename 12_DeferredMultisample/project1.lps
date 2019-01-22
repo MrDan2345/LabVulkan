@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="10"/>
+    <BuildModes Active="Default"/>
+    <Units Count="1">
+      <Unit0>
+        <Filename Value="project1.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <CursorPos X="78" Y="17"/>
+        <UsageCount Value="168"/>
+        <Loaded Value="True"/>
+      </Unit0>
+    </Units>
+  </ProjectSession>
+  <Debugging>
+    <Watches Count="1">
+      <Item1>
+        <Expression Value="_PipelineList"/>
+      </Item1>
+    </Watches>
+  </Debugging>
+</CONFIG>
