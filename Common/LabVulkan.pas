@@ -51,6 +51,7 @@ type
     class function FindLayer(const Name: AnsiString): PLabLayer;
     class procedure ResetExtensions;
     class procedure EnableExtension(const Name: AnsiString);
+    class procedure EnableExtensionIfAvailable(const Name: AnsiString);
     class procedure DisableExtension(const Name: AnsiString);
     class procedure ResetLayers;
     class procedure EnableLayer(const Name: AnsiString);
@@ -59,20 +60,20 @@ type
     class constructor CreateClass;
     class destructor DestroyClass;
     class procedure Run;
-    class procedure QueueSubmit(
+    class function QueueSubmit(
       const Queue: TVkQueue;
       const CommandBuffers: array of TVkCommandBuffer;
       const WaitSemaphores: array of TVkSemaphore;
       const SignalSemaphores: array of TVkSemaphore;
       const Fence: TVkFence;
       const WaitDstStageMask: TVkPipelineStageFlags = 0
-    );
-    class procedure QueuePresent(
+    ): TVkResult;
+    class function QueuePresent(
       const Queue: TVkQueue;
       const SwapChains: array of TVkSwapchainKHR;
       const ImageIndices: array of TVkUInt32;
       const WaitSemaphores: array of TVkSemaphore
-    );
+    ): TVkResult;
     class procedure QueueWaitIdle(const Queue: TVkQueue);
     property PhysicalDevices: TLabPhysicalDeviceList read _PhysicalDevices;
     constructor Create;
@@ -113,6 +114,18 @@ begin
   if _ExtensionsEnabled.Ptr.Find(Name) = -1 then
   begin
     _ExtensionsEnabled.Ptr.Add(Name);
+  end;
+end;
+
+class procedure TLabVulkan.EnableExtensionIfAvailable(const Name: AnsiString);
+  var i, j: TVkInt32;
+begin
+  for i := 0 to High(_Layers) do
+  for j := 0 to High(_Layers[i].Extensions) do
+  if _Layers[i].Extensions[j].Name = Name then
+  begin
+    EnableExtension(Name);
+    Exit;
   end;
 end;
 
@@ -222,14 +235,14 @@ begin
   ExitCode := 0;
 end;
 
-class procedure TLabVulkan.QueueSubmit(
+class function TLabVulkan.QueueSubmit(
   const Queue: TVkQueue;
   const CommandBuffers: array of TVkCommandBuffer;
   const WaitSemaphores: array of TVkSemaphore;
   const SignalSemaphores: array of TVkSemaphore;
   const Fence: TVkFence;
   const WaitDstStageMask: TVkPipelineStageFlags
-);
+): TVkResult;
   var submit_info: TVkSubmitInfo;
 begin
   {$Push}{$Hints off}
@@ -244,15 +257,15 @@ begin
   submit_info.pCommandBuffers := @CommandBuffers;
   submit_info.signalSemaphoreCount := Length(SignalSemaphores);
   submit_info.pSignalSemaphores := @SignalSemaphores[0];
-  Vulkan.QueueSubmit(Queue, 1, @submit_info, Fence);
+  Result := Vulkan.QueueSubmit(Queue, 1, @submit_info, Fence);
 end;
 
-class procedure TLabVulkan.QueuePresent(
+class function TLabVulkan.QueuePresent(
   const Queue: TVkQueue;
   const SwapChains: array of TVkSwapchainKHR;
   const ImageIndices: array of TVkUInt32;
   const WaitSemaphores: array of TVkSemaphore
-);
+): TVkResult;
   var present_info: TVkPresentInfoKHR;
 begin
   present_info.sType := VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -263,7 +276,7 @@ begin
   present_info.waitSemaphoreCount := Length(WaitSemaphores);
   present_info.pWaitSemaphores := @WaitSemaphores[0];
   present_info.pResults := nil;
-  Vulkan.QueuePresentKHR(Queue, @present_info);
+  Result := Vulkan.QueuePresentKHR(Queue, @present_info);
 end;
 
 class procedure TLabVulkan.QueueWaitIdle(const Queue: TVkQueue);

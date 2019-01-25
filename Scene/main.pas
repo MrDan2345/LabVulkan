@@ -144,7 +144,8 @@ type
       const Width: TVkUInt32;
       const Height: TVkUInt32;
       const Format: TVkFormat;
-      const Usage: TVkImageUsageFlags
+      const Usage: TVkImageUsageFlags;
+      const SampleCount: TVkSampleCountFlagBits
     );
   end;
 
@@ -329,8 +330,8 @@ type
     procedure UpdateRenderTargets(const Params: array of const);
   public
     var RenderTargets: array of record
-      Depth: TRenderTarget;
       Color: TRenderTarget;
+      Depth: TRenderTarget;
       Normals: TRenderTarget;
       ZBuffer: TLabDepthBufferShared;
       FrameBuffer: TLabFrameBufferShared;
@@ -360,6 +361,7 @@ type
     var ScreenQuad: TFullscreenQuadShared;
     var LightData: TLightDataShared;
     var DitherMask: TTextureShared;
+    var SampleCount: TVkSampleCountFlagBits;
     var OnStage: TLabDelegate;
     var OnStageComplete: TLabDelegate;
     var OnUpdateTransforms: TLabDelegate;
@@ -421,8 +423,8 @@ begin
   begin
     si_ptr := nil;
   end;
-  DeferredInfo.DepthOutput := 0;
-  DeferredInfo.ColorOutput := 1;
+  DeferredInfo.ColorOutput := 0;
+  DeferredInfo.DepthOutput := 1;
   DeferredInfo.NormalsOutlput := 2;
   for i := 0 to Geom.Subsets.Count - 1 do
   begin
@@ -720,30 +722,30 @@ begin
   SetLength(RenderTargets, SwapChain.ImageCount);
   for i := 0 to SwapChain.ImageCount - 1 do
   begin
-    RenderTargets[i].Depth.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R32_SFLOAT, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-    RenderTargets[i].Color.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R8G8B8A8_UNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-    RenderTargets[i].Normals.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    RenderTargets[i].Color.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R8G8B8A8_UNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT), App.SampleCount);
+    RenderTargets[i].Depth.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R32_SFLOAT, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT), App.SampleCount);
+    RenderTargets[i].Normals.SetupImage(_WidthRT, _HeightRT, VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT), App.SampleCount);
     RenderTargets[i].ZBuffer := TLabDepthBuffer.Create(
       _BackBuffer.Ptr.Device, _WidthRT, _HeightRT, VK_FORMAT_UNDEFINED,
-      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), App.SampleCount
     );
   end;
   _RenderPass := TLabRenderPass.Create(
     _BackBuffer.Ptr.Device,
     [
       LabAttachmentDescription(
-        RenderTargets[0].Depth.Image.Ptr.Format,
+        RenderTargets[0].Color.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         VK_ATTACHMENT_STORE_OP_DONT_CARE
       ),
       LabAttachmentDescription(
-        RenderTargets[0].Color.Image.Ptr.Format,
+        RenderTargets[0].Depth.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -752,7 +754,7 @@ begin
       LabAttachmentDescription(
         RenderTargets[0].Normals.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -761,7 +763,7 @@ begin
       LabAttachmentDescription(
         RenderTargets[0].ZBuffer.Ptr.Format,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
+        App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -808,8 +810,8 @@ begin
       _BackBuffer.Ptr.Device, _RenderPass,
       SwapChain.Width, SwapChain.Height,
       [
-        RenderTargets[i].Depth.View.Ptr.VkHandle,
         RenderTargets[i].Color.View.Ptr.VkHandle,
+        RenderTargets[i].Depth.View.Ptr.VkHandle,
         RenderTargets[i].Normals.View.Ptr.VkHandle,
         RenderTargets[i].ZBuffer.Ptr.View.VkHandle
       ]
@@ -1215,7 +1217,7 @@ procedure TScene.Draw(const Cmd: TLabCommandBuffer);
               VK_FRONT_FACE_COUNTER_CLOCKWISE
             ),
             LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
-            LabPipelineMultisampleState(VK_SAMPLE_COUNT_1_BIT),
+            LabPipelineMultisampleState(App.SampleCount, VK_FALSE, 0, nil, VK_TRUE),
             LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
             LabPipelineTesselationState(0)
           );
@@ -1546,11 +1548,11 @@ end;
 constructor TLightData.Create;
   var i: TVkInt32;
   var map: PVkVoid;
-  const light_radius_scale = 3;
+  const light_radius_scale = 5;
   const light_intensity_scale = 0.5;
   const light_speed_scale = 1.5;
 begin
-  InstanceCount := 1024;
+  InstanceCount := 256;
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
     SizeOf(light_vertices), SizeOf(TLightVertex),
@@ -1633,7 +1635,14 @@ begin
   VertexShader := TLabVertexShader.Create(App.Device, 'light_vs.spv');
   TessControlShader := TLabTessControlShader.Create(App.Device, 'light_tcs.spv');
   TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'light_tes.spv');
-  PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');
+  if App.SampleCount = VK_SAMPLE_COUNT_1_BIT then
+  begin
+    PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');
+  end
+  else
+  begin
+    PixelShader := TLabPixelShader.Create(App.Device, 'light_ps_ms.spv');
+  end;
   Sampler := TLabSampler.Create(
     App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,
     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -1768,7 +1777,21 @@ end;
 {$Pop}
 
 procedure TLightData.Draw(const Cmd: TLabCommandBuffer; const ImageIndex: TVkUInt32);
+  var shader_stage_ps: TLabShaderStage;
 begin
+  if App.SampleCount = VK_SAMPLE_COUNT_1_BIT then
+  begin
+    shader_stage_ps := LabShaderStage(PixelShader.Ptr);
+  end
+  else
+  begin
+    shader_stage_ps := LabShaderStage(
+      PixelShader.Ptr,
+      @App.SampleCount,
+      SizeOf(App.SampleCount),
+      LabSpecializationMapEntry(0, 0, SizeOf(App.SampleCount))
+    );
+  end;
   Pipeline := TLabGraphicsPipeline.FindOrCreate(
     App.Device, App.PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
@@ -1776,7 +1799,7 @@ begin
       LabShaderStage(VertexShader.Ptr),
       LabShaderStage(TessControlShader.Ptr),
       LabShaderStage(TessEvalShader.Ptr),
-      LabShaderStage(PixelShader.Ptr)
+      shader_stage_ps
     ],
     App.BackBuffer.Ptr.RenderPass, 0,
     LabPipelineViewportState(),
@@ -2087,12 +2110,13 @@ procedure TRenderTarget.SetupImage(
   const Width: TVkUInt32;
   const Height: TVkUInt32;
   const Format: TVkFormat;
-  const Usage: TVkImageUsageFlags
+  const Usage: TVkImageUsageFlags;
+  const SampleCount: TVkSampleCountFlagBits
 );
 begin
   Image := TLabImage.Create(
     App.Device, Format, Usage or TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT), [],
-    Width, Height, 1, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+    Width, Height, 1, 1, 1, SampleCount, VK_IMAGE_TILING_OPTIMAL,
     VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE, TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   View := TLabImageView.Create(
@@ -2179,6 +2203,14 @@ begin
     ],
     [VK_KHR_SWAPCHAIN_EXTENSION_NAME]
   );
+  SampleCount := Device.Ptr.PhysicalDevice.Ptr.GetSupportedSampleCount(
+    [
+      //VK_SAMPLE_COUNT_8_BIT,
+      VK_SAMPLE_COUNT_4_BIT,
+      VK_SAMPLE_COUNT_2_BIT
+    ]
+  );
+  //SampleCount := VK_SAMPLE_COUNT_1_BIT;
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   BackBuffer := TBackBuffer.Create(Window, Device, [], [], []);
   DeferredBuffer := TDeferredBuffer.Create(BackBuffer, [@UpdateRenderTargets]);

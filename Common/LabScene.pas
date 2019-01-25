@@ -1033,7 +1033,7 @@ begin
     if Length(TexDitherMask) > 0 then
     begin
       StrCode += '  vec4 dither_mask = textureLod(' + TexDitherMask + ', gl_FragCoord.xy * (1.0 / 16.0), 0);'#$D#$A;
-      StrCode += '  if (color.w - dither_mask.x < 0.0) discard;'#$D#$A;
+      //StrCode += '  if (color.w - dither_mask.x < 0.0) discard;'#$D#$A;
     end;
     StrCode += '  out_depth = gl_FragCoord.z;'#$D#$A;
     StrCode += '  out_color = color;'#$D#$A;

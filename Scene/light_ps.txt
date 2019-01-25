@@ -1,34 +1,34 @@
 #version 400
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#if MULTISAMPLED
+	#define sampler_type sampler2DMS
+	#define texture_fetch(s, t, i) texelFetch(s, t, i)
+layout (constant_id = 0) const int sample_count = 1;
+#else// MULTISAMPLED
+	#define sampler_type sampler2D
+	#define texture_fetch(s, t, i) texelFetch(s, t, 0)
+#endif// !MULTISAMPLED
 layout (std140, binding = 1) uniform t_data {
   mat4 vp_i;
   vec4 screen_ratio;
   vec4 camera_pos;
 } data;
-layout (binding = 2) uniform sampler2D tex_depth;
-layout (binding = 3) uniform sampler2D tex_color;
-layout (binding = 4) uniform sampler2D tex_normal;
+layout (binding = 2) uniform sampler_type tex_depth;
+layout (binding = 3) uniform sampler_type tex_color;
+layout (binding = 4) uniform sampler_type tex_normal;
 layout (location = 0) in vec4 light_pos;
 layout (location = 1) in vec4 light_color;
 layout (location = 0) out vec4 out_color;
-void main() {
-	out_color = vec4(1, 0, 0, 1);
+
+vec4 eval_color(float depth, vec4 color, vec3 normal) {
 	vec2 sc = gl_FragCoord.xy * data.screen_ratio.xy;
-	vec2 tc = sc * data.screen_ratio.zw;
-	
-	float depth = textureLod(tex_depth, tc, 0).x;
-	vec4 color = textureLod(tex_color, tc, 0);
-	vec3 normal = normalize(textureLod(tex_normal, tc, 0).xyz);
-	
 	vec4 pos_s = vec4(sc * 2 - 1, depth, 1);
 	vec4 pos_w = data.vp_i * pos_s;
 	pos_w *= (1 / pos_w.w);
 
 	vec3 pos_to_light = light_pos.xyz - pos_w.xyz;
-	float dist = length(pos_to_light);
-	if (dist > light_pos.w) discard;
-	float light_att = 1 - smoothstep(light_pos.w * 0.1, light_pos.w, dist);
+	float light_att = 1 - smoothstep(light_pos.w * 0.1, light_pos.w, length(pos_to_light));
 	pos_to_light = normalize(pos_to_light);
 	vec4 diffuse_light = dot(normal, pos_to_light) * light_att * light_color;
 	
@@ -36,6 +36,29 @@ void main() {
 	vec3 ref = normalize(cam_to_pos - 2 * normal * dot(cam_to_pos, normal));
 	vec4 specular_light = clamp(pow(dot(ref, pos_to_light), 15) * light_att, 0, 1) * light_color;
 	
-	out_color = color * diffuse_light + specular_light;//vec4(sc, 0, 1);//vec4(depth, depth, depth, 1);
-	//out_color = vec4(specular_light, specular_light, specular_light, 1);
+	return color * diffuse_light + specular_light;
+}
+
+void main() {
+	out_color = vec4(1, 0, 0, 1);
+	vec2 sc = gl_FragCoord.xy * data.screen_ratio.xy;
+	ivec2 tc = ivec2(gl_FragCoord.xy);
+	
+	float depth = texture_fetch(tex_depth, tc, 0).x;
+	vec4 color = texture_fetch(tex_color, tc, 0);
+	vec3 normal = normalize(texture_fetch(tex_normal, tc, 0).xyz);
+	
+	vec4 samp0 = eval_color(depth, color, normal);
+	vec4 c = samp0;
+#if MULTISAMPLED
+	float m = 1.0 / float(sample_count);
+	for (int i = 1; i < sample_count; ++i) {
+		float depth = texture_fetch(tex_depth, tc, i).x;
+		vec4 color = texture_fetch(tex_color, tc, i);
+		vec3 normal = normalize(texture_fetch(tex_normal, tc, i).xyz);
+		c += eval_color(depth, color, normal);
+	}
+	c *= m;
+#endif// MULTISAMPLED
+	out_color = c;
 }

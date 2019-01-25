@@ -1187,6 +1187,9 @@ begin
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_object_tracker');
+  EnableLayerIfAvailable('VK_LAYER_RENDERDOC_Capture');
+  EnableExtensionIfAvailable('VK_EXT_debug_utils');
+  EnableExtensionIfAvailable('VK_EXT_debug_report');
   OnInitialize := @Initialize;
   OnFinalize := @Finalize;
   OnLoop := @Loop;
@@ -1400,7 +1403,7 @@ end;
 procedure TLabApp.Initialize;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Ptr.Caption := 'Vulkan Deferred';
+  Window.Ptr.Caption := 'Vulkan Deferred MS';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -1411,11 +1414,12 @@ begin
   );
   SampleCount := Device.Ptr.PhysicalDevice.Ptr.GetSupportedSampleCount(
     [
-      VK_SAMPLE_COUNT_8_BIT,
+      //VK_SAMPLE_COUNT_8_BIT,
       VK_SAMPLE_COUNT_4_BIT,
       VK_SAMPLE_COUNT_2_BIT
     ]
   );
+  //SampleCount := VK_SAMPLE_COUNT_1_BIT;
   Surface := TLabSurface.Create(Window);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   SwapChainCreate;
@@ -1507,17 +1511,26 @@ begin
   //ScreenQuad.Ptr.Draw(Cmd.Ptr, cur_buffer);
   Cmd.Ptr.EndRenderPass;
   Cmd.Ptr.RecordEnd;
-  QueueSubmit(
-    SwapChain.Ptr.QueueFamilyGraphics,
-    [Cmd.Ptr.VkHandle],
-    [Semaphore.Ptr.VkHandle],
-    [],
-    Fence.Ptr.VkHandle,
-    TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  LabAssertVkError(
+    QueueSubmit(
+      SwapChain.Ptr.QueueFamilyGraphics,
+      [Cmd.Ptr.VkHandle],
+      [Semaphore.Ptr.VkHandle],
+      [],
+      Fence.Ptr.VkHandle,
+      TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+    )
   );
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
-  QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
+  LabAssertVkError(
+    QueuePresent(
+      SwapChain.Ptr.QueueFamilyPresent,
+      [SwapChain.Ptr.VkHandle],
+      [cur_buffer],
+      []
+    )
+  );
 end;
 
 end.
