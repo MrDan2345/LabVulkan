@@ -119,7 +119,7 @@ type
       var Next: TLayoutTracker;
       var Prev: TLayoutTracker;
       var Layout: TLabDescriptorSetLayoutWeak;
-      constructor Create(const ALayout: TLabDescriptorSetLayout; const ATRackerList: TLayoutTrackerPtr);
+      constructor Create(const ALayout: TLabDescriptorSetLayout; const ATrackerList: TLayoutTrackerPtr);
       destructor Destroy; override;
     end;
     type TPoolAllocTracker = class (TLabClass)
@@ -195,6 +195,12 @@ function LabWriteDescriptorSetImageSampler(
   const ImageInfo: array of TVkDescriptorImageInfo
 ): TLabWriteDescriptorSet;
 
+function LabWriteDescriptorSetImage(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const ImageInfo: array of TVkDescriptorImageInfo
+): TLabWriteDescriptorSet;
+
 function LabDescriptorBufferInfo(
   const Buffer: TVkBuffer;
   const Offset: TVkDeviceSize = 0;
@@ -204,7 +210,7 @@ function LabDescriptorBufferInfo(
 function LabDescriptorImageInfo(
   const ImageLayout: TVkImageLayout;
   const ImageView: TVkImageView;
-  const Sampler: TVkSampler
+  const Sampler: TVkSampler = VK_NULL_HANDLE
 ): TVkDescriptorImageInfo; inline;
 
 function LabDescriptorSetBindings(const Bindings: array of TVkDescriptorSetLayoutBinding; const SetCount: TVkInt32 = 1): TLabDescriptorSetBindings;
@@ -317,13 +323,17 @@ end;
 
 constructor TLabDescriptorSetsFactory.TLayoutTracker.Create(
   const ALayout: TLabDescriptorSetLayout;
-  const ATRackerList: TLayoutTrackerPtr
+  const ATrackerList: TLayoutTrackerPtr
 );
 begin
   _TrackerList := ATRackerList;
   Layout := ALayout;
   Prev := nil;
   Next := _TrackerList^;
+  if Assigned(_TrackerList^) then
+  begin
+    _TrackerList^.Prev := Self;
+  end;
   _TrackerList^ := Self;
 end;
 
@@ -713,6 +723,19 @@ begin
   Result := LabWriteDescriptorSet(
     DstSet, DstBinding,
     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    0, Length(ImageInfo), ImageInfo, [], []
+  );
+end;
+
+function LabWriteDescriptorSetImage(
+  const DstSet: TVkDescriptorSet;
+  const DstBinding: TVkUInt32;
+  const ImageInfo: array of TVkDescriptorImageInfo
+): TLabWriteDescriptorSet;
+begin
+  Result := LabWriteDescriptorSet(
+    DstSet, DstBinding,
+    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
     0, Length(ImageInfo), ImageInfo, [], []
   );
 end;

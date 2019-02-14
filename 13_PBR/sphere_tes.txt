@@ -1,0 +1,19 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+layout (triangles, cw) in;
+layout (std140, binding = 0) uniform t_data {
+  mat4 wvp;
+  mat4 w;
+} data;
+layout (location = 0) out vec3 out_normal;
+void main(void) {
+	vec3 pos = (
+		(gl_TessCoord.x * gl_in[0].gl_Position.xyz) +
+		(gl_TessCoord.y * gl_in[1].gl_Position.xyz) +
+		(gl_TessCoord.z * gl_in[2].gl_Position.xyz)
+	);
+	vec3 n = normalize(pos);
+	out_normal = mat3(data.w) * n;
+	gl_Position = data.wvp * vec4(n, 1);
+}

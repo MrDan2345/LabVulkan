@@ -516,6 +516,7 @@ function LabMatRotation(const v: TLabVec3; const a: TLabFloat): TLabMat; inline;
 function LabMatRotation(const q: TLabQuat): TLabMat; inline;
 function LabMatSkew(const Amount, Axis: TLabVec3; const Angle: TLabFloat): TLabMat; inline;
 function LabMatView(const Pos, Target, Up: TLabVec3): TLabMat; inline;
+function LabMatViewPos(const ViewMat: TLabMat): TLabVec3;
 function LabMatOrth(const Width, Height, ZNear, ZFar: TLabFloat): TLabMat; inline;
 function LabMatOrth2D(const Width, Height, ZNear, ZFar: TLabFloat; const FlipH: Boolean = False; const FlipV: Boolean = True): TLabMat; inline;
 function LabMatProj(const FOV, Aspect, ZNear, ZFar: TLabFloat): TLabMat; inline;
@@ -2551,6 +2552,12 @@ begin
     0, 0, 0, 1
   );
   {$Warnings on}
+end;
+
+function LabMatViewPos(const ViewMat: TLabMat): TLabVec3;
+begin
+  Result := LabVec3(-ViewMat.e30, -ViewMat.e31, -ViewMat.e32);
+  Result := Result.Transform3x3(ViewMat.Transpose);
 end;
 
 function LabMatOrth(const Width, Height, ZNear, ZFar: TLabFloat): TLabMat;
