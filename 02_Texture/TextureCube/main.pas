@@ -431,11 +431,11 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
 begin
-  fov := LabDegToRad * 60;
+  fov := LabDegToRad * 45;
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
-    View := LabMatView(LabVec3(0, 0, 0), LabVec3(0, 0, 1), LabVec3(0, -1, 0));
+    View := LabMatView(LabVec3(0, 0, 0), LabVec3(0, Sin((LabTimeLoopSec(8) / 8) * Pi * 2) * 0.3, 1), LabVec3(0, -1, 0));
     World := LabMatRotationY((LabTimeLoopSec(25) / 25) * Pi * 2);
     // Vulkan clip space has inverted Y and half Z.
     Clip := LabMat(
