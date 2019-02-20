@@ -215,20 +215,17 @@ begin
       )
     ]
   );
-  for i := 0 to 5 do
-  begin
-    BufferCopies[i] := LabBufferImageCopy(
-      LabOffset3D(0, 0, 0),
-      LabExtent3D(Size, Size, 1),
-      TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, TVkUInt32(i),
-      1, i * Size * Size * 4
-    )
-  end;
   Cmd.CopyBufferToImage(
     Staging.Ptr.VkHandle,
     Image.Ptr.VkHandle,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    BufferCopies
+    [
+      LabBufferImageCopy(
+        LabOffset3D(0, 0, 0),
+        LabExtent3D(Size, Size, 1),
+        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, 0, 6
+      )
+    ]
   );
   mip_src_size := Size;
   for i := 0 to MipLevels - 2 do
