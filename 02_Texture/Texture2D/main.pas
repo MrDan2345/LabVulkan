@@ -320,6 +320,9 @@ end;
 procedure TLabApp.Initialize;
   var map: PVkVoid;
   var img: TLabImageData;
+  var x, y, i_x, i_y: TVkInt32;
+  var dx, dy: TVkFloat;
+  var pc: PLabColor;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Ptr.Caption := 'Vulkan Texture';
@@ -364,6 +367,8 @@ begin
   end;
   img := TLabImageDataPNG.Create;
   img.Load('../../Images/box.png');
+  //img := TLabImageDataHDR.Create;
+  //img.Load('../../Images/Arches_E_PineTree_3k.hdr');
   Texture.MipLevels := LabIntLog2(LabMakePOT(LabMax(img.Width, img.Height))) + 1;
   Texture.Image := TLabImage.Create(
     Device,
@@ -371,19 +376,38 @@ begin
     TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
     TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT) or
     TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-    [], img.Width, img.Height, 1, Texture.MipLevels, 1, VK_SAMPLE_COUNT_1_BIT,
+    [], LabMakePOT(img.Width), LabMakePOT(img.Height), 1, Texture.MipLevels, 1, VK_SAMPLE_COUNT_1_BIT,
     VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
   );
   Texture.Staging := TLabBuffer.Create(
-    Device, img.DataSize,
+    Device, Texture.Image.Ptr.DataSize,
     TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
     TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
   );
   map := nil;
   if (Texture.Staging.Ptr.Map(map)) then
   begin
-    Move(img.Data^, map^, img.DataSize);
+    if (img.BPP = 4)
+    and (img.Width = Texture.Image.Ptr.Width)
+    and (img.Height = Texture.Image.Ptr.Height) then
+    begin
+      Move(img.Data^, map^, img.DataSize);
+    end
+    else
+    begin
+      pc := PLabColor(map);
+      dx := img.Width / Texture.Image.Ptr.Width;
+      dy := img.Height / Texture.Image.Ptr.Height;
+      for y := 0 to Texture.Image.Ptr.Height - 1 do
+      for x := 0 to Texture.Image.Ptr.Width - 1 do
+      begin
+        i_x := Round(x * dx);
+        i_y := Round(y * dy);
+        pc^ := img.Pixels[i_x, i_y];
+        Inc(pc);
+      end;
+    end;
     Texture.Staging.Ptr.Unmap;
   end;
   img.Free;

@@ -122,12 +122,18 @@ type
   TLabStreamHelper = class
   private
     var _Stream: TStream;
+    var _PosStack: array of TVkInt64;
     function GetSize: TVkInt64; inline;
     function GetPosition: TVkInt64; inline;
+    function GetRemaining: TVkInt64; inline;
   public
     property Stream: TStream read _Stream;
     property Size: TVkInt64 read GetSize;
     property Position: TVkInt64 read GetPosition;
+    property Remaining: TVkInt64 read GetRemaining;
+    procedure PosPush;
+    procedure PosPop;
+    function EoF: Boolean; inline;
     function ReadBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64; inline;
     function ReadBool: Boolean; inline;
     function ReadUInt8: TVkUInt8; inline;
@@ -876,6 +882,29 @@ end;
 function TLabStreamHelper.GetPosition: TVkInt64;
 begin
   Result := _Stream.Position;
+end;
+
+function TLabStreamHelper.GetRemaining: TVkInt64;
+begin
+  Result := _Stream.Size - _Stream.Position;
+end;
+
+procedure TLabStreamHelper.PosPush;
+begin
+  SetLength(_PosStack, Length(_PosStack) + 1);
+  _PosStack[High(_PosStack)] := _Stream.Position;
+end;
+
+procedure TLabStreamHelper.PosPop;
+begin
+  if Length(_PosStack) <= 0 then Exit;
+  _Stream.Seek(_PosStack[High(_PosStack)], soFromBeginning);
+  SetLength(_PosStack, Length(_PosStack) - 1);
+end;
+
+function TLabStreamHelper.EoF: Boolean;
+begin
+  Result := _Stream.Position >= _Stream.Size;
 end;
 
 function TLabStreamHelper.ReadBuffer(const Buffer: Pointer; const Count: TVkInt64): TVkInt64;

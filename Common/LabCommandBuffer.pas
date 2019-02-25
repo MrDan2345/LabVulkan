@@ -104,6 +104,12 @@ type
       const BufferMemoryBarriers: array of TVkBufferMemoryBarrier;
       const ImageMemoryBarriers: array of TVkImageMemoryBarrier
     );
+    procedure PushConstants(
+      const Layout: TLabPipelineLayout;
+      const Stages: TVkShaderStageFlags;
+      const Offset, Size: TVkUInt32;
+      const Values: PVkVoid
+    );
   end;
   TLabCommandBufferShared = specialize TLabSharedRef<TLabCommandBuffer>;
 
@@ -416,6 +422,23 @@ begin
     Length(MemoryBarriers), @MemoryBarriers[0],
     Length(BufferMemoryBarriers), @BufferMemoryBarriers[0],
     Length(ImageMemoryBarriers), @ImageMemoryBarriers[0]
+  );
+end;
+
+procedure TLabCommandBuffer.PushConstants(
+  const Layout: TLabPipelineLayout;
+  const Stages: TVkShaderStageFlags;
+  const Offset, Size: TVkUInt32;
+  const Values: PVkVoid
+);
+begin
+  Vulkan.CmdPushConstants(
+    _Handle,
+    Layout.VkHandle,
+    Stages,
+    Offset,
+    Size,
+    Values
   );
 end;
 //TLabCommandBuffer END

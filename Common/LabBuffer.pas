@@ -121,6 +121,32 @@ type
   end;
   TLabUniformBufferShared = specialize TLabSharedRef<TLabUniformBuffer>;
 
+  generic TLabUniformBufferArray<T> = class (TLabBuffer)
+  public
+    type TUniformData = T;
+    type PUniformData = ^TUniformData;
+    type TSelf = specialize TLabUniformBufferArray<TUniformData>;
+  private
+    var _Alignment: TVkDeviceSize;
+    var _Count: TVkUInt32;
+    var _Data: Pointer;
+    function GetBlockSize: TVkDeviceSize; inline;
+    function GetDataSize: TVkDeviceSize; inline;
+    function GetBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
+    function GetBufferData(const Index: TVkUInt32): PUniformData; inline;
+    function GetBufferOffset(const Index: TVkUInt32): TVkUInt32; inline;
+  public
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const ABufferCount: TVkUInt32;
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    );
+    destructor Destroy; override;
+    property Buffer[const Index: TVkUInt32]: PUniformData read GetBufferData; default;
+    property BufferOffset[const Index: TVkUInt32]: TVkUInt32 read GetBufferOffset;
+    property Count: TVkUInt32 read _Count;
+  end;
+
   TLabPipelineVertexInputState = record
     CreateInfo: TVkPipelineVertexInputStateCreateInfo;
     Data: record
@@ -172,6 +198,55 @@ function LabMappedMemoryRange(
 ): TVkMappedMemoryRange; inline;
 
 implementation
+
+function TLabUniformBufferArray.GetBlockSize: TVkDeviceSize;
+begin
+  Result := (SizeOf(TUniformData) + _Alignment - 1) and (not(_Alignment - 1));
+end;
+
+function TLabUniformBufferArray.GetDataSize: TVkDeviceSize;
+begin
+  Result := GetBlockSize * _Count;
+end;
+
+function TLabUniformBufferArray.GetBufferOffsetAlignment(
+  const BufferSize: TVkDeviceSize
+): TVkDeviceSize;
+  var align: TVkDeviceSize;
+begin
+  align := _Device.Ptr.PhysicalDevice.Ptr.Properties^.limits.minUniformBufferOffsetAlignment;
+  Result := BufferSize;
+  if align > 0 then
+  begin
+    Result := (Result + align - 1) and (not(align - 1));
+  end;
+end;
+
+function TLabUniformBufferArray.GetBufferData(const Index: TVkUInt32): PUniformData;
+begin
+  Result := PUniformData(_Data + GetBlockSize * Index);
+end;
+
+function TLabUniformBufferArray.GetBufferOffset(const Index: TVkUInt32): TVkUInt32;
+begin
+  Result := GetBlockSize * Index;
+end;
+
+constructor TLabUniformBufferArray.Create(const ADevice: TLabDeviceShared;
+  const ABufferCount: TVkUInt32; const AMemoryFlags: TVkFlags);
+begin
+  _Device := ADevice;
+  _Alignment := GetBufferOffsetAlignment(SizeOf(TUniformData));
+  _Count := ABufferCount;
+  inherited Create(ADevice, GetDataSize, TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), [], VK_SHARING_MODE_EXCLUSIVE, AMemoryFlags);
+  Map(_Data);
+end;
+
+destructor TLabUniformBufferArray.Destroy;
+begin
+  if IsMapped then Unmap;
+  inherited Destroy;
+end;
 
 function TLabBuffer.GetBufferInfo: PVkDescriptorBufferInfo;
 begin

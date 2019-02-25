@@ -8,9 +8,14 @@ layout (location = 1) out float out_depth;
 layout (location = 2) out vec4 out_normal;
 layout (location = 3) out vec2 out_phys_params;
 
+layout (push_constant) uniform t_material {
+	float roughness;
+	float metallic;
+} material;
+
 void main() {
-	out_color = vec4(1, 0, 0, 1);
+	out_color = vec4(0.86, 0.87, 0.88, 1);
 	out_depth = gl_FragCoord.z;
 	out_normal = vec4(normalize(in_normal), 1);
-	out_phys_params = vec2(0.5, 0.5);
+	out_phys_params = vec2(material.roughness, material.metallic);
 }

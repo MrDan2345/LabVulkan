@@ -10,7 +10,9 @@ uses
   ZBase,
   ZInflate,
   ZDeflate,
+  SysUtils,
   LabTypes,
+  LabMath,
   LabUtils;
 
 type
@@ -23,7 +25,8 @@ type
     idf_r8g8b8,
     idf_r16g16b16,
     idf_r8g8b8a8,
-    idf_r16g16b16a16
+    idf_r16g16b16a16,
+    idf_r32g32b32_f
   );
 
   TLabImagePixelReadProc = function (const x, y: Integer): TLabColor of Object;
@@ -50,6 +53,7 @@ type
     function ReadR16G16B16(const x, y: Integer): TLabColor;
     function ReadR8G8B8A8(const x, y: Integer): TLabColor;
     function ReadR16G16B16A16(const x, y: Integer): TLabColor;
+    function ReadR32G32B32_F(const x, y: Integer): TLabColor;
     procedure SetPixel(const x, y: Integer; const Value: TLabColor);
     procedure WriteNone(const x, y: Integer; const Value: TLabColor);
     procedure WriteG8(const x, y: Integer; const Value: TLabColor);
@@ -60,9 +64,11 @@ type
     procedure WriteR16G16B16(const x, y: Integer; const Value: TLabColor);
     procedure WriteR8G8B8A8(const x, y: Integer; const Value: TLabColor);
     procedure WriteR16G16B16A16(const x, y: Integer; const Value: TLabColor);
+    procedure WriteR32G32B32_F(const x, y: Integer; const Value: TLabColor);
     procedure DataAlloc; overload;
     procedure DataAlloc(const Size: LongWord); overload;
     procedure DataFree;
+    function DataAt(const x, y: Integer): Pointer; inline;
   public
     property Width: Integer read _Width;
     property Height: Integer read _Height;
@@ -102,7 +108,180 @@ type
     procedure Save(const StreamHelper: TLabStreamHelper); override;
   end;
 
+  TLabImageDataHDR = class(TLabImageData)
+  protected
+    class function CompareHeader(const Test: AnsiString; const StreamHelper: TLabStreamHelper): Boolean;
+    class function ReadToken(const StreamHelper: TLabStreamHelper): String;
+  public
+    class function CanLoad(const StreamHelper: TLabStreamHelper): Boolean; override;
+    procedure Load(const StreamHelper: TLabStreamHelper); override;
+    procedure Save(const StreamHelper: TLabStreamHelper); override;
+  end;
+
 implementation
+
+uses
+  Math;
+
+const HDRHeaders: array[0..1] of AnsiString = ('#?RADIANCE', '#?RGBE');
+
+class function TLabImageDataHDR.CompareHeader(const Test: AnsiString; const StreamHelper: TLabStreamHelper): Boolean;
+  var header: AnsiString;
+begin
+  if StreamHelper.Remaining <= Length(Test) then Exit(False);
+  StreamHelper.PosPush;
+  SetLength(header, Length(Test));
+  StreamHelper.ReadBuffer(@header[1], Length(Test));
+  Result := header = Test;
+  StreamHelper.PosPop;
+end;
+
+class function TLabImageDataHDR.ReadToken(const StreamHelper: TLabStreamHelper): String;
+  var n: TLabUInt8;
+begin
+  StreamHelper.PosPush;
+  n := 0;
+  repeat
+    if AnsiChar(StreamHelper.ReadUInt8) = #$A then Break;
+    Inc(n);
+  until StreamHelper.EoF;
+  StreamHelper.PosPop;
+  if n > 0 then
+  begin
+    SetLength(Result, n);
+    StreamHelper.ReadBuffer(@Result[1], n);
+  end
+  else
+  begin
+    Result := '';
+  end;
+  StreamHelper.Skip(1);
+end;
+
+class function TLabImageDataHDR.CanLoad(const StreamHelper: TLabStreamHelper): Boolean;
+  var i: TLabInt32;
+begin
+  for i := 0 to High(HDRHeaders) do
+  if CompareHeader(HDRHeaders[i], StreamHelper) then Exit(True);
+  Result := False;
+end;
+
+procedure TLabImageDataHDR.Load(const StreamHelper: TLabStreamHelper);
+  type TRGBE = array[0..3] of TLabUInt8;
+  procedure WritePixel(const rgbe: TRGBE; const x, y: TLabUInt32);
+    var f1: TLabFloat;
+    var d: PLabFloatArr;
+  begin
+    d := PLabFloatArr(DataAt(x, y));
+    if rgbe[3] <> 0 then
+    begin
+      f1 := Math.ldexp(1.0, rgbe[3] - (128 + 8));
+      d^[0] := rgbe[0] * f1;
+      d^[1] := rgbe[1] * f1;
+      d^[2] := rgbe[2] * f1;
+    end
+    else
+    begin
+       d^[0] := 0;
+       d^[1] := 0;
+       d^[2] := 0;
+    end;
+  end;
+  var token: AnsiString;
+  var token_arr: TLabStrArrA;
+  var format_valid: Boolean;
+  var w, h, j, i, k, n, z, len: TLabUInt32;
+  var c, v: TLabUInt8;
+  var rgbe: TRGBE;
+  var scanline: array of TRGBE;
+  var c1, c2: TLabUInt8;
+begin
+  ReadToken(StreamHelper);
+  format_valid := False;
+  repeat
+    token := ReadToken(StreamHelper);
+    if token = 'FORMAT=32-bit_rle_rgbe' then format_valid := True;
+  until Length(token) = 0;
+  if not format_valid then Exit;
+  token := ReadToken(StreamHelper);
+  token_arr := LabStrExplode(token, ' ');
+  if Length(token_arr) < 4 then Exit;
+  w := 0; h := 0;
+  if token_arr[0] = '-Y' then h := StrToIntDef(token_arr[1], 0);
+  if token_arr[2] = '+X' then w := StrToIntDef(token_arr[3], 0);
+  Allocate(idf_r32g32b32_f, w, h);
+  if (w < 8) or (w >= 32768) then
+  begin
+    for j := 0 to h - 1 do
+    for i := 0 to w - 1 do
+    begin
+      StreamHelper.ReadBuffer(@rgbe, 4);
+      WritePixel(rgbe, i, j);
+    end;
+  end
+  else
+  begin
+    for j := 0 to h - 1 do
+    begin
+      c1 := StreamHelper.ReadUInt8;
+      c2 := StreamHelper.ReadUInt8;
+      len := StreamHelper.ReadUInt8;
+      if (c1 <> 2) or (c2 <> 2) or (len and $80 > 0) then
+      begin
+       StreamHelper.Skip(-3);
+       for i := 0 to w - 1 do
+       begin
+         StreamHelper.ReadBuffer(@rgbe, 4);
+         WritePixel(rgbe, i, j);
+       end;
+       Continue;
+      end;
+      len := len shl 8;
+      len := len or StreamHelper.ReadUInt8;
+      if len <> w then Exit;
+      if Length(scanline) = 0 then SetLength(scanline, w);
+      for k := 0 to 3 do
+      begin
+        i := 0;
+        n := width - i;
+        while (n > 0) do
+        begin
+          c := StreamHelper.ReadUInt8;
+          if c > 128 then
+          begin
+            v := StreamHelper.ReadUInt8;
+            c -= 128;
+            if c > n then Exit;
+            for z := 0 to c - 1 do
+            begin
+              scanline[i][k] := v;
+              Inc(i);
+            end;
+          end
+          else
+          begin
+            if c > n then Exit;
+            for z := 0 to c - 1 do
+            begin
+              scanline[i][k] := StreamHelper.ReadUInt8;
+              Inc(i);
+            end;
+          end;
+          n := width - i;
+        end;
+      end;
+      for i := 0 to w - 1 do
+      begin
+        WritePixel(scanline[i], i, j);
+      end;
+    end;
+  end;
+end;
+
+procedure TLabImageDataHDR.Save(const StreamHelper: TLabStreamHelper);
+begin
+
+end;
 
 procedure TLabImageData.SetFormat(const f: TLabImageDataFormat);
 begin
@@ -161,6 +340,12 @@ begin
       _BPP := 8;
       _ReadProc := @ReadR16G16B16A16;
       _WriteProc := @WriteR16G16B16A16;
+    end;
+    idf_r32g32b32_f:
+    begin
+      _BPP := 12;
+      _ReadProc := @ReadR32G32B32_F;
+      _WriteProc := @WriteR32G32B32_F;
     end;
   end;
 end;
@@ -256,6 +441,24 @@ begin
   Result.a := d^;
 end;
 
+function TLabImageData.ReadR32G32B32_F(const x, y: Integer): TLabColor;
+  function ftob(const f: TLabFloat): Byte;
+    var i: TLabInt32;
+    const gamma = 1.0 / 2.2;
+  begin
+    i := Round(power(f, gamma) * $ff);
+    if i < 0 then i := 0 else if i > $ff then i := $ff;
+    Result := i;
+  end;
+  var f: PLabFloatArr;
+begin
+  f := PLabFloatArr(DataAt(x, y));
+  Result.r := ftob(f^[0]);
+  Result.g := ftob(f^[1]);
+  Result.b := ftob(f^[2]);
+  Result.a := 1;
+end;
+
 procedure TLabImageData.SetPixel(const x, y: Integer; const Value: TLabColor);
 begin
   _WriteProc(x, y, Value);
@@ -332,10 +535,23 @@ begin
   d^ := 0; Inc(d); d^ := Value.a;
 end;
 
+procedure TLabImageData.WriteR32G32B32_F(const x, y: Integer; const Value: TLabColor);
+  var f: PLabFloatArr;
+  const gamma = 2.2;
+  const rcp_ff = 1 / $ff;
+begin
+  f := PLabFloatArr(DataAt(x, y));
+  f^[0] := power(Value.r * rcp_ff, gamma);
+  f^[1] := power(Value.g * rcp_ff, gamma);
+  f^[2] := power(Value.b * rcp_ff, gamma);
+end;
+
 procedure TLabImageData.DataAlloc;
 begin
   if _BPP > 0 then
-  DataAlloc(_Width * _Height * _BPP);
+  begin
+    DataAlloc(_Width * _Height * _BPP);
+  end;
 end;
 
 procedure TLabImageData.DataAlloc(const Size: LongWord);
@@ -352,6 +568,11 @@ begin
     Freemem(_Data, _DataSize);
     _DataSize := 0;
   end;
+end;
+
+function TLabImageData.DataAt(const x, y: Integer): Pointer;
+begin
+  Result := _Data + (y * _Width + x) * _BPP;
 end;
 
 class function TLabImageData.CanLoad(const Stream: TStream): Boolean;
@@ -676,12 +897,13 @@ class function TLabImageDataPNG.CanLoad(const StreamHelper: TLabStreamHelper): B
   var Header: array[0..7] of AnsiChar;
 begin
   Result := False;
-  if StreamHelper.Size - StreamHelper.Position < 8 then Exit;
+  if StreamHelper.Remaining < 8 then Exit;
+  StreamHelper.PosPush;
   {$Hints off}
   StreamHelper.ReadBuffer(@Header, 8);
   {$Hints on}
   Result := Header = PNGHeader;
-  StreamHelper.Skip(-8);
+  StreamHelper.PosPop;
 end;
 
 procedure TLabImageDataPNG.Load(const StreamHelper: TLabStreamHelper);
