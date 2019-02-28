@@ -20,8 +20,12 @@ type
   PLabUInt8Arr = ^TLabUInt8Arr;
   TLabInt16 = TVkInt16;
   PLabInt16 = ^TLabInt16;
+  TLabInt16Arr = array[Word] of TLabInt16;
+  PLayInt16Arr = ^TLabInt16Arr;
   TLabUInt16 = TVkUInt16;
   PLabUInt16 = ^TLabUInt16;
+  TLabUInt16Arr = array[Word] of TLabUInt16;
+  PLabUInt16Arr = ^TLabUInt16Arr;
   TLabInt32 = TVkInt32;
   PLabInt32 = ^TLabInt32;
   TLabInt32Arr = array[Word] of TLabInt32;
@@ -32,8 +36,12 @@ type
   PLabUInt32Arr = ^TLabUInt32Arr;
   TLabInt64 = TVkInt64;
   PLabInt64 = ^TLabInt64;
+  TLabInt64Arr = array[Word] of TLabInt64;
+  PLabInt64Arr = ^TLabInt64Arr;
   TLabUInt64 = TVkUInt64;
   PLabUInt64 = ^TLabUInt64;
+  TLabUInt64Arr = array[Word] of TLabUInt64;
+  PLabUInt64Arr = ^TLabUInt64Arr;
 
   TLabMatRef = array[0..15] of TLabFloat;
   PLabMatRef = ^TLabMatRef;

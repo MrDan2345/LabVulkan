@@ -68,7 +68,7 @@ type
     procedure DataAlloc; overload;
     procedure DataAlloc(const Size: LongWord); overload;
     procedure DataFree;
-    function DataAt(const x, y: Integer): Pointer; inline;
+    class procedure RegisterImageFormat;
   public
     property Width: Integer read _Width;
     property Height: Integer read _Height;
@@ -77,6 +77,7 @@ type
     property DataSize: LongWord read _DataSize;
     property Format: TLabImageDataFormat read _Format;
     property Pixels[const x, y: Integer]: TLabColor read GetPixel write SetPixel; default;
+    function DataAt(const x, y: Integer): Pointer; inline;
     class function CanLoad(const Stream: TStream): Boolean; virtual; overload;
     class function CanLoad(const FileName: String): Boolean; virtual; overload;
     class function CanLoad(const Buffer: Pointer; const Size: Integer): Boolean; virtual; overload;
@@ -93,7 +94,7 @@ type
     destructor Destroy; override;
   end;
 
-  CLabImageType = class of TLabImageData;
+  TLabImageDataClass = class of TLabImageData;
 
   TLabImageDataPNG = class(TLabImageData)
   protected
@@ -103,6 +104,7 @@ type
     class function Swap32(const n: LongWord): LongWord;
     class function GetCRC(const Buffer: Pointer; const Size: Integer): LongWord;
   public
+    class constructor CreateClass;
     class function CanLoad(const StreamHelper: TLabStreamHelper): Boolean; override;
     procedure Load(const StreamHelper: TLabStreamHelper); override;
     procedure Save(const StreamHelper: TLabStreamHelper); override;
@@ -113,10 +115,18 @@ type
     class function CompareHeader(const Test: AnsiString; const StreamHelper: TLabStreamHelper): Boolean;
     class function ReadToken(const StreamHelper: TLabStreamHelper): String;
   public
+    class constructor CreateClass;
     class function CanLoad(const StreamHelper: TLabStreamHelper): Boolean; override;
     procedure Load(const StreamHelper: TLabStreamHelper); override;
     procedure Save(const StreamHelper: TLabStreamHelper); override;
   end;
+
+var ImageFormats: array of TLabImageDataClass;
+procedure LabRegisterImageFormat(const ImageType: TLabImageDataClass);
+function LabPickImageFormat(const StreamHelper: TLabStreamHelper): TLabImageDataClass;
+function LabPickImageFormat(const Stream: TStream): TLabImageDataClass;
+function LabPickImageFormat(const FileName: String): TLabImageDataClass;
+function LabPickImageFormat(const Buffer: Pointer; const Size: Integer): TLabImageDataClass;
 
 implementation
 
@@ -124,6 +134,56 @@ uses
   Math;
 
 const HDRHeaders: array[0..1] of AnsiString = ('#?RADIANCE', '#?RGBE');
+
+procedure LabRegisterImageFormat(const ImageType: TLabImageDataClass);
+  var f: TLabImageDataClass;
+begin
+  for f in ImageFormats do
+  if f = ImageType then Exit;
+  SetLength(ImageFormats, Length(ImageFormats) + 1);
+  ImageFormats[High(ImageFormats)] := ImageType;
+end;
+
+function LabPickImageFormat(const StreamHelper: TLabStreamHelper): TLabImageDataClass;
+  var f: TLabImageDataClass;
+begin
+  for f in ImageFormats do
+  if f.CanLoad(StreamHelper) then Exit(f);
+  Result := nil;
+end;
+
+function LabPickImageFormat(const Stream: TStream): TLabImageDataClass;
+  var sh: TLabStreamHelper;
+begin
+  sh := TLabStreamHelper.Create(Stream);
+  try
+    Result := LabPickImageFormat(sh);
+  finally
+    sh.Free;
+  end;
+end;
+
+function LabPickImageFormat(const FileName: String): TLabImageDataClass;
+  var fs: TFileStream;
+begin
+  fs := TFileStream.Create(FileName, fmOpenRead);
+  try
+    Result := LabPickImageFormat(fs);
+  finally
+    fs.Free;
+  end;
+end;
+
+function LabPickImageFormat(const Buffer: Pointer; const Size: Integer): TLabImageDataClass;
+  var ms: TLabConstMemoryStream;
+begin
+  ms := TLabConstMemoryStream.Create(Buffer, Size);
+  try
+    Result := LabPickImageFormat(ms);
+  finally
+    ms.Free;
+  end;
+end;
 
 class function TLabImageDataHDR.CompareHeader(const Test: AnsiString; const StreamHelper: TLabStreamHelper): Boolean;
   var header: AnsiString;
@@ -156,6 +216,11 @@ begin
     Result := '';
   end;
   StreamHelper.Skip(1);
+end;
+
+class constructor TLabImageDataHDR.CreateClass;
+begin
+  RegisterImageFormat;
 end;
 
 class function TLabImageDataHDR.CanLoad(const StreamHelper: TLabStreamHelper): Boolean;
@@ -575,6 +640,11 @@ begin
   Result := _Data + (y * _Width + x) * _BPP;
 end;
 
+class procedure TLabImageData.RegisterImageFormat;
+begin
+  LabRegisterImageFormat(TLabImageDataClass(ClassType));
+end;
+
 class function TLabImageData.CanLoad(const Stream: TStream): Boolean;
   var sh: TLabStreamHelper;
 begin
@@ -891,6 +961,11 @@ begin
     Inc(pb);
   end;
   Result := Result xor $ffffffff;
+end;
+
+class constructor TLabImageDataPNG.CreateClass;
+begin
+  RegisterImageFormat;
 end;
 
 class function TLabImageDataPNG.CanLoad(const StreamHelper: TLabStreamHelper): Boolean;

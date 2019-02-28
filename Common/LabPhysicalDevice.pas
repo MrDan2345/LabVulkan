@@ -33,6 +33,13 @@ type
     function GetQueueFamiliyIndex(const QueueFlags: TVkQueueFlags): TVkUInt32;
     function GetSupportedDepthFormat: TVkFormat;
     function GetSupportedSampleCount(const PreferredCount: array of TVkSampleCountFlagBits): TVkSampleCountFlagBits;
+    function ImageFormatProperties(
+      const Format: TVkFormat;
+      const ImageType: TVkImageType = VK_IMAGE_TYPE_2D;
+      const Tiling: TVkImageTiling = VK_IMAGE_TILING_OPTIMAL;
+      const Usage: TVkImageUsageFlags = TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT);
+      const Flags: TVkImageCreateFlags = 0
+    ): TVkImageFormatProperties;
   end;
   TLabPhysicalDeviceShared = specialize TLabSharedRef<TLabPhysicalDevice>;
   TLabPhysicalDeviceList = specialize TLabRefList<TLabPhysicalDeviceShared>;
@@ -155,6 +162,17 @@ begin
     if (TVkFlags(counts) and TVkFlags(PreferredCount[i])) > 0 then Exit(PreferredCount[i]);
   end;
   Result := VK_SAMPLE_COUNT_1_BIT;
+end;
+
+function TLabPhysicalDevice.ImageFormatProperties(
+  const Format: TVkFormat;
+  const ImageType: TVkImageType;
+  const Tiling: TVkImageTiling;
+  const Usage: TVkImageUsageFlags;
+  const Flags: TVkImageCreateFlags
+): TVkImageFormatProperties;
+begin
+  Vulkan.GetPhysicalDeviceImageFormatProperties(_PhysicalDevice, Format, ImageType, Tiling, Usage, Flags, @Result);
 end;
 
 //TLabPhysicalDevice END

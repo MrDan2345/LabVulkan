@@ -230,7 +230,9 @@ end;
 
 function LabSpecializationMapEntry(const ConstantID: TVkUInt32; const Offset: TVkUInt32; const Size: TVkSize): TVkSpecializationMapEntry;
 begin
+{$push}{$hints off}
   FillChar(Result, SizeOf(Result), 0);
+{$pop}
   Result.constantID := ConstantID;
   Result.offset := Offset;
   Result.size := Size;

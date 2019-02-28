@@ -71,6 +71,8 @@ function LabSubpassDependency(
   const DependencyFlags: TVkDependencyFlags = TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
 ): TVkSubpassDependency;
 
+const LabAttachmentReferenceInvalid: TVkAttachmentReference = (attachment: $ffffffff; layout: VK_IMAGE_LAYOUT_UNDEFINED);
+
 implementation
 
 constructor TLabRenderPass.Create(
@@ -255,7 +257,14 @@ begin
   begin
     Result.pResolveAttachments := nil;
   end;
-  Result.pDepthStencilAttachment := @Data.DepthStencilAttachment;
+  if Data.DepthStencilAttachment.attachment <> $ffffffff then
+  begin
+    Result.pDepthStencilAttachment := @Data.DepthStencilAttachment;
+  end
+  else
+  begin
+    Result.pDepthStencilAttachment := nil;
+  end;
   Result.preserveAttachmentCount := Length(Data.PreserveAttachments);
   if Length(Data.PreserveAttachments) > 0 then
   begin
