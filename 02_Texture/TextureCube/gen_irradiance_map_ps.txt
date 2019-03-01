@@ -1,0 +1,44 @@
+#version 400
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+layout (binding = 0) uniform samplerCube tex_env_map;
+layout (location = 0) in vec2 in_tc;
+layout (location = 0) out vec4 out_cube_faces[6];
+
+ivec3 face_swizzle[] = ivec3[] (
+	ivec3(2, 1, 0), ivec3(2, 1, 0), ivec3(0, 2, 1), ivec3(0, 2, 1), ivec3(0, 1, 2), ivec3(0, 1, 2)
+);
+vec3 face_side[] = vec3[] (
+	vec3(1, 1, -1), vec3(-1, 1, 1), vec3(-1, 1, 1), vec3(-1, -1, -1), vec3(-1, 1, -1), vec3(1, 1, 1)
+);
+
+#define PI 3.1415926535897932384626433832795
+
+void main() {
+	vec3 tc3 = vec3(in_tc, 1);
+	//float samp_count_h = 11;
+	//float samp_count_v = 6;
+	//float inc_h = 1 / (samp_count_h * PI * 2.0);
+	//float inc_v = 1 / (samp_count_v * PI * 0.5);
+	for (int i = 0; i < out_cube_faces.length(); ++i) {
+		ivec3 sw = face_swizzle[i];
+		vec3 dir = normalize(vec3(tc3[sw.x] * face_side[i].x, tc3[sw.y] * face_side[i].y, tc3[sw.z] * face_side[i].z));
+		vec3 dir_abs = abs(dir);
+		vec3 right = step(dir_abs.yzx, dir_abs) * step(dir_abs.zxy, dir_abs);//normalize(step(step(dir.yzx, dir), step(dir.zxy, dir)).zxy);
+		vec3 up = cross(dir, right);
+		right = cross(up, dir);
+		float sample_delta = 0.025;
+		float sample_count = 0.0; 
+		vec3 irradiance = vec3(0.0);
+		for(float ah = 0.0; ah < 2.0 * PI; ah += sample_delta) {
+			for(float av = 0.0; av < 0.5 * PI; av += sample_delta) {
+				vec3 dir_ts = vec3(sin(av) * cos(ah),  sin(av) * sin(ah), cos(av));
+				vec3 sampleVec = dir_ts.x * right + dir_ts.y * up + dir_ts.z * dir; 
+				irradiance += texture(tex_env_map, sampleVec).rgb * cos(av) * sin(av);
+				sample_count++;
+			}
+		}
+		irradiance = PI * irradiance * (1.0 / float(sample_count));
+		out_cube_faces[i] = vec4(irradiance, 1);
+	}
+}

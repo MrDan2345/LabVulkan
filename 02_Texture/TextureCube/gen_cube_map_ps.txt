@@ -9,7 +9,7 @@ ivec3 face_swizzle[] = ivec3[] (
 	ivec3(2, 1, 0), ivec3(2, 1, 0), ivec3(0, 2, 1), ivec3(0, 2, 1), ivec3(0, 1, 2), ivec3(0, 1, 2)
 );
 vec3 face_side[] = vec3[] (
-	vec3(-1, 1, 1), vec3(1, 1, -1), vec3(-1, -1, -1), vec3(-1, 1, 1), vec3(-1, 1, -1), vec3(1, 1, 1)
+	vec3(1, 1, 1), vec3(-1, 1, -1), vec3(-1, 1, -1), vec3(-1, -1, 1), vec3(-1, 1, 1), vec3(1, 1, -1)
 );
 
 vec2 dir_to_equirect(vec3 v) {
@@ -17,7 +17,7 @@ vec2 dir_to_equirect(vec3 v) {
     vec2 uv = vec2(atan(v.z, v.x), asin(v.y));
     uv *= invAtan;
     uv += 0.5;
-    return uv;
+    return vec2(1) - uv;
 }
 
 void main() {
@@ -25,6 +25,8 @@ void main() {
 	for (int i = 0; i < out_cube_faces.length(); ++i) {
 		ivec3 sw = face_swizzle[i];
 		vec3 dir = normalize(vec3(tc3[sw.x] * face_side[i].x, tc3[sw.y] * face_side[i].y, tc3[sw.z] * face_side[i].z));
+		//out_cube_faces[i] = vec4(dir * 0.5 + 0.5, 1);
 		out_cube_faces[i] = texture(tex_equirect, dir_to_equirect(dir), 0);
+		//if (i != 0) out_cube_faces[i].xyz *= 0.1;
 	}
 }
