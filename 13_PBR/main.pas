@@ -29,8 +29,10 @@ uses
   LabSync,
   LabUtils,
   LabImageData,
+  LabTextures,
   Classes,
-  SysUtils;
+  SysUtils,
+  Math;
 
 type
   TTransforms = record
@@ -42,71 +44,6 @@ type
   end;
   PTransforms = ^TTransforms;
 
-  TTexture = class (TLabClass)
-  private
-    var Staging: TLabBufferShared;
-    procedure Stage(const Args: array of const);
-    procedure StageComplete(const Args: array of const);
-  public
-    var Image: TLabImageShared;
-    var View: TLabImageViewShared;
-    var Sampler: TLabSamplerShared;
-    var MipLevels: TVkUInt32;
-    var Alpha: Boolean;
-    constructor Create(const FileName: String; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
-    constructor Create(const ImageData: TLabImageData; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
-    destructor Destroy; override;
-  end;
-  TTextureShared = specialize TLabSharedRef<TTexture>;
-
-  TCubeImage = class (TLabClass)
-  private
-    var _Data: array [0..5] of TLabImageData;
-    const ind_xp = 0;
-    const ind_xn = 1;
-    const ind_yp = 2;
-    const ind_yn = 3;
-    const ind_zp = 4;
-    const ind_zn = 5;
-    function GetImageData(const Index: TVkInt32): TLabImageData; inline;
-    function GetXN: TLabImageData; inline;
-    function GetXP: TLabImageData; inline;
-    function GetYN: TLabImageData; inline;
-    function GetYP: TLabImageData; inline;
-    function GetZN: TLabImageData; inline;
-    function GetZP: TLabImageData; inline;
-    function GetSize: TVkUInt32; inline;
-  public
-    property ImageData[const Index: TVkInt32]: TLabImageData read GetImageData; default;
-    property xn: TLabImageData read GetXN;
-    property xp: TLabImageData read GetXP;
-    property yn: TLabImageData read GetYN;
-    property yp: TLabImageData read GetYP;
-    property zn: TLabImageData read GetZN;
-    property zp: TLabImageData read GetZP;
-    property Size: TVkUInt32 read GetSize;
-    constructor Create(const DirName: String);
-    destructor Destroy; override;
-  end;
-  TCubeImageShared = specialize TLabSharedRef<TCubeImage>;
-
-  TCubeTexture = class (TLabClass)
-  private
-    var Staging: TLabBufferShared;
-    procedure Stage(const Args: array of const);
-    procedure StageComplete(const Args: array of const);
-  public
-    var Image: TLabImageShared;
-    var View: TLabImageViewShared;
-    var Sampler: TLabSamplerShared;
-    var MipLevels: TVkUInt32;
-    var Size: TVkUInt32;
-    constructor Create(const DirName: String);
-    constructor Create(const CubeImage: TCubeImage);
-    destructor Destroy; override;
-  end;
-  TCubeTextureShared = specialize TLabSharedRef<TCubeTexture>;
-
   TRenderTarget = object
     var Image: TLabImageShared;
     var View: TLabImageViewShared;
@@ -117,6 +54,18 @@ type
       const Usage: TVkImageUsageFlags;
       const SampleCount: TVkSampleCountFlagBits
     );
+  end;
+
+  TMyTexture2D = class (TLabTexture2D)
+  public
+    procedure AfterConstruction; override;
+    procedure BeforeDestruction; override;
+  end;
+
+  TMyTextureCube = class (TLabTextureCube)
+  public
+    procedure AfterConstruction; override;
+    procedure BeforeDestruction; override;
   end;
 
   TBackBuffer = class (TLabClass)
@@ -248,6 +197,8 @@ type
       vp_i: TLabMat;
       screen_ratio: TLabVec4;
       camera_pos: TLabVec4;
+      exposure: TVkFloat;
+      gamma: TVkFloat;
     end;
     type PUniformData = ^TUniformData;
     var UniformBuffer: TLabUniformBufferShared;
@@ -257,8 +208,15 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
-    var EnvTexture: TCubeTextureShared;
+    var TextureEnv: TLabTextureCubeShared;
+    var TextureIrradiance: TLabTextureCubeShared;
+    var TexturePrefiltered: TLabTextureCubeShared;
+    var TextureBRDFLUT: TLabTexture2DShared;
     procedure Resize(const Params: array of const);
+    procedure LoadEnvMap;
+    procedure GenerateIrradianceMap;
+    procedure GeneratePrefilteredMap;
+    procedure GenerateBRDFLUT;
   public
     constructor Create;
     destructor Destroy; override;
@@ -285,7 +243,7 @@ type
     var OnBindOffscreenTargets: TLabDelegate;
     var SampleCount: TVkSampleCountFlagBits;
     var Scene: TSceneShared;
-    var Lighting: TLightShared;
+    var Lighting: TIBLightShared;
     constructor Create;
     procedure UpdateRenderTargets(const Params: array of const);
     procedure UpdateTransforms;
@@ -307,12 +265,686 @@ var
 
 implementation
 
+procedure TMyTextureCube.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  App.OnStage.Add(@Stage);
+  App.OnStageComplete.Add(@StageComplete);
+end;
+
+procedure TMyTextureCube.BeforeDestruction;
+begin
+  App.OnStageComplete.Remove(@StageComplete);
+  App.OnStage.Remove(@Stage);
+  inherited BeforeDestruction;
+end;
+
+procedure TMyTexture2D.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  App.OnStage.Add(@Stage);
+  App.OnStageComplete.Add(@StageComplete);
+end;
+
+procedure TMyTexture2D.BeforeDestruction;
+begin
+  App.OnStageComplete.Remove(@StageComplete);
+  App.OnStage.Remove(@Stage);
+  inherited BeforeDestruction;
+end;
+
 procedure TIBLight.Resize(const Params: array of const);
   var w, h: TVkUInt32;
 begin
   w := TVkUInt32(Params[0].VInteger);
   h := TVkUInt32(Params[1].VInteger);
   UniformData^.screen_ratio := LabVec4(w, h, 1 / w, 1 / h);
+end;
+
+procedure TIBLight.LoadEnvMap;
+  const tex_size = 1024;
+  var tex2d: TLabTexture2D;
+  var tmp_cmd: TLabCommandBufferShared;
+  var render_pass: TLabRenderPassShared;
+  var attachments: array[0..5] of TVkAttachmentDescription;
+  var i: Integer;
+  var frame_buffer: TLabFrameBufferShared;
+  var vs: TLabVertexShaderShared;
+  var ps: TLabPixelShaderShared;
+  var pipeline_layout: TLabPipelineLayoutShared;
+  var pipeline_tmp: TLabPipelineShared;
+  var desc_sets: TLabDescriptorSetsShared;
+  var viewport: TVkViewport;
+  var scissor: TVkRect2D;
+  var view_arr: array[0..5] of TLabImageViewShared;
+begin
+  TextureEnv := TLabTextureCube.Create(
+    App.Device,
+    tex_size, VK_FORMAT_R32G32B32A32_SFLOAT,
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+    True
+  );
+  for i := 0 to 5 do
+  begin
+    view_arr[i] := TLabImageView.Create(
+      App.Device, TextureEnv.Ptr.Image.Ptr.VkHandle, TextureEnv.Ptr.Image.Ptr.Format,
+      TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_VIEW_TYPE_2D,
+      0, 1, i, 1
+    );
+  end;
+  tex2d := TLabTexture2D.Create(App.Device, '../Images/Arches_E_PineTree_3k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Tropical_Beach/Tropical_Beach_3k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Mono_Lake_C/Mono_Lake_C_Ref.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/hdrvfx_0012_sand/hdrvfx_0012_sand_v11_Ref.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Summi_Pool/Summi_Pool_3k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Milkyway/Milkyway_small.hdr', False);
+  for i := 0 to High(attachments) do
+  begin
+    attachments[i] := LabAttachmentDescription(
+      TextureEnv.Ptr.Format, {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      VK_IMAGE_LAYOUT_UNDEFINED
+    );
+  end;
+  render_pass := TLabRenderPass.Create(
+    App.Device,
+    attachments,
+    [
+      LabSubpassDescriptionData(
+        [],
+        [
+          LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(4, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(5, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        ],
+        [],
+        LabAttachmentReferenceInvalid,
+        []
+      )
+    ],
+    [
+      LabSubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      ),
+      LabSubpassDependency(
+        0,
+        VK_SUBPASS_EXTERNAL,
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      )
+    ]
+  );
+  frame_buffer := TLabFrameBuffer.Create(
+    App.Device, render_pass, tex_size, tex_size,
+    [
+      view_arr[0].Ptr.VkHandle,
+      view_arr[1].Ptr.VkHandle,
+      view_arr[2].Ptr.VkHandle,
+      view_arr[3].Ptr.VkHandle,
+      view_arr[4].Ptr.VkHandle,
+      view_arr[5].Ptr.VkHandle
+    ]
+  );
+  desc_sets := App.DescriptorSetsFactory.Ptr.Request(
+    [
+      LabDescriptorSetBindings(
+        [
+          LabDescriptorBinding(
+            0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+          )
+        ]
+      )
+    ]
+  );
+  pipeline_layout := TLabPipelineLayout.Create(
+    App.Device, [],
+    [
+      desc_sets.Ptr.Layout[0].Ptr
+    ]
+  );
+  desc_sets.Ptr.UpdateSets(
+    LabWriteDescriptorSetImageSampler(
+      desc_sets.Ptr.VkHandle[0], 0,
+      LabDescriptorImageInfo(
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        tex2d.View.Ptr.VkHandle,
+        tex2d.Sampler.Ptr.VkHandle
+      )
+    ),
+    []
+  );
+  vs := TLabVertexShader.Create(App.Device, 'cube_map_vs.spv');
+  ps := TLabPixelShader.Create(App.Device, 'gen_cube_map_ps.spv');
+  viewport := LabViewport(0, 0, tex_size, tex_size);
+  scissor := LabRect2D(0, 0, tex_size, tex_size);
+  pipeline_tmp := TLabGraphicsPipeline.FindOrCreate(
+    App.Device, App.PipelineCache, pipeline_layout.Ptr, [],
+    [LabShaderStage(vs.Ptr), LabShaderStage(ps.Ptr)],
+    render_pass, 0,
+    LabPipelineViewportState(1, @viewport, 1, @scissor),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState([], []),
+    LabPipelineRasterizationState(),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_FALSE, VK_FALSE),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment,
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment
+    ], []),
+    LabPipelineTesselationState(0)
+  );
+  tmp_cmd := TLabCommandBuffer.Create(App.CmdPool);
+  tmp_cmd.Ptr.RecordBegin();
+  tex2d.Stage([tmp_cmd.Ptr]);
+  tmp_cmd.Ptr.BeginRenderPass(
+    render_pass.Ptr, frame_buffer.Ptr,
+    [
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0)
+    ]
+  );
+  tmp_cmd.Ptr.BindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.Ptr, 0, [desc_sets.Ptr.VkHandle[0]], []);
+  tmp_cmd.Ptr.BindPipeline(pipeline_tmp.Ptr);
+  tmp_cmd.Ptr.Draw(3);
+  tmp_cmd.Ptr.EndRenderPass;
+  TextureEnv.Ptr.GenMipMaps(tmp_cmd.Ptr);
+  tmp_cmd.Ptr.RecordEnd;
+  TLabVulkan.QueueSubmit(
+    App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics,
+    [tmp_cmd.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  );
+  TLabVulkan.QueueWaitIdle(App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics);
+  tex2d.Free;
+end;
+
+procedure TIBLight.GenerateIrradianceMap;
+  const tex_size = 64;
+  var tmp_cmd: TLabCommandBufferShared;
+  var render_pass: TLabRenderPassShared;
+  var attachments: array[0..5] of TVkAttachmentDescription;
+  var i: Integer;
+  var frame_buffer: TLabFrameBufferShared;
+  var vs: TLabVertexShaderShared;
+  var ps: TLabPixelShaderShared;
+  var pipeline_layout: TLabPipelineLayoutShared;
+  var pipeline_tmp: TLabPipelineShared;
+  var desc_sets: TLabDescriptorSetsShared;
+  var viewport: TVkViewport;
+  var scissor: TVkRect2D;
+  var view_arr: array[0..5] of TLabImageViewShared;
+begin
+  TextureIrradiance := TLabTextureCube.Create(
+    App.Device,
+    tex_size, VK_FORMAT_R32G32B32A32_SFLOAT,
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+    True
+  );
+  for i := 0 to 5 do
+  begin
+    view_arr[i] := TLabImageView.Create(
+      App.Device, TextureIrradiance.Ptr.Image.Ptr.VkHandle, TextureIrradiance.Ptr.Image.Ptr.Format,
+      TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_VIEW_TYPE_2D,
+      0, 1, i, 1
+    );
+  end;
+  for i := 0 to High(attachments) do
+  begin
+    attachments[i] := LabAttachmentDescription(
+      TextureIrradiance.Ptr.Format, {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      VK_IMAGE_LAYOUT_UNDEFINED
+    );
+  end;
+  render_pass := TLabRenderPass.Create(
+    App.Device,
+    attachments,
+    [
+      LabSubpassDescriptionData(
+        [],
+        [
+          LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(4, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(5, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        ],
+        [],
+        LabAttachmentReferenceInvalid,
+        []
+      )
+    ],
+    [
+      LabSubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      ),
+      LabSubpassDependency(
+        0,
+        VK_SUBPASS_EXTERNAL,
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      )
+    ]
+  );
+  frame_buffer := TLabFrameBuffer.Create(
+    App.Device, render_pass, tex_size, tex_size,
+    [
+      view_arr[0].Ptr.VkHandle,
+      view_arr[1].Ptr.VkHandle,
+      view_arr[2].Ptr.VkHandle,
+      view_arr[3].Ptr.VkHandle,
+      view_arr[4].Ptr.VkHandle,
+      view_arr[5].Ptr.VkHandle
+    ]
+  );
+  desc_sets := App.DescriptorSetsFactory.Ptr.Request(
+    [
+      LabDescriptorSetBindings(
+        [
+          LabDescriptorBinding(
+            0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+          )
+        ]
+      )
+    ]
+  );
+  pipeline_layout := TLabPipelineLayout.Create(
+    App.Device, [],
+    [
+      desc_sets.Ptr.Layout[0].Ptr
+    ]
+  );
+  desc_sets.Ptr.UpdateSets(
+    LabWriteDescriptorSetImageSampler(
+      desc_sets.Ptr.VkHandle[0], 0,
+      LabDescriptorImageInfo(
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        TextureEnv.Ptr.View.Ptr.VkHandle,
+        TextureEnv.Ptr.Sampler.Ptr.VkHandle
+      )
+    ),
+    []
+  );
+  vs := TLabVertexShader.Create(App.Device, 'cube_map_vs.spv');
+  ps := TLabPixelShader.Create(App.Device, 'gen_irradiance_map_ps.spv');
+  viewport := LabViewport(0, 0, tex_size, tex_size);
+  scissor := LabRect2D(0, 0, tex_size, tex_size);
+  pipeline_tmp := TLabGraphicsPipeline.FindOrCreate(
+    App.Device, App.PipelineCache, pipeline_layout.Ptr, [],
+    [LabShaderStage(vs.Ptr), LabShaderStage(ps.Ptr)],
+    render_pass, 0,
+    LabPipelineViewportState(1, @viewport, 1, @scissor),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState([], []),
+    LabPipelineRasterizationState(),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_FALSE, VK_FALSE),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment,
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment
+    ], []),
+    LabPipelineTesselationState(0)
+  );
+  tmp_cmd := TLabCommandBuffer.Create(App.CmdPool);
+  tmp_cmd.Ptr.RecordBegin();
+  tmp_cmd.Ptr.BeginRenderPass(
+    render_pass.Ptr, frame_buffer.Ptr,
+    [
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0),
+      LabClearValue(0.0, 0.0, 0.0, 1.0)
+    ]
+  );
+  tmp_cmd.Ptr.BindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.Ptr, 0, [desc_sets.Ptr.VkHandle[0]], []);
+  tmp_cmd.Ptr.BindPipeline(pipeline_tmp.Ptr);
+  tmp_cmd.Ptr.Draw(3);
+  tmp_cmd.Ptr.EndRenderPass;
+  TextureIrradiance.Ptr.GenMipMaps(tmp_cmd.Ptr);
+  tmp_cmd.Ptr.RecordEnd;
+  TLabVulkan.QueueSubmit(
+    App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics,
+    [tmp_cmd.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  );
+  TLabVulkan.QueueWaitIdle(App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics);
+end;
+
+procedure TIBLight.GeneratePrefilteredMap;
+  const tex_size = 1024;
+  var tmp_cmd: TLabCommandBufferShared;
+  var render_pass: TLabRenderPassShared;
+  var attachments: array[0..5] of TVkAttachmentDescription;
+  var i, m, ts: Integer;
+  var frame_buffers: array of TLabFrameBufferShared;
+  var vs: TLabVertexShaderShared;
+  var ps: TLabPixelShaderShared;
+  var pipeline_layout: TLabPipelineLayoutShared;
+  var pipeline_tmp: TLabPipelineShared;
+  var desc_sets: TLabDescriptorSetsShared;
+  var view_arr: array of array[0..5] of TLabImageViewShared;
+  var push_consts: record
+    roughness: TVkFloat;
+    sample_count: TVkUInt32;
+  end;
+begin
+  TexturePrefiltered := TLabTextureCube.Create(
+    App.Device,
+    tex_size, VK_FORMAT_R32G32B32A32_SFLOAT,
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+    True
+  );
+  SetLength(view_arr, TexturePrefiltered.Ptr.MipLevels);
+  for m := 0 to TexturePrefiltered.Ptr.MipLevels - 1 do
+  for i := 0 to 5 do
+  begin
+    view_arr[m][i] := TLabImageView.Create(
+      App.Device, TexturePrefiltered.Ptr.Image.Ptr.VkHandle, TexturePrefiltered.Ptr.Image.Ptr.Format,
+      TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_VIEW_TYPE_2D,
+      m, 1, i, 1
+    );
+  end;
+  for i := 0 to High(attachments) do
+  begin
+    attachments[i] := LabAttachmentDescription(
+      TexturePrefiltered.Ptr.Format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      VK_IMAGE_LAYOUT_UNDEFINED
+    );
+  end;
+  render_pass := TLabRenderPass.Create(
+    App.Device,
+    attachments,
+    [
+      LabSubpassDescriptionData(
+        [],
+        [
+          LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(4, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+          LabAttachmentReference(5, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        ],
+        [],
+        LabAttachmentReferenceInvalid,
+        []
+      )
+    ],
+    [
+      LabSubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      ),
+      LabSubpassDependency(
+        0,
+        VK_SUBPASS_EXTERNAL,
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
+      )
+    ]
+  );
+  SetLength(frame_buffers, TexturePrefiltered.Ptr.MipLevels);
+  for m := 0 to TexturePrefiltered.Ptr.MipLevels - 1 do
+  begin
+    ts := Round(tex_size * Math.intpower(0.5, m));
+    frame_buffers[m] := TLabFrameBuffer.Create(
+      App.Device, render_pass, ts, ts,
+      [
+        view_arr[m][0].Ptr.VkHandle,
+        view_arr[m][1].Ptr.VkHandle,
+        view_arr[m][2].Ptr.VkHandle,
+        view_arr[m][3].Ptr.VkHandle,
+        view_arr[m][4].Ptr.VkHandle,
+        view_arr[m][5].Ptr.VkHandle
+      ]
+    );
+  end;
+  desc_sets := App.DescriptorSetsFactory.Ptr.Request(
+    [
+      LabDescriptorSetBindings(
+        [
+          LabDescriptorBinding(
+            0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+          )
+        ]
+      )
+    ]
+  );
+  pipeline_layout := TLabPipelineLayout.Create(
+    App.Device, [
+      LabPushConstantRange(
+        TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT),
+        0, SizeOf(push_consts)
+      )
+    ],
+    [
+      desc_sets.Ptr.Layout[0].Ptr
+    ]
+  );
+  desc_sets.Ptr.UpdateSets(
+    LabWriteDescriptorSetImageSampler(
+      desc_sets.Ptr.VkHandle[0], 0,
+      LabDescriptorImageInfo(
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        TextureEnv.Ptr.View.Ptr.VkHandle,
+        TextureEnv.Ptr.Sampler.Ptr.VkHandle
+      )
+    ),
+    []
+  );
+  vs := TLabVertexShader.Create(App.Device, 'cube_map_vs.spv');
+  ps := TLabPixelShader.Create(App.Device, 'gen_prefiltered_map_ps.spv');
+  pipeline_tmp := TLabGraphicsPipeline.FindOrCreate(
+    App.Device, App.PipelineCache, pipeline_layout.Ptr, [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
+    [LabShaderStage(vs.Ptr), LabShaderStage(ps.Ptr)],
+    render_pass, 0,
+    LabPipelineViewportState(),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState([], []),
+    LabPipelineRasterizationState(),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_FALSE, VK_FALSE),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment,
+      LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment
+    ], []),
+    LabPipelineTesselationState(0)
+  );
+  tmp_cmd := TLabCommandBuffer.Create(App.CmdPool);
+  tmp_cmd.Ptr.RecordBegin();
+  for m := 0 to TexturePrefiltered.Ptr.MipLevels - 1 do
+  begin
+    ts := Round(tex_size * Math.intpower(0.5, m));
+    tmp_cmd.Ptr.SetScissor([LabRect2D(0, 0, ts, ts)]);
+    tmp_cmd.Ptr.SetViewport([LabViewport(0, 0, ts, ts)]);
+    tmp_cmd.Ptr.BeginRenderPass(
+      render_pass.Ptr, frame_buffers[m].Ptr,
+      [
+        LabClearValue(0.0, 0.0, 0.0, 1.0),
+        LabClearValue(0.0, 0.0, 0.0, 1.0),
+        LabClearValue(0.0, 0.0, 0.0, 1.0),
+        LabClearValue(0.0, 0.0, 0.0, 1.0),
+        LabClearValue(0.0, 0.0, 0.0, 1.0),
+        LabClearValue(0.0, 0.0, 0.0, 1.0)
+      ]
+    );
+    tmp_cmd.Ptr.BindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout.Ptr, 0, [desc_sets.Ptr.VkHandle[0]], []);
+    tmp_cmd.Ptr.BindPipeline(pipeline_tmp.Ptr);
+    push_consts.roughness := m / (TexturePrefiltered.Ptr.MipLevels - 1);
+    push_consts.sample_count := 64;
+    tmp_cmd.Ptr.PushConstants(pipeline_layout.Ptr, TVkFlags(VK_SHADER_STAGE_FRAGMENT_BIT), 0, SizeOf(push_consts), @push_consts);
+    tmp_cmd.Ptr.Draw(3);
+    tmp_cmd.Ptr.EndRenderPass;
+  end;
+  tmp_cmd.Ptr.RecordEnd;
+  TLabVulkan.QueueSubmit(
+    App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics,
+    [tmp_cmd.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  );
+  TLabVulkan.QueueWaitIdle(App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics);
+end;
+
+procedure TIBLight.GenerateBRDFLUT;
+  const tex_size = 512;
+  var cmd_tmp: TLabCommandBufferShared;
+  var pipeline_layout: TLabPipelineLayoutShared;
+  var pipeline_tmp: TLabPipelineShared;
+  var vs: TLabVertexShaderShared;
+  var ps: TLabPixelShaderShared;
+  var render_pass: TLabRenderPassShared;
+  var frame_buffer: TLabFrameBufferShared;
+begin
+  TextureBRDFLUT := TLabTexture2D.Create(
+    App.Device,
+    VK_FORMAT_R16G16_SFLOAT, tex_size, tex_size,
+    TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or
+    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT),
+    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    False
+  );
+  vs := TLabVertexShader.Create(App.Device, 'brdflut_vs.spv');
+  ps := TLabPixelShader.Create(App.Device, 'brdflut_ps.spv');
+  render_pass := TLabRenderPass.Create(
+    App.Device,
+    [
+      LabAttachmentDescription(
+        TextureBRDFLUT.Ptr.Format,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_STORE
+      )
+    ],
+    [
+      LabSubpassDescriptionData(
+        [],
+        [
+          LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        ],
+        [],
+        LabAttachmentReferenceInvalid,
+        []
+      )
+    ],
+    [
+      LabSubpassDependency(
+        VK_SUBPASS_EXTERNAL,
+        0,
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+      ),
+      LabSubpassDependency(
+        0,
+        VK_SUBPASS_EXTERNAL,
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_MEMORY_READ_BIT)
+      )
+    ]
+  );
+  pipeline_layout := TLabPipelineLayout.Create(
+    App.Device, [], []
+  );
+  pipeline_tmp := TLabGraphicsPipeline.Create(
+    App.Device, App.PipelineCache, pipeline_layout.Ptr,
+    [VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_VIEWPORT],
+    [LabShaderStage(vs.Ptr), LabShaderStage(ps.Ptr)],
+    render_pass, 0,
+    LabPipelineViewportState(),
+    LabPipelineInputAssemblyState(),
+    LabPipelineVertexInputState([], []),
+    LabPipelineRasterizationState(),
+    LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_FALSE, VK_FALSE),
+    LabPipelineMultisampleState(),
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
+    LabPipelineTesselationState(0)
+  );
+  frame_buffer := TLabFrameBuffer.Create(
+    App.Device, render_pass,
+    TextureBRDFLUT.Ptr.Width, TextureBRDFLUT.Ptr.Height,
+    [TextureBRDFLUT.Ptr.View.Ptr.VkHandle]
+  );
+  cmd_tmp := TLabCommandBuffer.Create(App.CmdPool);
+  cmd_tmp.Ptr.RecordBegin();
+  cmd_tmp.Ptr.BeginRenderPass(
+    render_pass.Ptr, frame_buffer.ptr,
+    [LabClearValue(0.0, 0.0, 0.0, 1.0)]
+  );
+  cmd_tmp.Ptr.BindPipeline(pipeline_tmp.Ptr);
+  cmd_tmp.Ptr.SetViewport([LabViewport(0, 0, TextureBRDFLUT.Ptr.Width, TextureBRDFLUT.Ptr.Height)]);
+  cmd_tmp.Ptr.SetScissor(LabRect2D(0, 0, TextureBRDFLUT.Ptr.Width, TextureBRDFLUT.Ptr.Height));
+  cmd_tmp.Ptr.Draw(3);
+  cmd_tmp.Ptr.EndRenderPass;
+  cmd_tmp.Ptr.RecordEnd;
+  TLabVulkan.QueueSubmit(
+    App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics,
+    [cmd_tmp.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  );
+  TLabVulkan.QueueWaitIdle(App.BackBuffer.Ptr.SwapChain.Ptr.QueueFamilyGraphics);
 end;
 
 constructor TIBLight.Create;
@@ -322,7 +954,10 @@ begin
   App.BackBuffer.Ptr.OnResize.Add(@Resize);
   VertexShader := TLabVertexShader.Create(App.Device, 'screen_vs.spv');
   PixelShader := TLabPixelShader.Create(App.Device, 'env_ps.spv');
-  EnvTexture := TCubeTexture.Create('../Images/park_cube_map');
+  LoadEnvMap;
+  GenerateIrradianceMap;
+  GeneratePrefilteredMap;
+  GenerateBRDFLUT;
   DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings(
       [
@@ -331,7 +966,9 @@ begin
         LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE),
         LabDescriptorBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE),
         LabDescriptorBinding(4, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE),
-        LabDescriptorBinding(5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
+        LabDescriptorBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
+        LabDescriptorBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
+        LabDescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
       ],
       App.BackBuffer.Ptr.SwapChain.Ptr.ImageCount
     )
@@ -372,12 +1009,14 @@ begin
   xf := PTransforms(Params[0].VPointer);
   UniformData^.vp_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
   UniformData^.camera_pos := LabVec4(LabMatViewPos(xf^.View), 1);
+  UniformData^.exposure := 4.5;
+  UniformData^.gamma := 2.2;
 end;
 
 procedure TIBLight.BindOffscreenTargets(const Params: array of const);
   var i: TVkInt32;
   var Writes: array of TLabWriteDescriptorSet;
-  const binding_count = 6;
+  const binding_count = 8;
 begin
   SetLength(Writes, App.BackBuffer.Ptr.SwapChain.Ptr.ImageCount * binding_count);
   for i := 0 to App.BackBuffer.Ptr.SwapChain.Ptr.ImageCount - 1 do
@@ -427,14 +1066,36 @@ begin
         )
       ]
     );
-    Writes[i * binding_count + 5] := LabWriteDescriptorSetImage(
+    Writes[i * binding_count + 5] := LabWriteDescriptorSetImageSampler(
       DescriptorSets.Ptr.VkHandle[i],
       5,
       [
         LabDescriptorImageInfo(
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          EnvTexture.Ptr.Image.Ptr.VkHandle,
-          EnvTexture.Ptr.Sampler.Ptr.VkHandle
+          TextureIrradiance.Ptr.View.Ptr.VkHandle,
+          TextureIrradiance.Ptr.Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+    Writes[i * binding_count + 6] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      6,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          TexturePrefiltered.Ptr.View.Ptr.VkHandle,
+          TexturePrefiltered.Ptr.Sampler.Ptr.VkHandle
+        )
+      ]
+    );
+    Writes[i * binding_count + 7] := LabWriteDescriptorSetImageSampler(
+      DescriptorSets.Ptr.VkHandle[i],
+      7,
+      [
+        LabDescriptorImageInfo(
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          TextureBRDFLUT.Ptr.View.Ptr.VkHandle,
+          TextureBRDFLUT.Ptr.Sampler.Ptr.VkHandle
         )
       ]
     );
@@ -978,447 +1639,6 @@ begin
   TLabVulkan.QueuePresent(_SwapChain.Ptr.QueueFamilyPresent, [_SwapChain.Ptr.VkHandle], [_SwapChain.Ptr.CurImage], WaitSemaphores);
 end;
 
-procedure TTexture.Stage(const Args: array of const);
-  var Cmd: TLabCommandBuffer;
-  var mip_src_width, mip_src_height, mip_dst_width, mip_dst_height: TVkUInt32;
-  var i: TVkInt32;
-begin
-  Cmd := TLabCommandBuffer(Args[0].VObject);
-  Cmd.PipelineBarrier(
-    TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
-    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-    0, [], [],
-    [
-      LabImageMemoryBarrier(
-        Image.Ptr.VkHandle,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        0, TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT),
-        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, MipLevels
-      )
-    ]
-  );
-  Cmd.CopyBufferToImage(
-    Staging.Ptr.VkHandle,
-    Image.Ptr.VkHandle,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    [
-      LabBufferImageCopy(
-        LabOffset3D(0, 0, 0),
-        LabExtent3D(Image.Ptr.Width, Image.Ptr.Height, Image.Ptr.Depth),
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0
-      )
-    ]
-  );
-  mip_src_width := Image.Ptr.Width;
-  mip_src_height := Image.Ptr.Height;
-  for i := 0 to MipLevels - 2 do
-  begin
-    mip_dst_width := mip_src_width shr 1; if mip_dst_width <= 0 then mip_dst_width := 1;
-    mip_dst_height := mip_src_height shr 1; if mip_dst_height <= 0 then mip_dst_height := 1;
-    Cmd.PipelineBarrier(
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      0, [], [],
-      [
-        LabImageMemoryBarrier(
-          Image.Ptr.VkHandle,
-          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-          TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT), TVkFlags(VK_ACCESS_TRANSFER_READ_BIT),
-          VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i)
-        )
-      ]
-    );
-    Cmd.BlitImage(
-      Image.Ptr.VkHandle,
-      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      Image.Ptr.VkHandle,
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      [
-        LabImageBlit(
-          LabOffset3D(0, 0, 0), LabOffset3D(mip_src_width, mip_src_height, 1),
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i), 0, 1,
-          LabOffset3D(0, 0, 0), LabOffset3D(mip_dst_width, mip_dst_height, 1),
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i + 1), 0, 1
-        )
-      ]
-    );
-    Cmd.PipelineBarrier(
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
-      0, [], [],
-      [
-        LabImageMemoryBarrier(
-          Image.Ptr.VkHandle,
-          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          TVkFlags(VK_ACCESS_TRANSFER_READ_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT),
-          VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i)
-        )
-      ]
-    );
-    mip_src_width := mip_dst_width;
-    mip_src_height := mip_dst_height;
-  end;
-  Cmd.PipelineBarrier(
-    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-    TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
-    0, [], [],
-    [
-      LabImageMemoryBarrier(
-        Image.Ptr.VkHandle,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        TVkFlags(VK_ACCESS_TRANSFER_READ_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT),
-        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), MipLevels - 1
-      )
-    ]
-  );
-end;
-
-{$Push}{$Hints off}
-procedure TTexture.StageComplete(const Args: array of const);
-begin
-  Staging := nil;
-end;
-{$Pop}
-
-constructor TTexture.Create(const FileName: String; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
-  var img: TLabImageDataPNG;
-begin
-  img := TLabImageDataPNG.Create;
-  img.Load('../Images/' + FileName);
-  Create(img, FilterLinear, UseMipMaps);
-  img.Free;
-end;
-
-constructor TTexture.Create(const ImageData: TLabImageData; const FilterLinear: Boolean = True; const UseMipMaps: Boolean = True);
-  var map: PVkVoid;
-  var c: PLabColor;
-  var x, y: TVkInt32;
-  var Filter: TVkFilter;
-  var MipMapMode: TVkSamplerMipmapMode;
-  var AnisotropyEnabled: TVkBool32;
-  var MaxAnisotropy: TVkFloat;
-begin
-  if UseMipMaps then
-  begin
-    MipLevels := LabIntLog2(LabMakePOT(LabMax(ImageData.Width, ImageData.Height))) + 1;
-    MipMapMode := VK_SAMPLER_MIPMAP_MODE_LINEAR;
-  end
-  else
-  begin
-    MipLevels := 1;
-    MipMapMode := VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  end;
-  if FilterLinear then
-  begin
-    Filter := VK_FILTER_LINEAR;
-    AnisotropyEnabled := VK_TRUE;
-    MaxAnisotropy := 16;
-  end
-  else
-  begin
-    Filter := VK_FILTER_NEAREST;
-    AnisotropyEnabled := VK_FALSE;
-    MaxAnisotropy := 1;
-  end;
-  Alpha := False;
-  for y := 0 to ImageData.Height - 1 do
-  for x := 0 to ImageData.Width - 1 do
-  if ImageData.Pixels[x, y].a < $ff then
-  begin
-    Alpha := True;
-    Break;
-  end;
-  Image := TLabImage.Create(
-    App.Device,
-    VK_FORMAT_R8G8B8A8_UNORM,
-    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
-    TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT) or
-    TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-    [], ImageData.Width, ImageData.Height, 1, MipLevels, 1, VK_SAMPLE_COUNT_1_BIT,
-    VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  );
-  Staging := TLabBuffer.Create(
-    App.Device, Image.Ptr.DataSize,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if (Staging.Ptr.Map(map)) then
-  begin
-    if ImageData.Format = idf_r8g8b8a8 then
-    begin
-      Move(ImageData.Data^, map^, ImageData.DataSize);
-    end
-    else
-    begin
-      c := PLabColor(map);
-      for y := 0 to ImageData.Height - 1 do
-      for x := 0 to ImageData.Width - 1 do
-      begin
-        c^ := ImageData.Pixels[x, y];
-        Inc(c);
-      end;
-    end;
-    Staging.Ptr.Unmap;
-  end;
-  View := TLabImageView.Create(
-    App.Device, Image.Ptr.VkHandle, Image.Ptr.Format,
-    TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_VIEW_TYPE_2D,
-    0, MipLevels
-  );
-  Sampler := TLabSampler.Create(
-    App.Device, Filter, Filter,
-    VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    AnisotropyEnabled, MaxAnisotropy, MipMapMode, 0, 0, MipLevels - 1
-  );
-  App.OnStage.Add(@Stage);
-  App.OnStageComplete.Add(@StageComplete);
-end;
-
-destructor TTexture.Destroy;
-begin
-  App.OnStage.Remove(@Stage);
-  App.OnStageComplete.Remove(@StageComplete);
-  inherited Destroy;
-end;
-
-function TCubeImage.GetImageData(const Index: TVkInt32): TLabImageData;
-begin
-  Result := _Data[Index];
-end;
-
-function TCubeImage.GetXN: TLabImageData;
-begin
-  Result := _Data[ind_xn];
-end;
-
-function TCubeImage.GetXP: TLabImageData;
-begin
-  Result := _Data[ind_xp];
-end;
-
-function TCubeImage.GetYN: TLabImageData;
-begin
-  Result := _Data[ind_yn];
-end;
-
-function TCubeImage.GetYP: TLabImageData;
-begin
-  Result := _Data[ind_yp];
-end;
-
-function TCubeImage.GetZN: TLabImageData;
-begin
-  Result := _Data[ind_zn];
-end;
-
-function TCubeImage.GetZP: TLabImageData;
-begin
-  Result := _Data[ind_zp];
-end;
-
-function TCubeImage.GetSize: TVkUInt32;
-begin
-  Result := xn.Width;
-end;
-
-constructor TCubeImage.Create(const DirName: String);
-  var i: TVkInt32;
-begin
-  for i := 0 to 5 do _Data[i] := TLabImageDataPNG.Create;
-  _Data[ind_xn].Load(DirName + '/xn.png');
-  _Data[ind_xp].Load(DirName + '/xp.png');
-  _Data[ind_yn].Load(DirName + '/yn.png');
-  _Data[ind_yp].Load(DirName + '/yp.png');
-  _Data[ind_zn].Load(DirName + '/zn.png');
-  _Data[ind_zp].Load(DirName + '/zp.png');
-end;
-
-destructor TCubeImage.Destroy;
-  var i: TVkInt32;
-begin
-  for i := 0 to 5 do _Data[i].Free;
-  inherited Destroy;
-end;
-
-procedure TCubeTexture.Stage(const Args: array of const);
-  var Cmd: TLabCommandBuffer;
-  var BufferCopies: array[0..5] of TVkBufferImageCopy;
-  var i: TVkInt32;
-  var mip_src_size, mip_dst_size: TVkUInt32;
-begin
-  Cmd := TLabCommandBuffer(Args[0].VObject);
-  Cmd.PipelineBarrier(
-    TVkFlags(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT),
-    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-    0, [], [],
-    [
-      LabImageMemoryBarrier(
-        Image.Ptr.VkHandle,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        0, TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT),
-        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, MipLevels, 0, 6
-      )
-    ]
-  );
-  Cmd.CopyBufferToImage(
-    Staging.Ptr.VkHandle,
-    Image.Ptr.VkHandle,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    [
-      LabBufferImageCopy(
-        LabOffset3D(0, 0, 0),
-        LabExtent3D(Size, Size, 1),
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), 0, 0, 6
-      )
-    ]
-  );
-  mip_src_size := Size;
-  for i := 0 to MipLevels - 2 do
-  begin
-    mip_dst_size := mip_src_size shr 1;
-    Cmd.PipelineBarrier(
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      0, [], [],
-      [
-        LabImageMemoryBarrier(
-          Image.Ptr.VkHandle,
-          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-          TVkFlags(VK_ACCESS_TRANSFER_WRITE_BIT), TVkFlags(VK_ACCESS_TRANSFER_READ_BIT),
-          VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i), 1, 0, 6
-        )
-      ]
-    );
-    Cmd.BlitImage(
-      Image.Ptr.VkHandle,
-      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      Image.Ptr.VkHandle,
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      [
-        LabImageBlit(
-          LabOffset3D(0, 0, 0), LabOffset3D(mip_src_size, mip_src_size, 1),
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i), 0, 6,
-          LabOffset3D(0, 0, 0), LabOffset3D(mip_dst_size, mip_dst_size, 1),
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i + 1), 0, 6
-        )
-      ]
-    );
-    Cmd.PipelineBarrier(
-      TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-      TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
-      0, [], [],
-      [
-        LabImageMemoryBarrier(
-          Image.Ptr.VkHandle,
-          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          TVkFlags(VK_ACCESS_TRANSFER_READ_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT),
-          VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-          TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), TVkUInt32(i), 1, 0, 6
-        )
-      ]
-    );
-    mip_src_size := mip_dst_size;
-  end;
-  Cmd.PipelineBarrier(
-    TVkFlags(VK_PIPELINE_STAGE_TRANSFER_BIT),
-    TVkFlags(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),
-    0, [], [],
-    [
-      LabImageMemoryBarrier(
-        Image.Ptr.VkHandle,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        TVkFlags(VK_ACCESS_TRANSFER_READ_BIT), TVkFlags(VK_ACCESS_SHADER_READ_BIT),
-        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-        TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), MipLevels - 1, 1, 0, 6
-      )
-    ]
-  );
-end;
-
-procedure TCubeTexture.StageComplete(const Args: array of const);
-begin
-  Staging := nil;
-end;
-
-constructor TCubeTexture.Create(const DirName: String);
-  var img: TCubeImage;
-begin
-  img := TCubeImage.Create(DirName);
-  Create(img);
-  img.Free;
-end;
-
-constructor TCubeTexture.Create(const CubeImage: TCubeImage);
-  var i, x, y: TVkInt32;
-  var pc: PLabColor;
-begin
-  Size := CubeImage.Size;
-  MipLevels := LabIntLog2(LabMakePOT(Size)) + 1;
-  Image := TLabImage.Create(
-    App.Device,
-    VK_FORMAT_R8G8B8A8_UNORM,
-    TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT) or
-    TVkFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT) or
-    TVkFlags(VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-    [], Size, Size, 1, MipLevels, 6, VK_SAMPLE_COUNT_1_BIT,
-    VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_TYPE_2D, VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-    VK_IMAGE_LAYOUT_UNDEFINED,
-    TVkFlags(VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
-  );
-  Staging := TLabBuffer.Create(
-    App.Device,
-    Image.Ptr.DataSize,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT),
-    []
-  );
-  if Staging.Ptr.Map(pc) then
-  begin
-    for i := 0 to 5 do
-    begin
-      for y := 0 to Size - 1 do
-      for x := 0 to Size - 1 do
-      begin
-        pc^ := CubeImage[i].Pixels[x, y];
-        Inc(pc);
-      end;
-    end;
-    Staging.Ptr.Unmap;
-  end;
-  View := TLabImageView.Create(
-    App.Device, Image.Ptr.VkHandle, Image.Ptr.Format,
-    TVkFlags(VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_VIEW_TYPE_CUBE,
-    0, MipLevels
-  );
-  Sampler := TLabSampler.Create(
-    App.Device,
-    VK_FILTER_LINEAR, VK_FILTER_LINEAR,
-    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    VK_FALSE,
-    1,
-    VK_SAMPLER_MIPMAP_MODE_LINEAR, 0, 0, MipLevels
-  );
-  App.OnStage.Add(@Stage);
-  App.OnStageComplete.Add(@StageComplete);
-end;
-
-destructor TCubeTexture.Destroy;
-begin
-  App.OnStage.Remove(@Stage);
-  App.OnStageComplete.Remove(@StageComplete);
-  inherited Destroy;
-end;
-
 procedure TRenderTarget.SetupImage(
   const Width: TVkUInt32;
   const Height: TVkUInt32;
@@ -1466,7 +1686,10 @@ begin
   with Transforms do
   begin
     Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 1, 100);
-    View := LabMatView(LabVec3(0, 20, -16), LabVec3(0, 0, -2), LabVec3(0, 1, 0));
+    View := LabMatView(
+      LabVec3(cos(LabTimeLoopSec(30) / 30 * Pi * 2) * 20, sin(LabTimeLoopSec(155) / 155 * Pi * 2) * 20, sin(LabTimeLoopSec(30) / 30 * Pi * 2) * 20),
+      LabVec3(0, 0, -2), LabVec3(0, 1, 0)
+    );
     World := LabMatIdentity; //LabMatRotationY((LabTimeLoopSec(15) / 15) * Pi * 2);
     Clip := LabMat(
       1, 0, 0, 0,
@@ -1517,7 +1740,7 @@ begin
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
   Scene := TScene.Create;
-  Lighting := TLight.Create;
+  Lighting := TIBLight.Create;
   Fence := TLabFence.Create(Device);
   TransferBuffers;
   OnBindOffscreenTargets.Call([]);
