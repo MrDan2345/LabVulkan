@@ -16,29 +16,27 @@ vec3 face_side[] = vec3[] (
 
 void main() {
 	vec3 tc3 = vec3(in_tc, 1);
-	//float samp_count_h = 11;
-	//float samp_count_v = 6;
-	//float inc_h = 1 / (samp_count_h * PI * 2.0);
-	//float inc_v = 1 / (samp_count_v * PI * 0.5);
 	for (int i = 0; i < out_cube_faces.length(); ++i) {
 		ivec3 sw = face_swizzle[i];
 		vec3 dir = normalize(vec3(tc3[sw.x] * face_side[i].x, tc3[sw.y] * face_side[i].y, tc3[sw.z] * face_side[i].z));
-		vec3 dir_abs = abs(dir);
-		vec3 right = step(dir_abs.yzx, dir_abs) * step(dir_abs.zxy, dir_abs);//normalize(step(step(dir.yzx, dir), step(dir.zxy, dir)).zxy);
-		vec3 up = cross(dir, right);
-		right = cross(up, dir);
-		float sample_delta = 0.025;
-		float sample_count = 0.0; 
+		vec3 up = vec3(0.0, 1.0, 0.0);
+		vec3 right = normalize(cross(up, dir));
+		up = cross(dir, right);
+		const float TWO_PI = PI * 2.0;
+		const float HALF_PI = PI * 0.5;
+		const float delta_phi = TWO_PI / 180.0;
+		const float delta_theta = HALF_PI / 64.0;
 		vec3 irradiance = vec3(0.0);
-		for(float ah = 0.0; ah < 2.0 * PI; ah += sample_delta) {
-			for(float av = 0.0; av < 0.5 * PI; av += sample_delta) {
-				vec3 dir_ts = vec3(sin(av) * cos(ah),  sin(av) * sin(ah), cos(av));
-				vec3 sampleVec = dir_ts.x * right + dir_ts.y * up + dir_ts.z * dir; 
-				irradiance += texture(tex_env_map, sampleVec).rgb * cos(av) * sin(av);
-				sample_count++;
+		float sample_count = 0.0;
+		for (float phi = 0.0; phi < TWO_PI; phi += delta_phi) {
+			for (float theta = 0.0; theta < HALF_PI; theta += delta_theta) {
+				vec3 tempVec = cos(phi) * right + sin(phi) * up;
+				vec3 sampleVector = cos(theta) * dir + sin(theta) * tempVec;
+				irradiance += texture(tex_env_map, sampleVector).rgb * cos(theta) * sin(theta);
+				sample_count += 1.0;
 			}
 		}
-		irradiance = PI * irradiance * (1.0 / float(sample_count));
+		irradiance = PI * irradiance * (1.0 / sample_count);
 		out_cube_faces[i] = vec4(irradiance, 1);
 	}
 }

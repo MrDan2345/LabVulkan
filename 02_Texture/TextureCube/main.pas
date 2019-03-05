@@ -527,7 +527,6 @@ begin
       view_arr[3].Ptr.VkHandle,
       view_arr[4].Ptr.VkHandle,
       view_arr[5].Ptr.VkHandle
-      //App.TextureGen.Ptr.View.Ptr.VkHandle
     ]
   );
   desc_sets := App.DescriptorSetsFactory.Ptr.Request(
@@ -596,7 +595,6 @@ begin
   tmp_cmd.Ptr.BindPipeline(pipeline_tmp.Ptr);
   tmp_cmd.Ptr.Draw(3);
   tmp_cmd.Ptr.EndRenderPass;
-  App.TextureGen.Ptr.GenMipMaps(tmp_cmd.Ptr);
   tmp_cmd.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -608,6 +606,18 @@ begin
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
   tex2d.Free;
+  tmp_cmd.Ptr.RecordBegin();
+  App.TextureGen.Ptr.GenMipMaps(tmp_cmd.Ptr);
+  tmp_cmd.Ptr.RecordEnd;
+  QueueSubmit(
+    SwapChain.Ptr.QueueFamilyGraphics,
+    [tmp_cmd.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    0
+  );
+  QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
 end;
 
 procedure TLabApp.GenerateIrradianceMap;
@@ -769,7 +779,6 @@ begin
   tmp_cmd.Ptr.BindPipeline(pipeline_tmp.Ptr);
   tmp_cmd.Ptr.Draw(3);
   tmp_cmd.Ptr.EndRenderPass;
-  TextureIrradiance.Ptr.GenMipMaps(tmp_cmd.Ptr);
   tmp_cmd.Ptr.RecordEnd;
   QueueSubmit(
     SwapChain.Ptr.QueueFamilyGraphics,
@@ -778,6 +787,18 @@ begin
     [],
     VK_NULL_HANDLE,
     TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  );
+  QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
+  tmp_cmd.Ptr.RecordBegin();
+  TextureIrradiance.Ptr.GenMipMaps(tmp_cmd.Ptr);
+  tmp_cmd.Ptr.RecordEnd;
+  QueueSubmit(
+    SwapChain.Ptr.QueueFamilyGraphics,
+    [tmp_cmd.Ptr.VkHandle],
+    [],
+    [],
+    VK_NULL_HANDLE,
+    0
   );
   QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
 end;
