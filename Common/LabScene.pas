@@ -79,7 +79,7 @@ type
   TLabSceneShaderShared = specialize TLabSharedRef<TLabSceneShader>;
 
   TLabSceneShaderParameterType = (spt_uniform = 0, spt_uniform_dynamic, spt_image);
-  TLabSceneShaderParameterSemantic = (sps_color_map, sps_normal_map, sps_dither_mask);
+  TLabSceneShaderParameterSemantic = (sps_color_map, sps_normal_map, sps_material_map, sps_dither_mask);
   TLabSceneShaderParameterSemanticSet = set of TLabSceneShaderParameterSemantic;
   TLabSceneShaderParameter = record
     ShaderStage: TVkShaderStageFlags;
@@ -105,7 +105,8 @@ type
   TLabSceneShaderDeferredInfo = record
     DepthOutput: TVkUInt8;
     ColorOutput: TVkUInt8;
-    NormalsOutlput: TVkUInt8
+    NormalsOutlput: TVkUInt8;
+    MaterialOutput: TVkUInt8;
   end;
   PLabSceneShaderDeferredInfo = ^TLabSceneShaderDeferredInfo;
 
@@ -814,6 +815,7 @@ class function TLabSceneShaderFactory.MakeShader(
   var binding, i, loc, loc_in, loc_out, samp: Integer;
   var TexColor: String;
   var TexNormal: String;
+  var TexMaterial: String;
   var TexDitherMask: String;
   var TexCoord: String;
   var Bindings: array of TVkDescriptorSetLayoutBinding;
@@ -935,6 +937,7 @@ begin
 
   TexColor := '';
   TexNormal := '';
+  TexMaterial := '';
   TexDitherMask := '';
   TexCoord := '';
   samp := 0;
@@ -948,6 +951,10 @@ begin
     if (sps_normal_map in Parameters[i].Semantics) then
     begin
       TexNormal := 'tex_sampler' + IntToStr(samp);
+    end;
+    if (sps_material_map in Parameters[i].Semantics) then
+    begin
+      TexMaterial := 'tex_sampler' + IntToStr(samp);
     end;
     if (sps_dither_mask in Parameters[i].Semantics) then
     begin
@@ -1022,7 +1029,9 @@ begin
   if (Length(TexColor) > 0)
   and (Length(TexCoord) > 0) then
   begin
-    StrCode += '  color *= texture(' + TexColor + ', tex_coord);'#$D#$A;
+    StrCode += '  vec4 tex_color = texture(' + TexColor + ', tex_coord);'#$D#$A;
+    StrCode += '  tex_color.xyz = pow(tex_color.xyz, vec3(2.2));'#$D#$A;
+    StrCode += '  color *= tex_color;'#$D#$A;
   end;
 
   if Assigned(DeferredInfo) then
@@ -1030,6 +1039,7 @@ begin
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.DepthOutput) + ') out float out_depth;'#$D#$A;
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.ColorOutput) + ') out vec4 out_color;'#$D#$A;
     StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.NormalsOutlput) + ') out vec4 out_normal;'#$D#$A;
+    StrAttr += 'layout (location = ' + IntToStr(DeferredInfo^.MaterialOutput) + ') out vec4 out_material;'#$D#$A;
     if Length(TexDitherMask) > 0 then
     begin
       StrCode += '  vec4 dither_mask = textureLod(' + TexDitherMask + ', gl_FragCoord.xy * (1.0 / 16.0), 0);'#$D#$A;
@@ -1044,6 +1054,15 @@ begin
     else
     begin
       StrCode += '  out_normal = vec4(0, 0, 0, 1);'#$D#$A;
+    end;
+    if (Length(TexMaterial) > 0)
+    and (Length(TexCoord) > 0) then
+    begin
+      StrCode += '  out_material = texture(' + TexMaterial + ', tex_coord);'#$D#$A;
+    end
+    else
+    begin
+      StrCode += '  out_material = vec4(0.2, 0.0, 0.0, 0.0);'#$D#$A;
     end;
   end
   else

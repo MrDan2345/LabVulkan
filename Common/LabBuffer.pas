@@ -430,6 +430,7 @@ begin
     VK_INDEX_TYPE_UINT16: _Stride := 2;
     else _Stride := 4;
   end;
+  _IndexType := AIndexType;
   _IndexCount := AIndexCount;
   inherited Create(ADevice, _Stride * _IndexCount, AUsageFlags, [], VK_SHARING_MODE_EXCLUSIVE, AMemoryFlags);
 end;

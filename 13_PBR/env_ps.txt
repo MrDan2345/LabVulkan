@@ -120,8 +120,8 @@ void main() {
 	color = mix(color, textureLod(tex_prefiltered, -dir_to_camera, 0).xyz, step(0.99, depth));
 	
 	// Tone mapping
-	color = Uncharted2Tonemap(color * data.exposure);
-	color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
+	//color = Uncharted2Tonemap(color * data.exposure);
+	//color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
 	// Gamma correction
 	color = pow(color, vec3(1.0f / data.gamma));
    

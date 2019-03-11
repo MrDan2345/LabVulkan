@@ -17,6 +17,7 @@ layout (std140, binding = 1) uniform t_data {
 layout (binding = 2) uniform sampler_type tex_depth;
 layout (binding = 3) uniform sampler_type tex_color;
 layout (binding = 4) uniform sampler_type tex_normal;
+layout (binding = 5) uniform sampler_type tex_material;
 layout (location = 0) in vec4 light_pos;
 layout (location = 1) in vec4 light_color;
 layout (location = 0) out vec4 out_color;

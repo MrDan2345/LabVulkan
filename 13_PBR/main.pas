@@ -243,7 +243,8 @@ type
     var OnBindOffscreenTargets: TLabDelegate;
     var SampleCount: TVkSampleCountFlagBits;
     var Scene: TSceneShared;
-    var Lighting: TIBLightShared;
+    var LightingIB: TIBLightShared;
+    var LightingPoint: TLightShared;
     constructor Create;
     procedure UpdateRenderTargets(const Params: array of const);
     procedure UpdateTransforms;
@@ -342,6 +343,10 @@ begin
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/hdrvfx_0012_sand/hdrvfx_0012_sand_v11_Ref.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Summi_Pool/Summi_Pool_3k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Milkyway/Milkyway_small.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Factory_Catwalk/Factory_Catwalk_2k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Hamarikyu_Bridge_B/14-Hamarikyu_Bridge_B_3k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Theatre_Center/Theatre-Center_2k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/CharlesRiver/CharlesRiver_Ref.hdr', False);
   for i := 0 to High(attachments) do
   begin
     attachments[i] := LabAttachmentDescription(
@@ -879,6 +884,7 @@ begin
     TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) or
     TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT),
     TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    False,
     False
   );
   vs := TLabVertexShader.Create(App.Device, 'brdflut_vs.spv');
@@ -1179,7 +1185,11 @@ begin
     LabPipelineRasterizationState(),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState, VK_FALSE, VK_FALSE),
     LabPipelineMultisampleState(App.SampleCount),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment],[]),
+    LabPipelineColorBlendState([
+      LabPipelineColorBlendAttachmentState(
+        VK_TRUE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE
+      )
+    ],[]),
     LabPipelineTesselationState(0)
   );
   UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformData));
@@ -1762,7 +1772,8 @@ begin
   Cmd := TLabCommandBuffer.Create(CmdPool);
   PipelineCache := TLabPipelineCache.Create(Device);
   Scene := TScene.Create;
-  Lighting := TIBLight.Create;
+  LightingIB := TIBLight.Create;
+  LightingPoint := TLight.Create;
   Fence := TLabFence.Create(Device);
   TransferBuffers;
   OnBindOffscreenTargets.Call([]);
@@ -1772,7 +1783,8 @@ procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   Scene := nil;
-  Lighting := nil;
+  LightingIB := nil;
+  LightingPoint := nil;
   DeferredBuffer := nil;
   BackBuffer := nil;
   Cmd := nil;
@@ -1832,7 +1844,8 @@ end;
 
 procedure TLabApp.DrawLights;
 begin
-  Lighting.Ptr.Draw(Cmd.Ptr);
+  LightingIB.Ptr.Draw(Cmd.Ptr);
+  //LightingPoint.Ptr.Draw(Cmd.Ptr);
 end;
 
 end.

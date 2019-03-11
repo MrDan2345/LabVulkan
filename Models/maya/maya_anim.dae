@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.79.0 commit date:2018-03-22, commit time:14:10, hash:f4dc9f9d68b</authoring_tool>
     </contributor>
-    <created>2018-12-24T18:17:37</created>
-    <modified>2018-12-24T18:17:37</modified>
+    <created>2019-03-05T16:54:48</created>
+    <modified>2019-03-05T16:54:48</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -87,8 +87,14 @@
     <image id="siren_body_n_png" name="siren_body_n_png">
       <init_from>siren_body_n.png</init_from>
     </image>
+    <image id="siren_body_m_png" name="siren_body_m_png">
+      <init_from>siren_body_m.png</init_from>
+    </image>
     <image id="Mouth_png" name="Mouth_png">
       <init_from>Mouth.png</init_from>
+    </image>
+    <image id="Mouth_m_png" name="Mouth_m_png">
+      <init_from>Mouth_m.png</init_from>
     </image>
     <image id="siren_hands_c_png" name="siren_hands_c_png">
       <init_from>siren_hands_c.png</init_from>
@@ -96,11 +102,17 @@
     <image id="siren_hands_n_png" name="siren_hands_n_png">
       <init_from>siren_hands_n.png</init_from>
     </image>
+    <image id="siren_hands_m_png" name="siren_hands_m_png">
+      <init_from>siren_hands_m.png</init_from>
+    </image>
     <image id="siren_head_c_png" name="siren_head_c_png">
       <init_from>siren_head_c.png</init_from>
     </image>
     <image id="siren_head_n_png" name="siren_head_n_png">
       <init_from>siren_head_n.png</init_from>
+    </image>
+    <image id="siren_head_m_png" name="siren_head_m_png">
+      <init_from>siren_head_m.png</init_from>
     </image>
   </library_images>
   <library_effects>
@@ -114,6 +126,16 @@
         <newparam sid="siren_body_c_png-sampler">
           <sampler2D>
             <source>siren_body_c_png-surface</source>
+          </sampler2D>
+        </newparam>
+        <newparam sid="siren_body_m_png-surface">
+          <surface type="2D">
+            <init_from>siren_body_m_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="siren_body_m_png-sampler">
+          <sampler2D>
+            <source>siren_body_m_png-surface</source>
           </sampler2D>
         </newparam>
         <newparam sid="siren_body_n_png-surface">
@@ -138,7 +160,7 @@
               <texture texture="siren_body_c_png-sampler"/>
             </diffuse>
             <specular>
-              <color sid="specular">0.5 0.5 0.5 1</color>
+              <texture texture="siren_body_m_png-sampler"/>
             </specular>
             <shininess>
               <float sid="shininess">50</float>
@@ -169,6 +191,16 @@
             <source>Mouth_png-surface</source>
           </sampler2D>
         </newparam>
+        <newparam sid="Mouth_m_png-surface">
+          <surface type="2D">
+            <init_from>Mouth_m_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="Mouth_m_png-sampler">
+          <sampler2D>
+            <source>Mouth_m_png-surface</source>
+          </sampler2D>
+        </newparam>
         <technique sid="common">
           <phong>
             <emission>
@@ -181,7 +213,7 @@
               <texture texture="Mouth_png-sampler"/>
             </diffuse>
             <specular>
-              <color sid="specular">0.5 0.5 0.5 1</color>
+              <texture texture="Mouth_m_png-sampler"/>
             </specular>
             <shininess>
               <float sid="shininess">50</float>
@@ -203,6 +235,16 @@
         <newparam sid="siren_hands_c_png-sampler">
           <sampler2D>
             <source>siren_hands_c_png-surface</source>
+          </sampler2D>
+        </newparam>
+        <newparam sid="siren_hands_m_png-surface">
+          <surface type="2D">
+            <init_from>siren_hands_m_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="siren_hands_m_png-sampler">
+          <sampler2D>
+            <source>siren_hands_m_png-surface</source>
           </sampler2D>
         </newparam>
         <newparam sid="siren_hands_n_png-surface">
@@ -227,7 +269,7 @@
               <texture texture="siren_hands_c_png-sampler"/>
             </diffuse>
             <specular>
-              <color sid="specular">0.5 0.5 0.5 1</color>
+              <texture texture="siren_hands_m_png-sampler"/>
             </specular>
             <shininess>
               <float sid="shininess">50</float>
@@ -258,6 +300,16 @@
             <source>siren_head_c_png-surface</source>
           </sampler2D>
         </newparam>
+        <newparam sid="siren_head_m_png-surface">
+          <surface type="2D">
+            <init_from>siren_head_m_png</init_from>
+          </surface>
+        </newparam>
+        <newparam sid="siren_head_m_png-sampler">
+          <sampler2D>
+            <source>siren_head_m_png-surface</source>
+          </sampler2D>
+        </newparam>
         <newparam sid="siren_head_n_png-surface">
           <surface type="2D">
             <init_from>siren_head_n_png</init_from>
@@ -280,7 +332,7 @@
               <texture texture="siren_head_c_png-sampler"/>
             </diffuse>
             <specular>
-              <color sid="specular">0.5 0.5 0.5 1</color>
+              <texture texture="siren_head_m_png-sampler"/>
             </specular>
             <shininess>
               <float sid="shininess">50</float>
