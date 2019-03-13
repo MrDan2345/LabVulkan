@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.79.0 commit date:2018-03-22, commit time:14:10, hash:f4dc9f9d68b</authoring_tool>
     </contributor>
-    <created>2019-03-12T18:36:32</created>
-    <modified>2019-03-12T18:36:32</modified>
+    <created>2019-03-13T20:40:36</created>
+    <modified>2019-03-13T20:40:36</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -847,7 +847,7 @@
         <instance_camera url="#Camera-camera"/>
       </node>
       <node id="Lamp" name="Lamp" type="NODE">
-        <matrix sid="transform">0.8302095 -0.4143787 0.3728841 5.857382 0.5304496 0.7929002 -0.2998876 -6.125964 -0.1713928 0.4467657 0.8780802 9.516667 0 0 0 1</matrix>
+        <matrix sid="transform">0.06431476 -0.1476094 0.9869524 8.307895 0.9978635 0.02090249 -0.06189958 -1.214287 -0.0114928 0.9888248 0.1486384 7.698469 0 0 0 1</matrix>
         <instance_light url="#Lamp-light"/>
       </node>
       <node id="Plane" name="Plane" type="NODE">

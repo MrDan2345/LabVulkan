@@ -14,7 +14,7 @@ layout (binding = 1) uniform texture2D tex_color;
 layout (binding = 2) uniform texture2D tex_depth;
 layout (binding = 3) uniform texture2D tex_normal;
 layout (binding = 4) uniform texture2D tex_material;
-layout (binding = 5) uniform sampler2D tex_light_depth;
+layout (binding = 5) uniform sampler2DShadow tex_light_depth;
 layout (location = 0) out vec4 out_color;
 
 vec4 get_world_pos(float depth) {
@@ -37,7 +37,16 @@ void main() {
 	vec4 pos_light = data.vp_light * pos_w;
 	pos_light.xyz /= pos_light.w;
 	pos_light.xy = pos_light.xy * 0.5 + 0.5;
-	float depth_light = texture(tex_light_depth, pos_light.xy, 0).x + 0.001;
-	float shadow = step(pos_light.z, depth_light);
+	//float depth_light = texture(tex_light_depth, pos_light.xy, 0).x + 0.001;
+	//float shadow = step(pos_light.z, depth_light);
+	float shadow = 0.0;
+	vec2 tc_offset = vec2(1.0) / vec2(textureSize(tex_light_depth, 0));
+	for (int x = -1; x <= 1; ++x) {
+		for (int y = -1; y <= 1; ++y) {
+			vec3 tc = vec3(pos_light.xy + vec2(tc_offset.x * float(x), tc_offset.y * float(y)), pos_light.z - 0.001);
+			shadow += texture(tex_light_depth, tc, 0);
+		}
+	}
+	shadow /= 9.0;
 	out_color = vec4(vec3(dot(normal, -data.light_dir.xyz) * shadow) * data.light_color.xyz * color.xyz, 1);
 }

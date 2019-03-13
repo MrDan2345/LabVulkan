@@ -357,7 +357,7 @@ begin
   LightData^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
   LightData^.VP_Light := light_v * light_p * xf^.Clip;
   LightData^.CameraPos := LabVec4(LabMatViewPos(xf^.View), 1);
-  LightData^.LightDir := LabVec4(Inst.LightDir, 0);
+  LightData^.LightDir := LabVec4(Inst.LightDir.Norm, 0);
   LightData^.LightColor := LabVec4(Inst.LightColor, 0);
   LightUniformBuffer.Ptr.FlushAll;
   //UniformData^.exposure := 4.5;
@@ -445,16 +445,17 @@ begin
     VK_SAMPLE_COUNT_1_BIT
   );
   DepthSampler := TLabSampler.Create(
-    App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,
-    VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    //VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    //VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    //VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    App.Device, VK_FILTER_LINEAR, VK_FILTER_LINEAR,
+    //VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    //VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    //VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
     VK_FALSE,
     1, VK_SAMPLER_MIPMAP_MODE_NEAREST,
-    0, 0, 0
+    0, 0, 0, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+    VK_TRUE, VK_COMPARE_OP_LESS
   );
   DepthUniformBuffer := TUniformBufferDepth.Create(
     App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
@@ -640,7 +641,8 @@ begin
     if Assigned(Pass.Material) then
     begin
       for j := 0 to Pass.Material.Effect.Params.Count - 1 do
-      if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
+      if (Pass.Material.Effect.Params[j].ParameterType = pt_sampler)
+      and Assigned(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData) then
       begin
         Inc(pc);
       end;
@@ -679,13 +681,17 @@ begin
       for j := 0 to Pass.Material.Effect.Params.Count - 1 do
       if Pass.Material.Effect.Params[j].ParameterType = pt_sampler then
       begin
-        sem := [];
-        tex_name := Pass.Material.Effect.Params[j].Name;
-        if Pos('_c_', tex_name) > 0 then sem += [sps_color_map];
-        if Pos('_n_', tex_name) > 0 then sem += [sps_normal_map];
-        if Pos('_m_', tex_name) > 0 then sem += [sps_material_map];
         Image := TTexture(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
-        AddParamImage(Image, sem);
+        if Assigned(Image) then
+        begin
+          sem := [];
+          tex_name := Pass.Material.Effect.Params[j].Name;
+          if Pos('_c_', tex_name) > 0 then sem += [sps_color_map];
+          if Pos('_n_', tex_name) > 0 then sem += [sps_normal_map];
+          if Pos('_m_', tex_name) > 0 then sem += [sps_material_map];
+          Image := TTexture(TLabSceneEffectParameterSampler(Pass.Material.Effect.Params[j]).Image.UserData);
+          AddParamImage(Image, sem);
+        end;
       end;
     end;
     Pass.GeomSubset := r_s;
@@ -1283,7 +1289,10 @@ begin
   for i_i := 0 to Scene.Images.Count - 1 do
   begin
     r_i := Scene.Images[i_i];
-    r_i.UserData := TTexture.Create(r_i.Image);
+    if r_i.Image.DataSize > 0 then
+    begin
+      r_i.UserData := TTexture.Create(r_i.Image);
+    end;
   end;
   CameraInst := nil;
   LightInst := nil;
@@ -1355,7 +1364,7 @@ constructor TScene.Create;
 begin
   Scene := TLabScene.Create(App.Device);
   Scene.Add('../Models/scene.dae');
-  //Scene.Add('../Models/maya/maya_anim.dae');
+  Scene.Add('../Models/maya/maya_anim.dae');
   //Scene.Add('../Models/Cerberus/cerberus.dae');
   //xf := Scene.FindNode('Armature').Transform;
   //xf := xf * LabMatRotationY(-LabPi * 0.5) * LabMatScaling(0.75);
