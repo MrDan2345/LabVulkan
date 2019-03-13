@@ -33,13 +33,13 @@ type
       Projection: TLabMat;
       WVP: TLabMat;
     end;
-    type PTransforms = ^TTransforms;
+    type TUniformTransforms = specialize TLabUniformBuffer<TTransforms>;
+    type TUniformTransformsShared = specialize TLabSharedRef<TUniformTransforms>;
   private
     var _Device: TLabDeviceShared;
     var _VertexBuffer: TLabVertexBuffer;
     var _VertexBufferMap: PVertexArr;
-    var _UniformBuffer: TLabUniformBuffer;
-    var _UniformBufferMap: PTransforms;
+    var _UniformBuffer: TUniformTransforms;
     var _Vertices: array of TVertex;
     var _CurVertex: TVkInt32;
     var _FlushedVertices: TVkInt32;
@@ -48,8 +48,9 @@ type
     var _Pipeline: TLabPipelineShared;
     procedure Allocate(const Amount: TVkInt32);
     procedure AddLine(const v0, v1: TLabVec3; const c0, c1: TLabVec4);
+    function GetTransforms: TUniformTransforms.PUniformData; inline;
   public
-    property Transforms: PTransforms read _UniformBufferMap;
+    property Transforms: TUniformTransforms.PUniformData read GetTransforms;
     constructor Create(const ADevice: TLabDeviceShared);
     destructor Destroy; override;
     procedure DrawTransform(const xf: TLabMat);
@@ -82,20 +83,27 @@ begin
   Inc(_CurVertex);
 end;
 
+function TLabDebugDraw.GetTransforms: TUniformTransforms.PUniformData;
+begin
+  Result := _UniformBuffer.Buffer;
+end;
+
 constructor TLabDebugDraw.Create(const ADevice: TLabDeviceShared);
 begin
   inherited Create;
   _Device := ADevice;
   _CurVertex := 0;
   _FlushedVertices := 0;
-  _UniformBuffer := TLabUniformBuffer.Create(
-    _Device, SizeOf(Transforms), TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  _UniformBuffer := TUniformTransforms.Create(
+    _Device, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
   );
-  _UniformBuffer.Map(PVkVoid(_UniformBufferMap));
-  _UniformBufferMap^.World.SetIdentity;
-  _UniformBufferMap^.View.SetIdentity;
-  _UniformBufferMap^.Projection.SetIdentity;
-  _UniformBufferMap^.WVP.SetIdentity;
+  with Transforms^ do
+  begin
+    World.SetIdentity;
+    View.SetIdentity;
+    Projection.SetIdentity;
+    WVP.SetIdentity;
+  end;
   _Shader := TLabSceneShaderFactory.MakeShader(
     _Device.Ptr,
     [

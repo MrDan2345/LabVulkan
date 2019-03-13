@@ -527,6 +527,30 @@ type
   end;
   TLabColladaCameraList = specialize TLabList<TLabColladaCamera>;
 
+  TLabColladaLightType = (lt_ambient, lt_directional, lt_point, lt_spot);
+
+  TLabColladaLight = class (TLabColladaObject)
+  private
+    var _LightType: TLabColladaLightType;
+    var _Color: TLabVec3;
+    var _AttenuationConstant: TVkFloat;
+    var _AttenuationLinear: TVkFloat;
+    var _AttenuationQuadratic: TVkFloat;
+    var _FalloffAngle: TVkFloat;
+    var _FalloffExponent: TVkFloat;
+  public
+    property LightType: TLabColladaLightType read _LightType;
+    property Color: TLabVec3 read _Color;
+    property AttenuationConstant: TVkFloat read _AttenuationConstant;
+    property AttenuationLinear: TVkFloat read _AttenuationLinear;
+    property AttenuationQuadratic: TVkFloat read _AttenuationQuadratic;
+    property FalloffAngle: TVkFloat read _FalloffAngle;
+    property FalloffExponent: TVkFloat read _FalloffExponent;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+  TLabColladaLightList = specialize TLabList<TLabColladaLight>;
+
   TLabColladaInstanceMaterial = class (TLabColladaObject)
   private
     _Symbol: DOMString;
@@ -578,6 +602,17 @@ type
     procedure ResolveLinks; override;
   public
     property Camera: TLabColladaCamera read _Camera;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
+  TLabColladaInstanceLight = class (TLabColladaInstance)
+  private
+    _Light: TLabColladaLight;
+  protected
+    procedure ResolveLinks; override;
+  public
+    property Light: TLabColladaLight read _Light;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
     destructor Destroy; override;
   end;
@@ -677,6 +712,15 @@ type
     destructor Destroy; override;
   end;
 
+  TLabColladaLibraryLights = class (TLabColladaObject)
+  private
+    _Lights: TLabColladaLightList;
+  public
+    property Lights: TLabColladaLightList read _Lights;
+    constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+    destructor Destroy; override;
+  end;
+
   TLabColladaLibraryVisualScenes = class (TLabColladaObject)
   private
     _VisualScenes: TLabColladaVisualSceneList;
@@ -725,6 +769,7 @@ type
     _LibControllers: TLabColladaLibraryControllers;
     _LibAnimations: TLabColladaLibraryAnimations;
     _LibCameras: TLabColladaLibraryCameras;
+    _LibLights: TLabColladaLibraryLights;
     _LibVisualScenes: TLabColladaLibraryVisualScenes;
     _Scene: TLabColladaScene;
   public
@@ -736,6 +781,7 @@ type
     property LibControllers: TLabColladaLibraryControllers read _LibControllers;
     property LibAnimations: TLabColladaLibraryAnimations read _LibAnimations;
     property LibCameras: TLabColladaLibraryCameras read _LibCameras;
+    property LibLights: TLabColladaLibraryLights read _LibLights;
     property LibVisualScenes: TLabColladaLibraryVisualScenes read _LibVisualScenes;
     property Scene: TLabColladaScene read _Scene;
     constructor Create(const XMLNode: TDOMNode);
@@ -1679,6 +1725,84 @@ begin
 end;
 
 destructor TLabColladaCamera.Destroy;
+begin
+  inherited Destroy;
+end;
+
+constructor TLabColladaLight.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+  var CurNode, Node: TDOMNode;
+  var name_lc: DOMString;
+  var node_value: TLabStrArrA;
+  var i: TVkInt32;
+begin
+  inherited Create(XMLNode, AParent);
+  _LightType := lt_ambient;
+  _Color.SetValue(1, 1, 1);
+  _AttenuationConstant := 1;
+  _AttenuationLinear := 0;
+  _AttenuationQuadratic := 0;
+  _FalloffAngle := LabPi;
+  _FalloffExponent := 0;
+  CurNode := XMLNode.FindNode('technique_common');
+  CurNode := CurNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    name_lc := LowerCase(CurNode.NodeName);
+    if name_lc = 'ambient' then
+    begin
+      _LightType := lt_ambient;
+    end
+    else if name_lc = 'directional' then
+    begin
+      _LightType := lt_directional;
+    end
+    else if name_lc = 'point' then
+    begin
+      _LightType := lt_point;
+    end
+    else if name_lc = 'spot' then
+    begin
+      _LightType := lt_spot;
+    end;
+    Node := CurNode.FirstChild;
+    while Assigned(Node) do
+    begin
+      name_lc := LowerCase(Node.NodeName);
+      if name_lc = 'color' then
+      begin
+        node_value := LabStrExplode(AnsiString(Node.TextContent), ' ');
+        for i := 0 to LabMin(2, High(node_value)) do
+        begin
+          _Color[i] := StrToFloatDef(node_value[i], 0);
+        end;
+      end
+      else if name_lc = 'constant_attenuation' then
+      begin
+        _AttenuationConstant := StrToFloatDef(AnsiString(Node.TextContent), 1);
+      end
+      else if name_lc = 'linear_attenuation' then
+      begin
+        _AttenuationLinear := StrToFloatDef(AnsiString(Node.TextContent), 0);
+      end
+      else if name_lc = 'quadratic_attenuation' then
+      begin
+        _AttenuationQuadratic := StrToFloatDef(AnsiString(Node.TextContent), 0);
+      end
+      else if name_lc = 'falloff_angle' then
+      begin
+        _FalloffAngle := StrToFloatDef(AnsiString(Node.TextContent), 180) * LabDegToRad;
+      end
+      else if name_lc = 'falloff_exponent' then
+      begin
+        _FalloffExponent := StrToFloatDef(AnsiString(Node.TextContent), 0);
+      end;
+      Node := Node.NextSibling;
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLight.Destroy;
 begin
   inherited Destroy;
 end;
@@ -2669,6 +2793,26 @@ begin
   inherited Destroy;
 end;
 
+procedure TLabColladaInstanceLight.ResolveLinks;
+  var Obj: TLabColladaObject;
+begin
+  Obj := Find(url);
+  if Assigned(Obj) and (Obj is TLabColladaLight) then
+  begin
+    _Light := TLabColladaLight(Obj);
+  end;
+end;
+
+constructor TLabColladaInstanceLight.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+begin
+  inherited Create(XMLNode, AParent);
+end;
+
+destructor TLabColladaInstanceLight.Destroy;
+begin
+  inherited Destroy;
+end;
+
 constructor TLabColladaNode.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -2789,6 +2933,10 @@ begin
     else if NodeName = 'instance_camera' then
     begin
       _Instances.Add(TLabColladaInstanceCamera.Create(CurNode, Self));
+    end
+    else if NodeName = 'instance_light' then
+    begin
+      _Instances.Add(TLabColladaInstanceLight.Create(CurNode, Self));
     end;
     CurNode := CurNode.NextSibling;
   end;
@@ -3034,6 +3182,31 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabColladaLibraryLights.Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
+  var CurNode: TDOMNode;
+  var NodeName: DOMString;
+begin
+  inherited Create(XMLNode, AParent);
+  _Lights := TLabColladaLightList.Create;
+  CurNode := XMLNode.FirstChild;
+  while Assigned(CurNode) do
+  begin
+    NodeName := LowerCase(CurNode.NodeName);
+    if NodeName = 'light' then
+    begin
+      _Lights.Add(TLabColladaLight.Create(CurNode, Self));
+    end;
+    CurNode := CurNode.NextSibling;
+  end;
+end;
+
+destructor TLabColladaLibraryLights.Destroy;
+begin
+  while _Lights.Count > 0 do _Lights.Pop.Free;
+  _Lights.Free;
+  inherited Destroy;
+end;
+
 constructor TLabColladaLibraryVisualScenes.Create(
   const XMLNode: TDOMNode;
   const AParent: TLabColladaObject
@@ -3162,6 +3335,7 @@ begin
     end
     else if NodeName = 'library_lights' then
     begin
+      _LibLights := TLabColladaLibraryLights.Create(CurNode, Self);
     end
     else if NodeName = 'library_images' then
     begin
@@ -3201,6 +3375,7 @@ end;
 
 destructor TLabColladaRoot.Destroy;
 begin
+  FreeAndNil(_LibLights);
   FreeAndNil(_LibCameras);
   FreeAndNil(_LibMaterials);
   FreeAndNil(_LibEffects);

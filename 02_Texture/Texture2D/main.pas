@@ -41,6 +41,14 @@ type
 
   TLabApp = class (TLabVulkan)
   public
+    type TTransforms = packed record
+      World: TLabMat;
+      View: TLabMat;
+      Projection: TLabMat;
+      WVP: TLabMat;
+    end;
+    type TUniformTransforms = specialize TLabUniformBuffer<TTransforms>;
+    type TUniformTransformsShared = specialize TLabSharedRef<TUniformTransforms>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -51,7 +59,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
+    var UniformBuffer: TUniformTransformsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -66,12 +74,6 @@ type
     var TextureBRDFLUT: TLabTexture2DShared;
     var OnStage: TLabDelegate;
     var OnStageComplete: TLabDelegate;
-    var Transforms: record
-      World: TLabMat;
-      View: TLabMat;
-      Projection: TLabMat;
-      WVP: TLabMat;
-    end;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -192,7 +194,7 @@ procedure TLabApp.UpdateTransforms;
   var Clip: TLabMat;
 begin
   fov := LabDegToRad * 20;
-  with Transforms do
+  with UniformBuffer.Ptr.Buffer^ do
   begin
     Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
     View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, -1, 0));
@@ -232,10 +234,6 @@ end;
 
 procedure TLabApp.Initialize;
   var map: PVkVoid;
-  var img: TLabImageData;
-  var x, y, i_x, i_y: TVkInt32;
-  var dx, dy: TVkFloat;
-  var pc: PLabColor;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Ptr.Caption := 'Vulkan Texture';
@@ -250,9 +248,7 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   Cmd := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
-  //VertexShader := TLabVertexShader.Create(Device, @Bin_vs, SizeOf(Bin_vs));
-  //PixelShader := TLabPixelShader.Create(Device, @Bin_ps, SizeOf(Bin_ps));
+  UniformBuffer := TUniformTransforms.Create(Device);
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   VertexBuffer := TLabVertexBuffer.Create(
@@ -364,7 +360,6 @@ begin
 end;
 
 procedure TLabApp.Loop;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
@@ -380,12 +375,6 @@ begin
     SwapchainCreate;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms, UniformData^, SizeOf(Transforms));
-    UniformBuffer.Ptr.Unmap;
-  end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin

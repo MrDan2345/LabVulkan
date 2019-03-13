@@ -66,12 +66,16 @@ type
       VP: TLabMat;
     end;
     type PUniformVertex = ^TUniformVertex;
+    type TUniformBufferVertex = specialize TLabUniformBuffer<TUniformVertex>;
+    type TUniformBufferVertexShared = specialize TLabSharedRef<TUniformBufferVertex>;
     type TUniformPixel = packed record
       VP_i: TLabMat;
       rt_ratio: TLabVec4;
       camera_pos: TLabVec4;
     end;
     type PUniformPixel = ^TUniformPixel;
+    type TUniformBufferPixel = specialize TLabUniformBuffer<TUniformPixel>;
+    type TUniformBufferPixelShared = specialize TLabSharedRef<TUniformBufferPixel>;
     type TLightVertex = packed record
       x, y, z, w: TVkFloat;
     end;
@@ -98,8 +102,10 @@ type
         box_z: TLabVec4;
       end;
       type PComputeUniforms = ^TComputeUniforms;
+      type TUniformBufferCompute = specialize TLabUniformBuffer<TComputeUniforms>;
+      type TUnifromBufferComputeShared = specialize TLabSharedRef<TUniformBufferCompute>;
       var ComputeShader: TLabComputeShaderShared;
-      var UniformBuffer: TLabUniformBufferShared;
+      var UniformBuffer: TUnifromBufferComputeShared;
       var DescriptorSets: TLabDescriptorSetsShared;
       var PipelineLayout: TLabPipelineLayoutShared;
       var Pipeline: TLabPipelineShared;
@@ -125,8 +131,8 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
-    var UniformBufferVertex: TLabUniformBufferShared;
-    var UniformBufferPixel: TLabUniformBufferShared;
+    var UniformBufferVertex: TUniformBufferVertexShared;
+    var UniformBufferPixel: TUniformBufferPixelShared;
     var UniformsVertex: PUniformVertex;
     var UniformsPixel: PUniformPixel;
     var ComputeTask: TComputeTask;
@@ -149,7 +155,9 @@ type
       gamma: TVkFloat;
     end;
     type PUniformData = ^TUniformData;
-    var UniformBuffer: TLabUniformBufferShared;
+    type TUniformBuffer = specialize TLabUniformBuffer<TUniformData>;
+    type TUniformBufferShared = specialize TLabSharedRef<TUniformBuffer>;
+    var UniformBuffer: TUniformBufferShared;
     var UniformData: PUniformData;
     var VertexShader: TLabVertexShaderShared;
     var PixelShader: TLabPixelShaderShared;
@@ -188,14 +196,24 @@ type
 
   TScene = class (TLabClass)
   public
-    type TUniformInstance = packed record
-      W: TLabMat;
-      V: TLabMat;
-      P: TLabMat;
-      WVP: TLabMat;
+    type TUniformGlobal = packed record
+      time: TLabVec4;
     end;
-    type TUniformArray = specialize TLabAlignedArray<TUniformInstance>;
-    type TUniformArrayShared = specialize TLabSharedRef<TUniformArray>;
+    type TUniformBufferGlobal = specialize TLabUniformBuffer<TUniformGlobal>;
+    type TUniformBufferGlobalShared = specialize TLabSharedRef<TUniformBufferGlobal>;
+    type TUnifromView = packed record
+      v: TLabMat;
+      p: TLabMat;
+      vp: TLabMat;
+      vp_i: TLabMat;
+    end;
+    type TUniformBufferView = specialize TLabUniformBuffer<TUnifromView>;
+    type TUniformBufferViewShared = specialize TLabSharedRef<TUniformBufferView>;
+    type TUniformInstance = packed record
+      w: TLabMat;
+    end;
+    type TUniformBufferInstance = specialize TLabUniformBufferDynamic<TUniformInstance>;
+    type TUniformBufferInstanceShared = specialize TLabSharedRef<TUniformBufferInstance>;
     type TNodeData = class (TLabClass)
     private
       var _Node: TLabSceneNode;
@@ -241,6 +259,7 @@ type
         var Pipeline: TLabPipelineShared;
       end;
       type TPassList = specialize TLabList<TPass>;
+      type TUniformJoint = specialize TLabUniformBuffer<TLabMat>;
     private
       var _Scene: TScene;
       var _Attachment: TLabSceneNodeAttachment;
@@ -251,7 +270,7 @@ type
       );
     public
       var Passes: TPassList;
-      var JointUniformBuffer: TLabUniformBuffer;
+      var JointUniformBuffer: TUniformJoint;
       var JointUniforms: PLabMatArr;
       var Joints: TLabSceneNodeList;
       procedure UpdateSkinTransforms(const Params: array of const);
@@ -261,9 +280,9 @@ type
     end;
   private
     var Scene: TLabScene;
-    var UniformBufferInstance: TLabBufferShared;
-    var UniformArrayInstance: TUniformArrayShared;
-    var UniformBufferInstanceMap: Pointer;
+    var UniformBufferGlobal: TUniformBufferGlobalShared;
+    var UniformBufferView: TUniformBufferViewShared;
+    var UniformBufferInstance: TUniformBufferInstanceShared;
     procedure ProcessScene;
     procedure UpdateTransforms(const Params: array of const);
     function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
@@ -430,7 +449,7 @@ begin
   begin
     r_s := Geom.Subsets[i];
     Pass := TPass.Create;
-    pc := 1;//uniform buffer;
+    pc := 3;//uniform buffers;
     pc += 1;//dither mask
     if Assigned(Skin) then Inc(pc);
     for j := 0 to MaterialBindings.Count - 1 do
@@ -449,6 +468,14 @@ begin
     end;
     SetLength(Params, pc);
     pc := 0;
+    Params[pc] := LabSceneShaderParameterUniform(
+      _Scene.UniformBufferGlobal.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    );
+    Inc(pc);
+    Params[pc] := LabSceneShaderParameterUniform(
+      _Scene.UniformBufferView.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    );
+    Inc(pc);
     Params[pc] := LabSceneShaderParameterUniformDynamic(
       _Scene.UniformBufferInstance.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
     );
@@ -525,10 +552,8 @@ begin
   Passes := TPassList.Create;
   if not (Attachment.Controller is TLabSceneControllerSkin) then Exit;
   Skin := TLabSceneControllerSkin(Attachment.Controller);
-  JointUniformBuffer := TLabUniformBuffer.Create(
-    App.Device, SizeOf(TLabMat) * Length(Skin.Joints)
-  );
-  JointUniformBuffer.Map(JointUniforms);
+  JointUniformBuffer := TUniformJoint.Create(App.Device, Length(Skin.Joints));
+  JointUniforms := PLabMatArr(JointUniformBuffer.Buffer);
   Joints := TLabSceneNodeList.Create;
   Joints.Allocate(Length(Skin.Joints));
   for i := 0 to Joints.Count - 1 do
@@ -1070,17 +1095,11 @@ begin
   end;
   CameraInst := nil;
   inst_count := 0;
+  UniformBufferGlobal := TUniformBufferGlobal.Create(App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+  UniformBufferView := TUniformBufferView.Create(App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   ProcessNode(Scene.Root);
   if inst_count = 0 then Exit;
-  UniformArrayInstance := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformInstance)));
-  UniformArrayInstance.Ptr.Count := inst_count;
-  UniformBufferInstance := TLabBuffer.Create(
-    App.Device, UniformArrayInstance.Ptr.DataSize,
-    TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
-    [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-  );
-  UniformBufferInstance.Ptr.Map(UniformBufferInstanceMap);
+  UniformBufferInstance := TUniformBufferInstance.Create(App.Device, inst_count, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   CreateInstances(Scene.Root);
 end;
 
@@ -1092,12 +1111,9 @@ procedure TScene.UpdateTransforms(const Params: array of const);
   begin
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
-    with UniformArrayInstance.Ptr.Items[nd.UniformOffset]^ do
+    with UniformBufferInstance.Ptr.Buffer[nd.UniformOffset]^ do
     begin
-      P := xf^.Projection;
-      V := xf^.View;
-      W := Node.Transform * xf^.World;
-      WVP := W * V * P * xf^.Clip;
+      w := Node.Transform * xf^.World;
     end;
     for i_n := 0 to Node.Children.Count - 1 do
     begin
@@ -1113,14 +1129,20 @@ begin
     Scene.DefaultAnimationClip.Sample(t, True);
   end;
   xf := PTransforms(Params[0].VPointer);
-  UpdateNode(Scene.Root);
-  if Assigned(UniformBufferInstanceMap) then
+  UniformBufferGlobal.Ptr.Buffer^.time := LabVec4(
+    LabTimeSec, LabTimeLoopSec * LabTwoPi,
+    sin(LabTimeLoopSec * LabTwoPi), cos(LabTimeLoopSec * LabTwoPi)
+  );
+  UniformBufferGlobal.Ptr.FlushAll;
+  with UniformBufferView.Ptr.Buffer^ do
   begin
-    Move(UniformArrayInstance.Ptr.Data^, UniformBufferInstanceMap^, UniformArrayInstance.Ptr.DataSize);
-    UniformBufferInstance.Ptr.FlushMappedMemoryRanges(
-      [LabMappedMemoryRange(UniformBufferInstance.Ptr.Memory, 0, VK_WHOLE_SIZE)]
-    );
+    v := xf^.View;
+    p := xf^.Projection * xf^.Clip;
+    vp := xf^.View * xf^.Projection * xf^.Clip;
+    vp_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
   end;
+  UpdateNode(Scene.Root);
+  if UniformBufferInstance.IsValid then UniformBufferInstance.Ptr.FlushAll;
 end;
 
 function TScene.GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
@@ -1254,7 +1276,7 @@ procedure TScene.Draw(const Cmd: TLabCommandBuffer);
         Cmd.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
           r_p.PipelineLayout.Ptr,
-          0, [r_p.Shader.Ptr.DescriptorSets.Ptr.VkHandle[0]], [UniformArrayInstance.Ptr.ItemOffset[nd.UniformOffset]]
+          0, [r_p.Shader.Ptr.DescriptorSets.Ptr.VkHandle[0]], [UniformBufferInstance.Ptr.BufferOffset[nd.UniformOffset]]
         );
         if Assigned(r_ss) then
         begin
@@ -1500,7 +1522,8 @@ constructor TLightData.TComputeTask.Create(const StorageBuffer: TLabBuffer; cons
 begin
   inherited Create;
   ComputeShader := TLabComputeShader.Create(App.Device, 'cs.spv');
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TComputeUniforms));
+  UniformBuffer := TUniformBufferCompute.Create(App.Device);
+  Uniforms := UniformBuffer.Ptr.Buffer;
   if UniformBuffer.Ptr.Map(Uniforms) then
   begin
     FillChar(Uniforms^, SizeOf(TComputeUniforms), 0);
@@ -1673,10 +1696,10 @@ begin
     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     VK_FALSE, 1, VK_SAMPLER_MIPMAP_MODE_NEAREST
   );
-  UniformBufferVertex := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformVertex));
-  UniformBufferVertex.Ptr.Map(UniformsVertex);
-  UniformBufferPixel := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformPixel));
-  UniformBufferPixel.Ptr.Map(UniformsPixel);
+  UniformBufferVertex := TUniformBufferVertex.Create(App.Device);
+  UniformsVertex := UniformBufferVertex.Ptr.Buffer;
+  UniformBufferPixel := TUniformBufferPixel.Create(App.Device);
+  UniformsPixel := UniformBufferPixel.Ptr.Buffer;
   DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)),
@@ -2616,14 +2639,13 @@ begin
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment],[]),
     LabPipelineTesselationState(0)
   );
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformData));
-  UniformBuffer.Ptr.Map(UniformData);
+  UniformBuffer := TUniformBuffer.Create(App.Device);
+  UniformData := UniformBuffer.Ptr.Buffer;
   Resize([App.BackBuffer.Ptr.SwapChain.Ptr.Width, App.BackBuffer.Ptr.SwapChain.Ptr.Height]);
 end;
 
 destructor TIBLight.Destroy;
 begin
-  UniformBuffer.Ptr.Unmap;
   App.OnUpdateTransforms.Remove(@UpdateTransforms);
   App.OnBindOffscreenTargets.Remove(@BindOffscreenTargets);
   inherited Destroy;

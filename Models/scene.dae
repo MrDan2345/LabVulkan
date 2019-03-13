@@ -5,8 +5,8 @@
       <author>Blender User</author>
       <authoring_tool>Blender 2.79.0 commit date:2018-03-22, commit time:14:10, hash:f4dc9f9d68b</authoring_tool>
     </contributor>
-    <created>2019-03-05T17:28:39</created>
-    <modified>2019-03-05T17:28:39</modified>
+    <created>2019-03-12T18:36:32</created>
+    <modified>2019-03-12T18:36:32</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
@@ -34,16 +34,13 @@
   <library_lights>
     <light id="Lamp-light" name="Lamp">
       <technique_common>
-        <point>
+        <directional>
           <color sid="color">1.5 1.5 1.5</color>
-          <constant_attenuation>1</constant_attenuation>
-          <linear_attenuation>0</linear_attenuation>
-          <quadratic_attenuation>1.20071e-4</quadratic_attenuation>
-        </point>
+        </directional>
       </technique_common>
       <extra>
         <technique profile="blender">
-          <type sid="type" type="int">0</type>
+          <type sid="type" type="int">1</type>
           <flag sid="flag" type="int">0</flag>
           <mode sid="mode" type="int">8192</mode>
           <gamma sid="blender_gamma" type="float">1</gamma>
@@ -54,9 +51,9 @@
           <shadow_g sid="blender_shadow_g" type="float">0</shadow_g>
           <shadow_b sid="blender_shadow_b" type="float">0</shadow_b>
           <energy sid="blender_energy" type="float">1.5</energy>
-          <dist sid="blender_dist" type="float">91.25998</dist>
-          <spotsize sid="spotsize" type="float">75</spotsize>
-          <spotblend sid="spotblend" type="float">0.15</spotblend>
+          <dist sid="blender_dist" type="float">53.33998</dist>
+          <spotsize sid="spotsize" type="float">58.2</spotsize>
+          <spotblend sid="spotblend" type="float">0.503937</spotblend>
           <halo_intensity sid="blnder_halo_intensity" type="float">1</halo_intensity>
           <att1 sid="att1" type="float">0</att1>
           <att2 sid="att2" type="float">1</att2>
@@ -77,7 +74,7 @@
           <ray_sampz sid="ray_sampz" type="int">1</ray_sampz>
           <ray_samp_type sid="ray_samp_type" type="int">0</ray_samp_type>
           <area_shape sid="area_shape" type="int">1</area_shape>
-          <area_size sid="area_size" type="float">0.1</area_size>
+          <area_size sid="area_size" type="float">0.247</area_size>
           <area_sizey sid="area_sizey" type="float">0.1</area_sizey>
           <area_sizez sid="area_sizez" type="float">1</area_sizez>
           <adapt_thresh sid="adapt_thresh" type="float">0.000999987</adapt_thresh>
@@ -850,7 +847,7 @@
         <instance_camera url="#Camera-camera"/>
       </node>
       <node id="Lamp" name="Lamp" type="NODE">
-        <matrix sid="transform">-0.2908646 -0.7711008 0.5663932 5.857382 0.9551712 -0.1998834 0.2183912 -6.125964 -0.05518906 0.6045247 0.7946723 9.516667 0 0 0 1</matrix>
+        <matrix sid="transform">0.8302095 -0.4143787 0.3728841 5.857382 0.5304496 0.7929002 -0.2998876 -6.125964 -0.1713928 0.4467657 0.8780802 9.516667 0 0 0 1</matrix>
         <instance_light url="#Lamp-light"/>
       </node>
       <node id="Plane" name="Plane" type="NODE">

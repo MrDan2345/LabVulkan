@@ -55,16 +55,18 @@ type
   TTextureShared = specialize TLabSharedRef<TTexture>;
 
   TLightData = class (TLabClass)
-    type TUniformVertex = packed record
+    type TVertexData = packed record
       VP: TLabMat;
     end;
-    type PUniformVertex = ^TUniformVertex;
-    type TUniformPixel = packed record
+    type TUniformVertex = specialize TLabUniformBuffer<TVertexData>;
+    type TUniformVertexShared = specialize TLabSharedRef<TUniformVertex>;
+    type TPixelData = packed record
       VP_i: TLabMat;
       rt_ratio: TLabVec4;
       camera_pos: TLabVec4;
     end;
-    type PUniformPixel = ^TUniformPixel;
+    type TUniformPixel = specialize TLabUniformBuffer<TPixelData>;
+    type TUniformPixelShard = specialize TLabSharedRef<TUniformPixel>;
     type TLightVertex = packed record
       x, y, z, w: TVkFloat;
     end;
@@ -83,20 +85,20 @@ type
       1, 4, 5, 4, 3, 5, 3, 2, 5, 2, 1, 5
     );
     type TComputeTask = class
-      type TComputeUniforms = packed record
+      type TComputeData = packed record
         bounds_min: TLabVec4;
         bounds_max: TLabVec4;
         box_x: TLabVec4;
         box_y: TLabVec4;
         box_z: TLabVec4;
       end;
-      type PComputeUniforms = ^TComputeUniforms;
+      type TUniformCompute = specialize TLabUniformBuffer<TComputeData>;
+      type TUniformComputeShared = specialize TLabSharedRef<TUniformCompute>;
       var ComputeShader: TLabComputeShaderShared;
-      var UniformBuffer: TLabUniformBufferShared;
+      var UniformBuffer: TUniformComputeShared;
       var DescriptorSets: TLabDescriptorSetsShared;
       var PipelineLayout: TLabPipelineLayoutShared;
       var Pipeline: TLabPipelineShared;
-      var Uniforms: PComputeUniforms;
       var Cmd: TLabCommandBufferShared;
       var Fence: TLabFenceShared;
       constructor Create(const StorageBuffer: TLabBuffer; const InstanceCount: TVkUInt32);
@@ -118,10 +120,8 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
-    var UniformBufferVertex: TLabUniformBufferShared;
-    var UniformBufferPixel: TLabUniformBufferShared;
-    var UniformsVertex: PUniformVertex;
-    var UniformsPixel: PUniformPixel;
+    var UniformBufferVertex: TUniformVertexShared;
+    var UniformBufferPixel: TUniformPixelShard;
     var ComputeTask: TComputeTask;
     constructor Create;
     destructor Destroy; override;
@@ -147,14 +147,15 @@ type
       x, y, z, w: TVkFloat;
       u, v: TVkFloat;
     end;
-    type TUniforms = packed record
+    type TQuadData = packed record
       ScreenSize: TLabVec4;
       RTSize: TLabVec4;
       VP_i: TLabMat;
     end;
-    type PUniforms = ^TUniforms;
-    var QuadData: array[0..3] of TScreenVertex;
-    var UniformBuffer: TLabUniformBufferShared;
+    type TUniformQuad = specialize TLabUniformBuffer<TQuadData>;
+    type TUniformQuadShared = specialize TLabSharedRef<TUniformQuad>;
+    var QuadVertices: array[0..3] of TScreenVertex;
+    var UniformBuffer: TUniformQuadShared;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexBufferStaging: TLabBufferShared;
     var IndexBuffer: TLabIndexBufferShared;
@@ -165,7 +166,6 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
-    var Uniforms: PUniforms;
     constructor Create;
     destructor Destroy; override;
     procedure Stage(const Args: array of const);
@@ -180,12 +180,13 @@ type
 
   TCube = class (TLabClass)
   public
-    type TUniforms = record
+    type TCubeData = record
       W: TLabMat;
       WVP: TLabMat;
     end;
-    type PUniforms = ^TUniforms;
-    var UniformBuffer: TLabUniformBufferShared;
+    type TUniformCube = specialize TLabUniformBuffer<TCubeData>;
+    type TUniformCubeShared = specialize TLabSharedRef<TUniformCube>;
+    var UniformBuffer: TUniformCubeShared;
     var VertexBuffer: TLabVertexBufferShared;
     var VertexStaging: TLabBufferShared;
     var TextureColor: TTextureShared;
@@ -195,7 +196,6 @@ type
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
-    var Uniforms: PUniforms;
     constructor Create;
     destructor Destroy; override;
     procedure Stage(const Args: array of const);
@@ -424,12 +424,12 @@ constructor TLightData.TComputeTask.Create(const StorageBuffer: TLabBuffer; cons
 begin
   inherited Create;
   ComputeShader := TLabComputeShader.Create(App.Device, 'cs.spv');
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TComputeUniforms));
-  if UniformBuffer.Ptr.Map(Uniforms) then
+  UniformBuffer := TUniformCompute.Create(App.Device);
+  FillChar(UniformBuffer.Ptr.Buffer^, SizeOf(TComputeData), 0);
+  with UniformBuffer.Ptr.Buffer^ do
   begin
-    FillChar(Uniforms^, SizeOf(TComputeUniforms), 0);
-    Uniforms^.bounds_min := LabVec4(-bounds, -bounds, -bounds, 0);
-    Uniforms^.bounds_max := LabVec4(bounds, bounds, bounds, 0);
+    bounds_min := LabVec4(-bounds, -bounds, -bounds, 0);
+    bounds_max := LabVec4(bounds, bounds, bounds, 0);
   end;
   DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
@@ -475,7 +475,6 @@ end;
 
 destructor TLightData.TComputeTask.Destroy;
 begin
-  UniformBuffer.Ptr.Unmap;
   inherited Destroy;
 end;
 
@@ -585,10 +584,8 @@ begin
     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     VK_FALSE, 1, VK_SAMPLER_MIPMAP_MODE_NEAREST
   );
-  UniformBufferVertex := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformVertex));
-  UniformBufferVertex.Ptr.Map(UniformsVertex);
-  UniformBufferPixel := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformPixel));
-  UniformBufferPixel.Ptr.Map(UniformsPixel);
+  UniformBufferVertex := TUniformVertex.Create(App.Device);
+  UniformBufferPixel := TUniformPixel.Create(App.Device);
   DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)),
@@ -685,15 +682,15 @@ procedure TLightData.UpdateTransforms(const Args: array of const);
   var v_pos: TLabVec3;
 begin
   xf := PTransforms(Args[0].VPointer);
-  ComputeTask.Uniforms^.box_x := LabVec4(TLabVec3(xf^.World.AxisX).Norm, 0);
-  ComputeTask.Uniforms^.box_y := LabVec4(TLabVec3(xf^.World.AxisY).Norm, 0);
-  ComputeTask.Uniforms^.box_z := LabVec4(TLabVec3(xf^.World.AxisZ).Norm, 0);
+  ComputeTask.UniformBuffer.Ptr.Buffer^.box_x := LabVec4(TLabVec3(xf^.World.AxisX).Norm, 0);
+  ComputeTask.UniformBuffer.Ptr.Buffer^.box_y := LabVec4(TLabVec3(xf^.World.AxisY).Norm, 0);
+  ComputeTask.UniformBuffer.Ptr.Buffer^.box_z := LabVec4(TLabVec3(xf^.World.AxisZ).Norm, 0);
   v_pos := LabVec3(-xf^.View.e30, -xf^.View.e31, -xf^.View.e32);
   v_pos := v_pos.Transform3x3(xf^.View.Transpose);
   VP := xf^.View * xf^.Projection * xf^.Clip;
-  UniformsVertex^.VP := VP;
-  UniformsPixel^.VP_i := VP.Inverse;
-  UniformsPixel^.camera_pos := LabVec4(v_pos, 0);
+  UniformBufferVertex.Ptr.Buffer^.VP := VP;
+  UniformBufferPixel.Ptr.Buffer^.VP_i := VP.Inverse;
+  UniformBufferPixel.Ptr.Buffer^.camera_pos := LabVec4(v_pos, 0);
   ComputeTask.Run;
 end;
 
@@ -741,7 +738,7 @@ begin
     );
   end;
   DescriptorSets.Ptr.UpdateSets(Writes, []);
-  UniformsPixel^.rt_ratio := LabVec4(
+  UniformBufferPixel.Ptr.Buffer^.rt_ratio := LabVec4(
     1 / App.SwapChain.Ptr.Width,
     1 / App.SwapChain.Ptr.Height,
     App.SwapChain.Ptr.Width / App.WidthRT,
@@ -770,13 +767,13 @@ constructor TFullscreenQuad.Create;
 begin
   u := App.SwapChain.Ptr.Width / App.WidthRT;
   v := App.SwapChain.Ptr.Height / App.HeightRT;
-  QuadData[0] := ScreenVertex(-1, -1, 0.5, 1, 0, 0);
-  QuadData[1] := ScreenVertex(1, -1, 0.5, 1, u, 0);
-  QuadData[2] := ScreenVertex(-1, 1, 0.5, 1, 0, v);
-  QuadData[3] := ScreenVertex(1, 1, 0.5, 1, u, v);
+  QuadVertices[0] := ScreenVertex(-1, -1, 0.5, 1, 0, 0);
+  QuadVertices[1] := ScreenVertex(1, -1, 0.5, 1, u, 0);
+  QuadVertices[2] := ScreenVertex(-1, 1, 0.5, 1, 0, v);
+  QuadVertices[3] := ScreenVertex(1, 1, 0.5, 1, u, v);
   VertexBuffer := TLabVertexBuffer.Create(
     App.Device,
-    SizeOf(QuadData), SizeOf(TScreenVertex),
+    SizeOf(QuadVertices), SizeOf(TScreenVertex),
     [
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, LabPtrToOrd(@TScreenVertex( nil^ ).x)),
       LabVertexBufferAttributeFormat(VK_FORMAT_R32G32_SFLOAT, LabPtrToOrd(@TScreenVertex( nil^ ).u))
@@ -795,7 +792,7 @@ begin
   Map := nil;
   if VertexBufferStaging.Ptr.Map(Map) then
   begin
-    Move(QuadData, Map^, VertexBuffer.Ptr.Size);
+    Move(QuadVertices, Map^, VertexBuffer.Ptr.Size);
     VertexBufferStaging.Ptr.Unmap;
     VertexBufferStaging.Ptr.FlushAll;
   end;
@@ -824,8 +821,7 @@ begin
     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
   );
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(Uniforms));
-  UniformBuffer.Ptr.Map(Uniforms);
+  UniformBuffer := TUniformQuad.Create(App.Device);
   UpdateUniforms;
   VertexShader := TLabVertexShader.Create(
     App.Device, 'fullscreen_vs.spv'
@@ -904,7 +900,7 @@ procedure TFullscreenQuad.UpdateTransforms(const Args: array of const);
   var xf: PTransforms;
 begin
   xf := PTransforms(Args[0].VPointer);
-  Uniforms^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
+  UniformBuffer.Ptr.Buffer^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
 end;
 
 {$Push}{$Hints off}
@@ -973,18 +969,21 @@ procedure TFullscreenQuad.Resize(const Cmd: TLabCommandBuffer);
 begin
   u := App.SwapChain.Ptr.Width / App.WidthRT;
   v := App.SwapChain.Ptr.Height / App.HeightRT;
-  Uniforms^.ScreenSize.x := App.SwapChain.Ptr.Width;
-  Uniforms^.ScreenSize.y := App.SwapChain.Ptr.Height;
-  Uniforms^.ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
-  Uniforms^.ScreenSize.w := 1 / App.SwapChain.Ptr.Height;
-  QuadData[1].u := u;
-  QuadData[2].v := v;
-  QuadData[3].u := u;
-  QuadData[3].v := v;
+  with UniformBuffer.Ptr.Buffer^ do
+  begin
+    ScreenSize.x := App.SwapChain.Ptr.Width;
+    ScreenSize.y := App.SwapChain.Ptr.Height;
+    ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
+    ScreenSize.w := 1 / App.SwapChain.Ptr.Height;
+  end;
+  QuadVertices[1].u := u;
+  QuadVertices[2].v := v;
+  QuadVertices[3].u := u;
+  QuadVertices[3].v := v;
   map := nil;
   if VertexBufferStaging.Ptr.Map(map) then
   begin
-    Move(QuadData, map^, VertexBuffer.Ptr.Size);
+    Move(QuadVertices, map^, VertexBuffer.Ptr.Size);
     VertexBufferStaging.Ptr.Unmap;
     VertexBufferStaging.Ptr.FlushAll;
   end;
@@ -1007,14 +1006,17 @@ end;
 
 procedure TFullscreenQuad.UpdateUniforms;
 begin
-  Uniforms^.ScreenSize.x := App.SwapChain.Ptr.Width;
-  Uniforms^.ScreenSize.y := App.SwapChain.Ptr.Height;
-  Uniforms^.ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
-  Uniforms^.ScreenSize.w := 1 / App.SwapChain.Ptr.Height;
-  Uniforms^.RTSize.x := App.WidthRT;
-  Uniforms^.RTSize.y := App.HeightRT;
-  Uniforms^.RTSize.z := 1 / App.WidthRT;
-  Uniforms^.RTSize.w := 1 / App.HeightRT;
+  with UniformBuffer.Ptr.Buffer^ do
+  begin
+    ScreenSize.x := App.SwapChain.Ptr.Width;
+    ScreenSize.y := App.SwapChain.Ptr.Height;
+    ScreenSize.z := 1 / App.SwapChain.Ptr.Width;
+    ScreenSize.w := 1 / App.SwapChain.Ptr.Height;
+    RTSize.x := App.WidthRT;
+    RTSize.y := App.HeightRT;
+    RTSize.z := 1 / App.WidthRT;
+    RTSize.w := 1 / App.HeightRT;
+  end;
 end;
 
 class function TFullscreenQuad.ScreenVertex(const x, y, z, w, u, v: TVkFloat): TScreenVertex;
@@ -1055,8 +1057,7 @@ begin
     Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
     VertexStaging.Ptr.Unmap;
   end;
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniforms));
-  UniformBuffer.Ptr.Map(Uniforms);
+  UniformBuffer := TUniformCube.Create(App.Device);
   TextureColor := TTexture.Create('crate_c.png');
   TextureNormal := TTexture.Create('crate_n.png');
   VertexShader := TLabVertexShader.Create(App.Device, 'vs.spv');
@@ -1131,7 +1132,6 @@ destructor TCube.Destroy;
 begin
   App.OnUpdateTransforms.Remove(@UpdateTransforms);
   App.OnStage.Remove(@Stage);
-  UniformBuffer.Ptr.Unmap;
   Pipeline := nil;
   PipelineLayout := nil;
   inherited Destroy;
@@ -1148,8 +1148,11 @@ procedure TCube.UpdateTransforms(const Args: array of const);
   var xf: PTransforms;
 begin
   xf := PTransforms(Args[0].VPointer);
-  Uniforms^.W := xf^.World;
-  Uniforms^.WVP := xf^.WVP;
+  with UniformBuffer.Ptr.Buffer^ do
+  begin
+    W := xf^.World;
+    WVP := xf^.WVP;
+  end;
 end;
 
 procedure TCube.Draw(const Cmd: TLabCommandBuffer);
@@ -1187,7 +1190,7 @@ begin
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_standard_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_object_tracker');
-  EnableLayerIfAvailable('VK_LAYER_RENDERDOC_Capture');
+  //EnableLayerIfAvailable('VK_LAYER_RENDERDOC_Capture');
   EnableExtensionIfAvailable('VK_EXT_debug_utils');
   EnableExtensionIfAvailable('VK_EXT_debug_report');
   OnInitialize := @Initialize;

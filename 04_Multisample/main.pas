@@ -33,6 +33,8 @@ uses
 type
   TLabApp = class (TLabVulkan)
   public
+    type TUniformMat = specialize TLabUniformBuffer<TLabMat>;
+    type TUniformMatShared = specialize TLabSharedRef<TUniformMat>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -47,7 +49,14 @@ type
       var ColorMS: TLabImageShared;
       var ColorMSView: TLabImageViewShared;
     end;
-    var UniformBuffer: TLabUniformBufferShared;
+    var Transforms: record
+      Projection: TLabMat;
+      View: TLabMat;
+      Model: TLabMat;
+      Clip: TLabMat;
+      MVP: TLabMat;
+    end;
+    var UniformBuffer: TUniformMatShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -58,13 +67,6 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
-    var Transforms: record
-      Projection: TLabMat;
-      View: TLabMat;
-      Model: TLabMat;
-      Clip: TLabMat;
-      MVP: TLabMat;
-    end;
     var SampleCount: TVkSampleCountFlagBits;
     constructor Create;
     procedure SwapchainCreate;
@@ -249,6 +251,7 @@ begin
       0, 0, 0, 1
     );
     MVP := Model * View * Projection * Clip;
+    UniformBuffer.Ptr.Buffer^ := MVP;
   end;
 end;
 
@@ -290,7 +293,7 @@ begin
   );
   Surface := TLabSurface.Create(Window);
   SwapChainCreate;
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
+  UniformBuffer := TUniformMat.Create(Device);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([

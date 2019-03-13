@@ -43,13 +43,23 @@ type
     BoneIndex: array[0..1] of TVkUInt32;
     BoneWeight: array[0..1] of TVkFloat;
   end;
-  TSkinUniform = packed record
+  TSkinBones = packed record
     Bones: array[0..1] of TLabMat;
   end;
-  PSkinUniform = ^TSkinUniform;
+
+  TTransforms = packed record
+    World: TLabMat;
+    View: TLabMat;
+    Projection: TLabMat;
+    WVP: TLabMat;
+  end;
 
   TLabApp = class (TLabVulkan)
   public
+    type TUniformTransforms = specialize TLabUniformBuffer<TTransforms>;
+    type TUniformTransformsShared = specialize TLabSharedRef<TUniformTransforms>;
+    type TUniformSkin = specialize TLabUniformBuffer<TSkinBones>;
+    type TUniformSkinShared = specialize TLabSharedRef<TUniformSkin>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -60,8 +70,8 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
-    var UniformBufferSkin: TLabUniformBufferShared;
+    var UniformBuffer: TUniformTransformsShared;
+    var UniformBufferSkin: TUniformSkinShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -81,17 +91,10 @@ type
       var Sampler: TLabSamplerShared;
       var MipLevels: TVkUInt32;
     end;
-    var Transforms: record
-      World: TLabMat;
-      View: TLabMat;
-      Projection: TLabMat;
-      WVP: TLabMat;
-    end;
     var VertexStream0: array of TVertex0;
     var VertexStream1: array of TVertex1;
     var VertexStream2: array of TVertex2;
     var Indices: array of TVkUInt16;
-    var SkinUniform: PSkinUniform;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -197,15 +200,18 @@ procedure TLabApp.UpdateTransforms;
   var fov: TVkFloat;
   var Clip: TLabMat;
 begin
-  SkinUniform^.Bones[0] := LabMatIdentity;
-  SkinUniform^.Bones[1] := (
-    LabMatTranslation(0, -2, 0) *
-    LabMatRotationY(1.8 * sin(4 * LabTimeLoopSec(2 * LabTwoPi))) *
-    LabMatRotationX(1.5 * sin(LabTimeLoopSec(LabTwoPi))) *
-    LabMatTranslation(0, 2, 0)
-  );
+  with UniformBufferSkin.Ptr.Buffer^ do
+  begin
+    Bones[0] := LabMatIdentity;
+    Bones[1] := (
+      LabMatTranslation(0, -2, 0) *
+      LabMatRotationY(1.8 * sin(4 * LabTimeLoopSec(2 * LabTwoPi))) *
+      LabMatRotationX(1.5 * sin(LabTimeLoopSec(LabTwoPi))) *
+      LabMatTranslation(0, 2, 0)
+    );
+  end;
   fov := LabDegToRad * 20;
-  with Transforms do
+  with UniformBuffer.Ptr.Buffer^ do
   begin
     Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
     View := LabMatView(LabVec3(0, 2, -20), LabVec3(0, 2, 0), LabVec3(0, 1, 0));
@@ -378,9 +384,8 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   Cmd := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(Transforms));
-  UniformBufferSkin := TLabUniformBuffer.Create(Device, SizeOf(TSkinUniform));
-  UniformBufferSkin.Ptr.Map(PVkVoid(SkinUniform));
+  UniformBuffer := TUniformTransforms.Create(Device);
+  UniformBufferSkin := TUniformSkin.Create(Device);
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   GenerateVertices;
@@ -608,7 +613,6 @@ begin
 end;
 
 procedure TLabApp.Loop;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
@@ -624,12 +628,6 @@ begin
     SwapchainCreate;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms, UniformData^, SizeOf(Transforms));
-    UniformBuffer.Ptr.Unmap;
-  end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin

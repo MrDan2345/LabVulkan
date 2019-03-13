@@ -143,7 +143,7 @@ type
       w: TLabMat;
     end;
     type PUniformData = ^TUniformData;
-    type TUniformBufferArray = specialize TLabUniformBufferArray<TUniformData>;
+    type TUniformBufferArray = specialize TLabUniformBufferDynamic<TUniformData>;
     type TUniformBufferArrayShared = specialize TLabSharedRef<TUniformBufferArray>;
     var UniformBuffer: TUniformBufferArrayShared;
     type TMaterial = packed record
@@ -174,7 +174,9 @@ type
       camera_pos: TLabVec4;
     end;
     type PUniformData = ^TUniformData;
-    var UniformBuffer: TLabUniformBufferShared;
+    type TUniformBuffer = specialize TLabUniformBuffer<TUniformData>;
+    type TUniformBufferShared = specialize TLabSharedRef<TUniformBuffer>;
+    var UniformBuffer: TUniformBufferShared;
     var UniformData: PUniformData;
     var VertexShader: TLabVertexShaderShared;
     var PixelShader: TLabPixelShaderShared;
@@ -201,7 +203,9 @@ type
       gamma: TVkFloat;
     end;
     type PUniformData = ^TUniformData;
-    var UniformBuffer: TLabUniformBufferShared;
+    type TUniformBuffer = specialize TLabUniformBuffer<TUniformData>;
+    type TUniformBufferShared = specialize TLabSharedRef<TUniformBuffer>;
+    var UniformBuffer: TUniformBufferShared;
     var UniformData: PUniformData;
     var VertexShader: TLabVertexShaderShared;
     var PixelShader: TLabPixelShaderShared;
@@ -1018,8 +1022,8 @@ begin
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment],[]),
     LabPipelineTesselationState(0)
   );
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformData));
-  UniformBuffer.Ptr.Map(UniformData);
+  UniformBuffer := TUniformBuffer.Create(App.Device);
+  UniformData := UniformBuffer.Ptr.Buffer;
   Resize([App.BackBuffer.Ptr.SwapChain.Ptr.Width, App.BackBuffer.Ptr.SwapChain.Ptr.Height]);
 end;
 
@@ -1192,14 +1196,13 @@ begin
     ],[]),
     LabPipelineTesselationState(0)
   );
-  UniformBuffer := TLabUniformBuffer.Create(App.Device, SizeOf(TUniformData));
-  UniformBuffer.Ptr.Map(UniformData);
+  UniformBuffer := TUniformBuffer.Create(App.Device, SizeOf(TUniformData));
+  UniformData := UniformBuffer.Ptr.Buffer;
   Resize([App.BackBuffer.Ptr.SwapChain.Ptr.Width, App.BackBuffer.Ptr.SwapChain.Ptr.Height]);
 end;
 
 destructor TLight.Destroy;
 begin
-  UniformBuffer.Ptr.Unmap;
   App.OnUpdateTransforms.Remove(@UpdateTransforms);
   App.OnBindOffscreenTargets.Remove(@BindOffscreenTargets);
   inherited Destroy;

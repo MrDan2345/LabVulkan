@@ -33,6 +33,8 @@ uses
 type
   TLabApp = class (TLabVulkan)
   public
+    type TUniformMat = specialize TLabUniformBuffer<TLabMat>;
+    type TUniformMatShared = specialize TLabSharedRef<TUniformMat>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -43,7 +45,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
+    var UniformBuffer: TUniformMatShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -185,6 +187,7 @@ begin
       0, 0, 0, 1
     );
     MVP := Model * View * Projection * Clip;
+    UniformBuffer.Ptr.Buffer^ := MVP;
   end;
 end;
 
@@ -231,7 +234,7 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
+  UniformBuffer := TUniformMat.Create(Device);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
@@ -342,7 +345,6 @@ begin
 end;
 
 procedure TLabApp.Loop;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
 begin
@@ -358,12 +360,6 @@ begin
     SwapchainCreate;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms.MVP, UniformData^, SizeOf(Transforms.MVP));
-    UniformBuffer.Ptr.Unmap;
-  end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin

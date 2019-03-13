@@ -45,7 +45,6 @@ type
   TComputeUniform = packed record
     w, h: TVkFloat;
   end;
-  PComputeUniform = ^TComputeUniform;
 
   TVertex = packed record
     pos: TLabVec2;
@@ -57,6 +56,10 @@ type
 
   TLabApp = class (TLabVulkan)
   public
+    type TUniformCompute = specialize TLabUniformBuffer<TComputeUniform>;
+    type TUniformComputeShared = specialize TLabSharedRef<TUniformCompute>;
+    type TUniformMat = specialize TLabUniformBuffer<TLabMat>;
+    type TUniformMatShared = specialize TLabSharedRef<TUniformMat>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -67,7 +70,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
+    var UniformBuffer: TUniformMatShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -82,11 +85,9 @@ type
     var ComputePipelineLayout: TLabPipelineLayoutShared;
     var ComputeDescriptorSets: TLabDescriptorSetsShared;
     var ComputeShader: TLabComputeShaderShared;
-    var ComputeUniformBuffer: TLabUniformBufferShared;
+    var ComputeUniformBuffer: TUniformComputeShared;
     var ParticleCount: TVkUInt32;
     var ComputeGroups: TVkUInt32;
-    var UniformData: PLabMat;
-    var ComputeUniformData: PComputeUniform;
     var Texture: TTextureShared;
     constructor Create;
     procedure SwapchainCreate;
@@ -347,7 +348,7 @@ end;
 procedure TLabApp.UpdateTransforms;
 begin
   if (Window.Ptr.Width = 0) or (Window.Ptr.Height = 0) then Exit;
-  UniformData^ := LabMatScaling(2 / Window.Ptr.Width, 2 / Window.Ptr.Height, 1) * LabMatTranslation(-1, -1, 0);
+  UniformBuffer.Ptr.Buffer^ := LabMatScaling(2 / Window.Ptr.Width, 2 / Window.Ptr.Height, 1) * LabMatTranslation(-1, -1, 0);
 end;
 
 procedure TLabApp.RunComputeShader;
@@ -486,8 +487,7 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TLabMat));
-  UniformBuffer.Ptr.Map(UniformData);
+  UniformBuffer := TUniformMat.Create(Device);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
@@ -580,8 +580,7 @@ begin
     ),
     LabPipelineTesselationState(0)
   );
-  ComputeUniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TComputeUniform));
-  ComputeUniformBuffer.Ptr.Map(ComputeUniformData);
+  ComputeUniformBuffer := TUniformCompute.Create(Device);
   ComputeDescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([
       LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_COMPUTE_BIT)),
@@ -660,8 +659,11 @@ begin
     SwapchainDestroy;
     SwapchainCreate;
   end;
-  ComputeUniformData^.w := Window.Ptr.Width;
-  ComputeUniformData^.h := Window.Ptr.Height;
+  with ComputeUniformBuffer.Ptr.Buffer^ do
+  begin
+    w := Window.Ptr.Width;
+    h := Window.Ptr.Height;
+  end;
   RunComputeShader;
   UpdateTransforms;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);

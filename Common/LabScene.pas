@@ -130,7 +130,8 @@ type
       const Desc: array of TLabColladaVertexAttribute;
       const Parameters: array of TLabSceneShaderParameter;
       const SkinInfo: PLabSceneShaderSkinInfo = nil;
-      const DeferredInfo: PLabSceneShaderDeferredInfo = nil
+      const DeferredInfo: PLabSceneShaderDeferredInfo = nil;
+      const DepthOnly: Boolean = False
     ): TLabSceneShader;
   end;
 
@@ -447,12 +448,36 @@ type
   end;
   TLabSceneCameraList = specialize TLabList<TLabSceneCamera>;
 
+  TLabSceneLight = class (TLabClass)
+  private
+    var _Scene: TLabScene;
+    var _LightType: TLabColladaLightType;
+    var _Color: TLabVec3;
+    var _AttenuationConstant: TVkFloat;
+    var _AttenuationLinear: TVkFloat;
+    var _AttenuationQuadratic: TVkFloat;
+    var _FalloffAngle: TVkFloat;
+    var _FalloffExponent: TVkFloat;
+  public
+    property LightType: TLabColladaLightType read _LightType write _LightType;
+    property Color: TLabVec3 read _Color write _Color;
+    property AttenuationConstant: TVkFloat read _AttenuationConstant write _AttenuationConstant;
+    property AttenuationLinear: TVkFloat read _AttenuationLinear write _AttenuationLinear;
+    property AttenuationQuadratic: TVkFloat read _AttenuationQuadratic write _AttenuationQuadratic;
+    property FalloffAngle: TVkFloat read _FalloffAngle write _FalloffAngle;
+    property FalloffExponent: TVkFloat read _FalloffExponent write _FalloffExponent;
+    constructor Create(const AScene: TLabScene; const ColladaLight: TLabColladaLight);
+    destructor Destroy; override;
+  end;
+  TLabSceneLightList = specialize TLabList<TLabSceneLight>;
+
   TLabSceneNodeAttachment = class (TLabClass)
   private
     var _Scene: TLabScene;
     var _Node: TLabSceneNode;
     var _UserData: TObject;
   public
+    property Node: TLabSceneNode read _Node;
     property UserData: TObject read _UserData write _UserData;
     constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode);
     destructor Destroy; override;
@@ -507,6 +532,26 @@ type
     destructor Destroy; override;
   end;
   TLabSceneNodeAttachmentCameraList = specialize TLabList<TLabSceneNodeAttachmentCamera>;
+
+  TLabSceneNodeAttachmentLight = class (TLabSceneNodeAttachment)
+  private
+    var _Light: TLabSceneLight;
+    function GetLightPos: TLabVec3; inline;
+    function GetLightDir: TLabVec3; inline;
+    function GetLightColor: TLabVec3; inline;
+    function GetLightRight: TLabVec3; inline;
+    function GetLightUp: TLabVec3; inline;
+  public
+    property Light: TLabSceneLight read _Light;
+    property LightPos: TLabVec3 read GetLightPos;
+    property LightDir: TLabVec3 read GetLightDir;
+    property LightUp: TLabVec3 read GetLightUp;
+    property LightRight: TLabVec3 read GetLightRight;
+    property LightColor: TLabVec3 read GetLightColor;
+    constructor Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceLight: TLabColladaInstanceLight);
+    destructor Destroy; override;
+  end;
+  TLabSceneNodeAttachmentLightList = specialize TLabList<TLabSceneNodeAttachmentLight>;
 
   TLabSceneNode = class (TLabClass)
   public
@@ -568,6 +613,7 @@ type
     var _Animations: TLabSceneAnimationList;
     var _AnimationClips: TLabSceneAnimationClipList;
     var _Cameras: TLabSceneCameraList;
+    var _Lights: TLabSceneLightList;
     var _DefaultAnimationClip: TLabSceneAnimationClip;
   public
     property Device: TLabDeviceShared read _Device;
@@ -778,7 +824,8 @@ class function TLabSceneShaderFactory.MakeShader(
   const Desc: array of TLabColladaVertexAttribute;
   const Parameters: array of TLabSceneShaderParameter;
   const SkinInfo: PLabSceneShaderSkinInfo;
-  const DeferredInfo: PLabSceneShaderDeferredInfo = nil
+  const DeferredInfo: PLabSceneShaderDeferredInfo;
+  const DepthOnly: Boolean
 ): TLabSceneShader;
   const ParameterDescriptorRemap: array[0..2] of TVkDescriptorType = (
     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -831,12 +878,20 @@ begin
   StrCode := '';
   loc_in := 0;
   loc_out := 0;
-  StrUniforms := 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_xf {'#$D#$A;
-  StrUniforms += '  mat4 w;'#$D#$A;
+  StrUniforms := 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_global {'#$D#$A;
+  StrUniforms += '  vec4 time;'#$D#$A;
+  StrUniforms += '} global;'#$D#$A;
+  Inc(binding);
+  StrUniforms += 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_view {'#$D#$A;
   StrUniforms += '  mat4 v;'#$D#$A;
   StrUniforms += '  mat4 p;'#$D#$A;
-  StrUniforms += '  mat4 wvp;'#$D#$A;
-  StrUniforms += '} xf;'#$D#$A;
+  StrUniforms += '  mat4 vp;'#$D#$A;
+  StrUniforms += '  mat4 vp_i;'#$D#$A;
+  StrUniforms += '} view;'#$D#$A;
+  Inc(binding);
+  StrUniforms += 'layout (std140, binding = ' + IntToStr(binding) + ') uniform t_object {'#$D#$A;
+  StrUniforms += '  mat4 w;'#$D#$A;
+  StrUniforms += '} object;'#$D#$A;
   Inc(binding);
   if Assigned(SkinInfo) then
   begin
@@ -884,7 +939,7 @@ begin
         begin
           StrCode += '  position = vec4((joint * position).xyz, 1);'#$D#$A;
         end;
-        StrCode += '  gl_Position = xf.wvp * position;'#$D#$A;
+        StrCode += '  gl_Position = view.vp * (object.w * position);'#$D#$A;
       end;
       as_normal,
       as_tangent,
@@ -900,7 +955,7 @@ begin
         begin
           StrCode += '  ' + Sem + ' = mat3(joint) * ' + Sem + ';'#$D#$A;
         end;
-        StrCode += '  out_' + Sem + ' = mat3(xf.w) * ' + Sem + ';'#$D#$A;
+        StrCode += '  out_' + Sem + ' = mat3(object.w) * ' + Sem + ';'#$D#$A;
         StrAttrOut += 'layout (location = ' + IntToStr(loc_out) + ') out vec3 out_' + Sem + ';'#$D#$A;
         Inc(loc_out);
       end;
@@ -929,6 +984,7 @@ begin
   Result.VertexShader := TLabSceneVertexShader.FindOrCreate(ADevice, Code);
 
 //Pixel Shader
+
   StrAttr := '';
   if Assigned(SkinInfo) then
   begin
@@ -1071,7 +1127,7 @@ begin
     if has_normal and not Assigned(DeferredInfo) then
     begin
       //StrCode += '  color.xyz *= 1.4 * ((dot(normal, normalize(vec3(1, 1, -1))) * 0.5 + 0.5) * 0.9 + 0.1);'#$D#$A;
-      StrCode += '  vec3 light = 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, 1))), 0, 1), 1.5) * vec3(1, 1, 1);'#$D#$A;
+      StrCode += '  vec3 light = 1.4 * pow(clamp(dot(normal, normalize(vec3(1, 1, 1))), 0, 1), 1.2) * vec3(1, 1, 1);'#$D#$A;
       StrCode += '  light += clamp(dot(normal, normalize(vec3(-1, -1, -1))), 0, 1) * vec3(0.1, 0.1, 0.5);'#$D#$A;
       StrCode += '  color.xyz *= light;'#$D#$A;
     end;
@@ -1085,8 +1141,16 @@ begin
   end;
 
   //StrCode += '  out_color = texture(tex_sampler0, vec2(in_texcoord0.x, 1 - in_texcoord0.y));'#$D#$A;
-  Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
-  Code := LabStrReplace(Code, '<$code$>', StrCode);
+  if DepthOnly then
+  begin
+    Code := LabStrReplace(ShaderCodePS, '<$attribs$>', '');
+    Code := LabStrReplace(Code, '<$code$>', '');
+  end
+  else
+  begin
+    Code := LabStrReplace(ShaderCodePS, '<$attribs$>', StrAttr);
+    Code := LabStrReplace(Code, '<$code$>', StrCode);
+  end;
   Result.PixelShader := TLabScenePixelShader.FindOrCreate(ADevice, Code);
   SetLength(Bindings, Length(Parameters));
   SetLength(DescPoolSizes, Length(Parameters));
@@ -1456,6 +1520,42 @@ begin
 end;
 
 destructor TLabSceneNodeAttachmentCamera.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TLabSceneNodeAttachmentLight.GetLightPos: TLabVec3;
+begin
+  Result := _Node.Transform.Translation;
+end;
+
+function TLabSceneNodeAttachmentLight.GetLightDir: TLabVec3;
+begin
+  Result := -_Node.Transform.AxisY;
+end;
+
+function TLabSceneNodeAttachmentLight.GetLightColor: TLabVec3;
+begin
+  Result := _Light.Color;
+end;
+
+function TLabSceneNodeAttachmentLight.GetLightRight: TLabVec3;
+begin
+  Result := _Node.Transform.AxisX;
+end;
+
+function TLabSceneNodeAttachmentLight.GetLightUp: TLabVec3;
+begin
+  Result := _Node.Transform.AxisZ;
+end;
+
+constructor TLabSceneNodeAttachmentLight.Create(const AScene: TLabScene; const ANode: TLabSceneNode; const ColladaInstanceLight: TLabColladaInstanceLight);
+begin
+  inherited Create(AScene, ANode);
+  _Light := TLabSceneLight(ColladaInstanceLight.Light.UserData);
+end;
+
+destructor TLabSceneNodeAttachmentLight.Destroy;
 begin
   inherited Destroy;
 end;
@@ -2520,6 +2620,24 @@ begin
   inherited Destroy;
 end;
 
+constructor TLabSceneLight.Create(const AScene: TLabScene; const ColladaLight: TLabColladaLight);
+begin
+  ColladaLight.UserData := Self;
+  _Scene := AScene;
+  _LightType := ColladaLight.LightType;
+  _Color := ColladaLight.Color;
+  _AttenuationConstant := ColladaLight.AttenuationConstant;
+  _AttenuationLinear := ColladaLight.AttenuationLinear;
+  _AttenuationQuadratic := ColladaLight.AttenuationQuadratic;
+  _FalloffAngle := ColladaLight.FalloffAngle;
+  _FalloffExponent := ColladaLight.FalloffExponent;
+end;
+
+destructor TLabSceneLight.Destroy;
+begin
+  inherited Destroy;
+end;
+
 procedure TLabSceneNode.SetParent(const Value: TLabSceneNode);
 begin
   if _Parent = Value then Exit;
@@ -2684,6 +2802,10 @@ begin
       else if ANode.Children[i] is TLabColladaInstanceCamera then
       begin
         _Attachments.Add(TLabSceneNodeAttachmentCamera.Create(_Scene, Self, TLabColladaInstanceCamera(ANode.Children[i])));
+      end
+      else if ANode.Children[i] is TLabColladaInstanceLight then
+      begin
+        _Attachments.Add(TLabSceneNodeAttachmentLight.Create(_Scene, Self, TLabColladaInstanceLight(ANode.Children[i])));
       end;
     end;
   end;
@@ -2739,6 +2861,11 @@ begin
   for i := 0 to Collada.RootNode.LibCameras.Cameras.Count - 1 do
   begin
     _Cameras.Add(TLabSceneCamera.Create(Self, Collada.RootNode.LibCameras.Cameras[i]));
+  end;
+  if Assigned(Collada.RootNode.LibLights) then
+  for i := 0 to Collada.RootNode.LibLights.Lights.Count - 1 do
+  begin
+    _Lights.Add(TLabSceneLight.Create(Self, Collada.RootNode.LibLights.Lights[i]));
   end;
   if Assigned(Collada.RootNode.LibControllers) then
   for i := 0 to Collada.RootNode.LibControllers.Controllers.Count - 1 do
@@ -2819,6 +2946,7 @@ begin
   _Animations := TLabSceneAnimationList.Create;
   _AnimationClips := TLabSceneAnimationClipList.Create;
   _Cameras := TLabSceneCameraList.Create;
+  _Lights := TLabSceneLightList.Create;
   _DefaultAnimationClip := TLabSceneAnimationClip.Create(Self, 'Default');
   _AnimationClips.Add(_DefaultAnimationClip);
   _Root := TLabSceneNode.Create(Self, nil, nil);
@@ -2839,6 +2967,8 @@ begin
   _Controllers.Free;
   while _Geometries.Count > 0 do _Geometries.Pop.Free;
   _Geometries.Free;
+  while _Lights.Count > 0 do _Lights.Pop.Free;
+  _Lights.Free;
   while _Cameras.Count > 0 do _Cameras.Pop.Free;
   _Cameras.Free;
   while _Images.Count > 0 do _Images.Pop.Free;

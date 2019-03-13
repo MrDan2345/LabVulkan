@@ -36,10 +36,11 @@ type
     VP: TLabMat;
     WVP: TLabMat;
   end;
-  PTransforms = ^TTransforms;
 
   TLabApp = class (TLabVulkan)
   public
+    type TUniformTransforms = specialize TLabUniformBuffer<TTransforms>;
+    type TUniformTransformsShared = specialize TLabSharedRef<TUniformTransforms>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -50,7 +51,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabUniformBufferShared;
+    var UniformBuffer: TUniformTransformsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var PipelineGeom: TLabPipelineShared;
@@ -65,7 +66,6 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
-    var Transforms: PTransforms;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -179,7 +179,7 @@ begin
     0, 0, 1, 0,
     0, 0, 0, 1
   );
-  with Transforms^ do
+  with UniformBuffer.Ptr.Buffer^ do
   begin
     W := World;
     VP := View * Projection * Clip;
@@ -220,8 +220,7 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TLabUniformBuffer.Create(Device, SizeOf(TTransforms));
-  UniformBuffer.Ptr.Map(Transforms);
+  UniformBuffer := TUniformTransforms.Create(Device);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
     LabDescriptorSetBindings([

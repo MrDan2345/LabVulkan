@@ -37,8 +37,8 @@ type
     Projection: TLabMat;
     WVP: TLabMat;
   end;
-  TUniformArray = specialize TLabAlignedArray<TUniformData>;
-  TUniformArrayShared = specialize TLabSharedRef<TUniformArray>;
+  TUniformDynamic = specialize TLabUniformBufferDynamic<TUniformData>;
+  TUniformDynamicShared = specialize TLabSharedRef<TUniformDynamic>;
 
   TLabApp = class (TLabVulkan)
   public
@@ -52,7 +52,7 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TLabBufferShared;
+    var UniformBuffer: TUniformDynamicShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
@@ -63,7 +63,6 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
-    var Transforms: TUniformArrayShared;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -72,7 +71,6 @@ type
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
-    function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
   end;
 
 const
@@ -175,8 +173,8 @@ procedure TLabApp.UpdateTransforms;
   var Clip: TLabMat;
 begin
   fov := LabDegToRad * 45;
-  for i := 0 to Transforms.Ptr.Count - 1 do
-  with Transforms.Ptr.Items[i]^ do
+  for i := 0 to UniformBuffer.Ptr.Count - 1 do
+  with UniformBuffer.Ptr.Buffer[i]^ do
   begin
     Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
     View := LabMatView(LabVec3(-8, 5, -4), LabVec3(5, 0, 0), LabVec3(0, 1, 0));
@@ -227,14 +225,17 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
-  Transforms.Ptr.Count := 20;
-  UniformBuffer := TLabBuffer.Create(
-    Device, Transforms.Ptr.DataSize,
-    TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
-    [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  //Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
+  //Transforms.Ptr.Count := 20;
+  UniformBuffer := TUniformDynamic.Create(
+    Device, 20
   );
+  //UniformBuffer := TLabBuffer.Create(
+  //  Device, Transforms.Ptr.DataSize,
+  //  TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
+  //  [], VK_SHARING_MODE_EXCLUSIVE,
+  //  TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  //);
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
   VertexBuffer := TLabVertexBuffer.Create(
@@ -331,7 +332,6 @@ begin
 end;
 
 procedure TLabApp.Loop;
-  var UniformData: PVkUInt8;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
   var i: Integer;
@@ -348,17 +348,6 @@ begin
     SwapchainCreate;
   end;
   UpdateTransforms;
-  UniformData := nil;
-  if (UniformBuffer.Ptr.Map(UniformData)) then
-  begin
-    Move(Transforms.Ptr.Data^, UniformData^, Transforms.Ptr.DataSize);
-    UniformBuffer.Ptr.FlushMappedMemoryRanges(
-      [
-        LabMappedMemoryRange(UniformBuffer.Ptr.Memory, 0, UniformBuffer.Ptr.Size)
-      ]
-    );
-    UniformBuffer.Ptr.Unmap;
-  end;
   r := SwapChain.Ptr.AcquireNextImage(Semaphore);
   if r = VK_ERROR_OUT_OF_DATE_KHR then
   begin
@@ -382,12 +371,12 @@ begin
   CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
   CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
-  for i := 0 to Transforms.Ptr.Count - 1 do
+  for i := 0 to UniformBuffer.Ptr.Count - 1 do
   begin
     CmdBuffer.Ptr.BindDescriptorSets(
       VK_PIPELINE_BIND_POINT_GRAPHICS,
       PipelineLayout.Ptr,
-      0, [DescriptorSets.Ptr.VkHandle[0]], [Transforms.Ptr.ItemOffset[i]]
+      0, [DescriptorSets.Ptr.VkHandle[0]], [UniformBuffer.Ptr.BufferOffset[i]]
     );
     CmdBuffer.Ptr.Draw(12 * 3);
   end;
@@ -404,17 +393,6 @@ begin
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
-end;
-
-function TLabApp.GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
-  var align: TVkDeviceSize;
-begin
-  align := Device.Ptr.PhysicalDevice.Ptr.Properties^.limits.minUniformBufferOffsetAlignment;
-  Result := BufferSize;
-  if align > 0 then
-  begin
-    Result := (Result + align - 1) and (not(align - 1));
-  end;
 end;
 
 end.

@@ -34,14 +34,24 @@ uses
   sysutils;
 
 type
-  TUniformData = packed record
-    World: TLabMat;
-    View: TLabMat;
-    Projection: TLabMat;
-    WVP: TLabMat;
+  TGlobalData = packed record
+    time: TLabVec4;
   end;
-  TUniformArray = specialize TLabAlignedArray<TUniformData>;
-  TUniformArrayShared = specialize TLabSharedRef<TUniformArray>;
+  TGlobalUniform = specialize TLabUniformBuffer<TGlobalData>;
+  TGlobalUniformShared = specialize TLabSharedRef<TGlobalUniform>;
+  TViewData = packed record
+    v: TLabMat;
+    p: TLabMat;
+    vp: TLabMat;
+    vp_i: TLabMat;
+  end;
+  TViewUniform = specialize TLabUniformBuffer<TViewData>;
+  TViewUniformShared = specialize TLabSharedRef<TViewUniform>;
+  TObjectData = packed record
+    w: TLabMat;
+  end;
+  TObjectUniform = specialize TLabUniformBufferDynamic<TObjectData>;
+  TObjectUniformShared = specialize TLabSharedRef<TObjectUniform>;
 
   TLabApp = class (TLabVulkan)
   public
@@ -60,12 +70,12 @@ type
     var CmdBuffer: TLabCommandBufferShared;
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
-    var UniformBuffer: TLabBufferShared;
+    var UniformGlobal: TGlobalUniformShared;
+    var UniformView: TViewUniformShared;
+    var UniformObject: TObjectUniformShared;
     var RenderPass: TLabRenderPassShared;
     var PipelineCache: TLabPipelineCacheShared;
     var Scene: TLabScene;
-    var Transforms: TUniformArrayShared;
-    var UniformBufferMap: Pointer;
     var DebugDraw: TLabDebugDraw;
     constructor Create;
     procedure SwapchainCreate;
@@ -76,7 +86,6 @@ type
     procedure Initialize;
     procedure Finalize;
     procedure Loop;
-    function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
   end;
 
   TNodeData = class (TLabClass)
@@ -140,6 +149,7 @@ type
       destructor Destroy; override;
     end;
     type TPassList = specialize TLabList<TPass>;
+    type TJointUniform = specialize TLabUniformBuffer<TLabMat>;
   private
     var _Attachment: TLabSceneNodeAttachment;
     procedure SetupGeometry(
@@ -149,7 +159,7 @@ type
     );
   public
     Passes: TPassList;
-    JointUniformBuffer: TLabUniformBuffer;
+    JointUniformBuffer: TJointUniform;
     JointUniforms: PLabMatArr;
     Joints: TLabSceneNodeList;
     procedure UpdateSkinTransforms;
@@ -469,7 +479,7 @@ begin
   begin
     r_s := Geom.Subsets[i];
     Pass := TPass.Create;
-    pc := 1;
+    pc := 3;//uniforms
     if Assigned(Skin) then Inc(pc);
     for j := 0 to MaterialBindings.Count - 1 do
     if r_s.Material = MaterialBindings[j].Symbol then
@@ -487,8 +497,16 @@ begin
     end;
     SetLength(Params, pc);
     pc := 0;
+    Params[pc] := LabSceneShaderParameterUniform(
+      App.UniformGlobal.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    );
+    Inc(pc);
+    Params[pc] := LabSceneShaderParameterUniform(
+      App.UniformView.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    );
+    Inc(pc);
     Params[pc] := LabSceneShaderParameterUniformDynamic(
-      App.UniformBuffer.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+      App.UniformObject.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
     );
     Inc(pc);
     if Assigned(Skin) then
@@ -533,12 +551,6 @@ begin
 end;
 
 procedure TInstanceData.UpdateSkinTransforms;
-  function CombinedTransform(const n: TLabSceneNode): TLabMat;
-    var i: TVkInt32;
-  begin
-    Result := n.Transform;
-    if Assigned(n.Parent) then Result := Result * CombinedTransform(n.Parent);
-  end;
   var Skin: TLabSceneControllerSkin;
   var i: TVkInt32;
   var m: TLabMat;
@@ -548,7 +560,7 @@ begin
   Skin := TLabSceneControllerSkin(TLabSceneNodeAttachmentController(_Attachment).Controller);
   for i := 0 to Joints.Count - 1 do
   begin
-    m := Joints[i].Transform;//CombinedTransform(Joints[i]);
+    m := Joints[i].Transform;
     m := (Skin.BindShapeMatrix * Skin.Joints[i].BindPose) * m;
     JointUniforms^[i] := m;
   end;
@@ -565,33 +577,16 @@ constructor TInstanceData.Create(
   const Attachment: TLabSceneNodeAttachmentController
 );
   var Skin: TLabSceneControllerSkin;
-  procedure PropagateBinds(const Node: TLabSceneNode; const xf: TLabMat);
-    var i: TVkInt32;
-    var bp: TLabMat;
-  begin
-    bp := xf;
-    for i := 0 to Joints.Count - 1 do
-    if Joints[i] = Node then
-    begin
-      bp := bp * Skin.Joints[i].BindPose;
-      Skin.Joints[i].BindPose := bp;
-      Break;
-    end;
-    for i := 0 to Node.Children.Count - 1 do
-    begin
-      PropagateBinds(Node.Children[i], bp);
-    end;
-  end;
   var i: TVkInt32;
 begin
   _Attachment := Attachment;
   Passes := TPassList.Create;
   if not (Attachment.Controller is TLabSceneControllerSkin) then Exit;
   Skin := TLabSceneControllerSkin(Attachment.Controller);
-  JointUniformBuffer := TLabUniformBuffer.Create(
-    App.Device, SizeOf(TLabMat) * Length(Skin.Joints)
+  JointUniformBuffer := TJointUniform.Create(
+    App.Device, Length(Skin.Joints)
   );
-  JointUniformBuffer.Map(JointUniforms);
+  JointUniforms := PLabMatArr(JointUniformBuffer.Buffer);
   Joints := TLabSceneNodeList.Create;
   Joints.Allocate(Length(Skin.Joints));
   for i := 0 to Joints.Count - 1 do
@@ -607,7 +602,6 @@ begin
     end;
     JointUniforms^[i] := LabMatIdentity;
   end;
-  //PropagateBinds(Attachment.Skeleton, LabMatIdentity);
   SetupGeometry(Skin.Geometry, Skin, Attachment.MaterialBindings);
 end;
 
@@ -616,7 +610,6 @@ begin
   FreeAndNil(Joints);
   if Assigned(JointUniformBuffer) then
   begin
-    JointUniformBuffer.Unmap;
     FreeAndNil(JointUniformBuffer);
   end;
   while Passes.Count > 0 do Passes.Pop.Free;
@@ -829,14 +822,9 @@ begin
   inst_count := 0;
   ProcessNode(Scene.Root);
   if inst_count = 0 then Exit;
-  Transforms := TUniformArray.Create(GetUniformBufferOffsetAlignment(SizeOf(TUniformData)));
-  Transforms.Ptr.Count := inst_count;
-  UniformBuffer := TLabBuffer.Create(
-    Device, Transforms.Ptr.DataSize,
-    TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
-    [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-  );
+  UniformGlobal := TGlobalUniform.Create(Device, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+  UniformView := TViewUniform.Create(Device, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+  UniformObject := TObjectUniform.Create(Device, inst_count, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   CreateInstances(Scene.Root);
 end;
 
@@ -848,16 +836,12 @@ procedure TLabApp.UpdateTransforms;
   procedure UpdateNode(const Node: TLabSceneNode);
     var i_n, i: Integer;
     var nd: TNodeData;
-    var id: TInstanceData;
   begin
     nd := TNodeData(Node.UserData);
     if Assigned(nd) then
-    with Transforms.Ptr.Items[nd.UniformOffset]^ do
+    with UniformObject.Ptr.Buffer[nd.UniformOffset]^ do
     begin
-      Projection := GlobalProjection;
-      View := GlobalView;
-      World := Node.Transform * GlobalWorld;
-      WVP := World * View * Projection * GlobalClip;
+      w := Node.Transform * GlobalWorld;
     end;
     //DebugDraw.DrawTransform(Node.Transform);
     for i_n := 0 to Node.Children.Count - 1 do
@@ -889,14 +873,20 @@ begin
     0, 0, 1, 0,
     0, 0, 0, 1
   );
+  UniformGlobal.Ptr.Buffer^.time := LabVec4(
+    LabTimeSec,
+    LabTimeLoopSec * LabTwoPi,
+    sin(LabTimeLoopSec * LabTwoPi),
+    cos(LabTimeLoopSec * LabTwoPi)
+  );
+  UniformGlobal.Ptr.FlushAll;
+  UniformView.Ptr.Buffer^.v := GlobalView;
+  UniformView.Ptr.Buffer^.p := GlobalProjection * GlobalClip;
+  UniformView.Ptr.Buffer^.vp := GlobalView * GlobalProjection * GlobalClip;
+  UniformView.Ptr.Buffer^.vp_i := (GlobalView * GlobalProjection * GlobalClip).Inverse;
+  UniformView.Ptr.FlushAll;
   UpdateNode(Scene.Root);
-  if Assigned(UniformBufferMap) then
-  begin
-    Move(Transforms.Ptr.Data^, UniformBufferMap^, Transforms.Ptr.DataSize);
-    UniformBuffer.Ptr.FlushMappedMemoryRanges(
-      [LabMappedMemoryRange(UniformBuffer.Ptr.Memory, 0, UniformBuffer.Ptr.Size)]
-    );
-  end;
+  UniformObject.Ptr.FlushAll;
   with DebugDraw.Transforms^ do
   begin
     World := GlobalWorld;
@@ -986,8 +976,6 @@ begin
 end;
 
 procedure TLabApp.Initialize;
-  var fov: TVkFloat;
-  var ColladaParser: TLabColladaParser;
 begin
   Window := TLabWindow.Create(500, 500);
   Window.Ptr.Caption := 'Vulkan Model';
@@ -1017,12 +1005,10 @@ begin
   Fence := TLabFence.Create(Device);
   TransferBuffers;
   DebugDraw := TLabDebugDraw.Create(Device);
-  if UniformBuffer.IsValid then UniformBuffer.Ptr.Map(UniformBufferMap);
 end;
 
 procedure TLabApp.Finalize;
 begin
-  if UniformBuffer.IsValid then UniformBuffer.Ptr.Unmap;
   Device.Ptr.WaitIdle;
   DebugDraw.Free;
   SwapchainDestroy;
@@ -1030,7 +1016,9 @@ begin
   Fence := nil;
   Semaphore := nil;
   PipelineCache := nil;
-  UniformBuffer := nil;
+  UniformObject := nil;
+  UniformView := nil;
+  UniformGlobal := nil;
   Surface := nil;
   Device := nil;
   Window := nil;
@@ -1129,7 +1117,7 @@ procedure TLabApp.Loop;
         CmdBuffer.Ptr.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
           r_p.PipelineLayout.Ptr,
-          0, [r_p.Shader.Ptr.DescriptorSets.Ptr.VkHandle[0]], [Transforms.Ptr.ItemOffset[nd.UniformOffset]]
+          0, [r_p.Shader.Ptr.DescriptorSets.Ptr.VkHandle[0]], [UniformObject.Ptr.BufferOffset[nd.UniformOffset]]
         );
         if Assigned(r_ss) then
         begin
@@ -1156,9 +1144,6 @@ procedure TLabApp.Loop;
   end;
   var cur_buffer: TVkUInt32;
   var r: TVkResult;
-  var n: TLabSceneNode;
-  var e: TLabVec3;
-  var m: TLabMat;
   var t, anim_loop: TLabFloat;
 begin
   TLabVulkan.IsActive := Window.Ptr.IsActive;
@@ -1222,17 +1207,6 @@ begin
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
-end;
-
-function TLabApp.GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
-  var align: TVkDeviceSize;
-begin
-  align := Device.Ptr.PhysicalDevice.Ptr.Properties^.limits.minUniformBufferOffsetAlignment;
-  Result := BufferSize;
-  if align > 0 then
-  begin
-    Result := (Result + align - 1) and (not(align - 1));
-  end;
 end;
 
 end.
