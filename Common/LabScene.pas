@@ -627,6 +627,7 @@ type
     property Animations: TLabSceneAnimationList read _Animations;
     property AnimationClips: TLabSceneAnimationClipList read _AnimationClips;
     property Cameras: TLabSceneCameraList read _Cameras;
+    property Lights: TLabSceneLightList read _Lights;
     property DefaultAnimationClip: TLabSceneAnimationClip read _DefaultAnimationClip;
     procedure Add(const FileName: String);
     function FindAnimationClip(const Name: AnsiString): TLabSceneAnimationClip;

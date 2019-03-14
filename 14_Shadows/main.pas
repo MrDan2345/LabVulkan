@@ -75,15 +75,15 @@ type
 
   TLight = class (TLabClass)
   public
-    type TDepthData = packed record
-      v: TLabMat;
-      p: TLabMat;
-      vp: TLabMat;
-      vp_i: TLabMat;
-    end;
-    type PDepthData = ^TDepthData;
-    type TUniformBufferDepth = specialize TLabUniformBuffer<TDepthData>;
-    type TUniformBufferDepthShared = specialize TLabSharedRef<TUniformBufferDepth>;
+    //type TDepthData = packed record
+    //  v: TLabMat;
+    //  p: TLabMat;
+    //  vp: TLabMat;
+    //  vp_i: TLabMat;
+    //end;
+    //type PDepthData = ^TDepthData;
+    //type TUniformBufferDepth = specialize TLabUniformBuffer<TDepthData>;
+    //type TUniformBufferDepthShared = specialize TLabSharedRef<TUniformBufferDepth>;
     type TLightData = packed record
       VP_i: TLabMat;
       VP_Light: TLabMat;
@@ -100,10 +100,9 @@ type
     var DepthSampler: TLabSamplerShared;
     var DepthRenderPass: TLabRenderPassShared;
     var DepthFrameBuffer: TLabFrameBufferShared;
-    var DepthUniformBuffer: TUniformBufferDepthShared;
-    var DepthData: PDepthData;
-    var DepthPipelineLayout: TLabPipelineLayoutShared;
-    var DepthDescriptorSets: TLabDescriptorSetsShared;
+    //var DepthUniformBuffer: TUniformBufferDepthShared;
+    //var DepthPipelineLayout: TLabPipelineLayoutShared;
+    //var DepthDescriptorSets: TLabDescriptorSetsShared;
     var LightVS: TLabVertexShaderShared;
     var LightPS: TLabPixelShaderShared;
     var LightDescriptorSets: TLabDescriptorSetsShared;
@@ -111,10 +110,11 @@ type
     var LightPipelineLayout: TLabPipelineLayoutShared;
     var LightUniformBuffer: TUniformBufferLightShared;
     var LightData: PLightData;
+    var Index: TVkInt32;
     procedure Resize(const Params: array of const);
     procedure UpdateTransforms(const Params: array of const);
     procedure BindOffscreenTargets(const Params: array of const);
-    constructor Create(const LightInst: TLabSceneNodeAttachmentLight);
+    constructor Create(const LightInst: TLabSceneNodeAttachmentLight; const LightIndex: TVkInt32);
     destructor Destroy; override;
     procedure Draw(const Cmd: TLabCommandBuffer);
   end;
@@ -140,6 +140,14 @@ type
     end;
     type TUniformBufferInstance = specialize TLabUniformBufferDynamic<TUniformInstance>;
     type TUniformBufferInstanceShared = specialize TLabSharedRef<TUniformBufferInstance>;
+    type TUniformLightView = packed record
+      v: TLabMat;
+      p: TLabMat;
+      vp: TLabMat;
+      vp_i: TLabMat;
+    end;
+    type TUniformBufferLightView = specialize TLabUniformBufferDynamic<TUniformLightView>;
+    type TUniformBufferLightViewShared = specialize TLabSharedRef<TUniformBufferLightView>;
     type TUniformBufferJoint = specialize TLabUniformBuffer<TLabMat>;
     type TUniformBufferJointShared = specialize TLabSharedRef<TUniformBufferJoint>;
     type TNodeData = class (TLabClass)
@@ -213,6 +221,7 @@ type
     var UniformBufferGlobal: TUniformBufferGlobalShared;
     var UniformBufferView: TUniformBufferViewShared;
     var UniformBufferInstance: TUniformBufferInstanceShared;
+    var UniformBufferLightView: TUniformBufferLightViewShared;
     procedure ProcessScene;
     procedure UpdateTransforms(const Params: array of const);
     function GetUniformBufferOffsetAlignment(const BufferSize: TVkDeviceSize): TVkDeviceSize;
@@ -349,11 +358,14 @@ begin
   light_v := LabMatView(Inst.LightPos, Inst.LightPos + Inst.LightDir, Inst.LightUp);
   //light_p := LabMatProj(90 * LabDegToRad, 1, 1, 1000);
   light_p := LabMatOrth(50, 50, 1, 1000);
-  DepthData^.v := light_v;
-  DepthData^.p := light_p;
-  DepthData^.vp := light_v * light_p * xf^.Clip;
-  DepthData^.vp_i := (light_v * light_p * xf^.Clip).Inverse;
-  DepthUniformBuffer.Ptr.FlushAll;
+  with App.Scene.Ptr.UniformBufferLightView.Ptr.Buffer[Index]^ do
+  begin
+    v := light_v;
+    p := light_p;
+    vp := light_v * light_p * xf^.Clip;
+    vp_i := (light_v * light_p * xf^.Clip).Inverse;
+  end;
+  //DepthUniformBuffer.Ptr.FlushAll;
   LightData^.VP_i := (xf^.View * xf^.Projection * xf^.Clip).Inverse;
   LightData^.VP_Light := light_v * light_p * xf^.Clip;
   LightData^.CameraPos := LabVec4(LabMatViewPos(xf^.View), 1);
@@ -432,8 +444,9 @@ begin
   LightDescriptorSets.Ptr.UpdateSets(Writes, []);
 end;
 
-constructor TLight.Create(const LightInst: TLabSceneNodeAttachmentLight);
+constructor TLight.Create(const LightInst: TLabSceneNodeAttachmentLight; const LightIndex: TVkInt32);
 begin
+  Index := LightIndex;
   App.OnBindOffscreenTargets.Add(@BindOffscreenTargets);
   App.OnUpdateTransforms.Add(@UpdateTransforms);
   App.BackBuffer.Ptr.OnResize.Add(@Resize);
@@ -457,20 +470,20 @@ begin
     0, 0, 0, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
     VK_TRUE, VK_COMPARE_OP_LESS
   );
-  DepthUniformBuffer := TUniformBufferDepth.Create(
-    App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-  );
-  DepthData := DepthUniformBuffer.Ptr.Buffer;
-  DepthDescriptorSets := App.DescriptorSetsFactory.Ptr.Request(
-    [LabDescriptorSetBindings(
-      LabDescriptorBinding(
-        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
-      )
-    )]
-  );
-  DepthPipelineLayout := TLabPipelineLayout.Create(
-    App.Device, [], [DepthDescriptorSets.Ptr.Layout[0].Ptr]
-  );
+  //DepthUniformBuffer := TUniformBufferDepth.Create(
+  //  App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  //);
+  //DepthData := DepthUniformBuffer.Ptr.Buffer;
+  //DepthDescriptorSets := App.DescriptorSetsFactory.Ptr.Request(
+  //  [LabDescriptorSetBindings(
+  //    LabDescriptorBinding(
+  //      0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+  //    )
+  //  )]
+  //);
+  //DepthPipelineLayout := TLabPipelineLayout.Create(
+  //  App.Device, [], [DepthDescriptorSets.Ptr.Layout[0].Ptr]
+  //);
   DepthRenderPass := TLabRenderPass.Create(
     App.Device,
     [
@@ -657,8 +670,8 @@ begin
     Params[pc] := LabSceneShaderParameterUniform(
       _Scene.UniformBufferView.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
     );
-    ParamsDepth[pc] := LabSceneShaderParameterUniform(
-      _Scene.LightInst[0].Ptr.DepthUniformBuffer.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
+    ParamsDepth[pc] := LabSceneShaderParameterUniformDynamic(
+      _Scene.UniformBufferLightView.Ptr.VkHandle, [], TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)
     );
     Inc(pc);
     Params[pc] := LabSceneShaderParameterUniformDynamic(
@@ -1254,7 +1267,7 @@ procedure TScene.ProcessScene;
       and (TLabSceneNodeAttachmentLight(Node.Attachments[i]).Light.LightType = lt_directional) then
       begin
         SetLength(LightInst, Length(LightInst) + 1);
-        LightInst[High(LightInst)] := TLight.Create(TLabSceneNodeAttachmentLight(Node.Attachments[i]));
+        LightInst[High(LightInst)] := TLight.Create(TLabSceneNodeAttachmentLight(Node.Attachments[i]), High(LightInst));
       end;
     end;
     for i := 0 to Node.Children.Count - 1 do
@@ -1300,6 +1313,7 @@ begin
   ProcessNode(Scene.Root);
   UniformBufferGlobal := TUniformBufferGlobal.Create(App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   UniformBufferView := TUniformBufferView.Create(App.Device, 1, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+  UniformBufferLightView := TUniformBufferLightView.Create(App.Device, Scene.Lights.Count, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   if inst_count = 0 then Exit;
   UniformBufferInstance := TUniformBufferInstance.Create(App.Device, inst_count, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   CreateInstances(Scene.Root);
@@ -1599,7 +1613,11 @@ procedure TScene.DrawDepth(const Cmd: TLabCommandBuffer);
         Cmd.BindDescriptorSets(
           VK_PIPELINE_BIND_POINT_GRAPHICS,
           r_p.PipelineLayoutDepth.Ptr,
-          0, [r_p.ShaderDepth.Ptr.DescriptorSets.Ptr.VkHandle[0]], [UniformBufferInstance.Ptr.BufferOffset[nd.UniformOffset]]
+          0, [r_p.ShaderDepth.Ptr.DescriptorSets.Ptr.VkHandle[0]],
+          [
+            UniformBufferLightView.Ptr.BufferOffset[Light.Index],
+            UniformBufferInstance.Ptr.BufferOffset[nd.UniformOffset]
+          ]
         );
         if Assigned(r_ss) then
         begin
@@ -2033,6 +2051,7 @@ begin
   TLabVulkan.IsActive := Window.Ptr.IsActive;
   if not BackBuffer.Ptr.FrameStart then Exit;
   UpdateTransforms;
+  Scene.Ptr.UniformBufferLightView.Ptr.FlushAll;
   cur_buffer := BackBuffer.Ptr.SwapChain.Ptr.CurImage;
   if OnStage.CallbackCount > 0 then
   begin
