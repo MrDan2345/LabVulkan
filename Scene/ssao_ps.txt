@@ -1,0 +1,48 @@
+#version 400
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+#extension GL_EXT_samplerless_texture_functions : enable
+layout (std140, binding = 0) uniform t_data {
+	vec4 screen_ratio;
+	mat4 v;
+	mat4 p;
+	mat4 p_i;
+	vec4 samples[64];
+	vec4 random_vectors[64];
+} data;
+layout (binding = 1) uniform texture2D tex_depth;
+layout (binding = 2) uniform texture2D tex_normals;
+layout (location = 0) in vec2 in_tc;
+layout (location = 0) out vec4 out_color;
+
+void main() {
+	vec2 pos_c = in_tc;
+	ivec2 tc = ivec2((in_tc * 0.5 + 0.5) * data.screen_ratio.xy);
+	vec4 rv_tbl = data.random_vectors[(tc.y % 8) * 8 + tc.x % 8];
+	vec3 rv = vec3(rv_tbl[(tc.x % 16 / 8) * 2], rv_tbl[(tc.x % 16 / 8) * 2 + 1], 0);
+	float depth = texelFetch(tex_depth, tc, 0).x;
+	vec4 pos_v = data.p_i * vec4(pos_c, depth, 1);
+	pos_v.xyz /= pos_v.w;
+	vec3 normal = texelFetch(tex_normals, tc, 0).xyz;
+	normal = mat3(data.v) * normal;
+	vec3 tr = abs(dot(normal, vec3(1, 0, 0))) > 0.999 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+	vec3 tangent = normalize(cross(tr, normal));
+	//vec3 tangent = normalize(rv - normal * dot(rv, normal));
+	vec3 bitangent = normalize(cross(normal, tangent));
+	mat3 tbn = mat3(tangent, bitangent, normal);
+	float occlusion = 0.0;
+	float radius = 0.5;
+	float bias = 0.000125;
+	for (int i = 0; i < 64; ++i) {
+		vec3 samp_v = (tbn * data.samples[i].xyz) * radius + pos_v.xyz;
+		vec4 samp_c = data.p * vec4(samp_v, 1);
+		samp_c.xyz /= samp_c.w;
+		ivec2 samp_tc = ivec2(clamp(samp_c.xy * 0.5 + 0.5, 0.0, 1.0) * data.screen_ratio.xy);
+		samp_tc = clamp(samp_tc, ivec2(0), textureSize(tex_depth, 0).xy);
+		float samp_depth = texelFetch(tex_depth, samp_tc.xy, 0).x;
+		float range_check = smoothstep(0.0, 1.0, radius / abs(depth - samp_depth));
+		occlusion += (samp_depth + bias <= samp_c.z ? 1.0 : 0.0) * range_check;  
+	}
+	occlusion = clamp(1.0 - (occlusion / 64.0) * 1.5, 0.0, 1.0);
+	out_color = vec4(vec3(occlusion), 1);
+}

@@ -133,6 +133,7 @@ type
     function Map: Boolean; inline; overload;
     property Buffer: PUniformData read GetBuffer;
     property Item[const Index: TVkUInt32]: PUniformData read GetItem; default;
+    property ItemCount: TVkUInt32 read _Count;
   end;
 
   generic TLabUniformBufferDynamic<T> = class (TLabBuffer)

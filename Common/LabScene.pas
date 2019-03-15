@@ -1087,7 +1087,7 @@ begin
   and (Length(TexCoord) > 0) then
   begin
     StrCode += '  vec4 tex_color = texture(' + TexColor + ', tex_coord);'#$D#$A;
-    StrCode += '  tex_color.xyz = pow(tex_color.xyz, vec3(2.2));'#$D#$A;
+    //StrCode += '  tex_color.xyz = pow(tex_color.xyz, vec3(2.2));'#$D#$A;
     StrCode += '  color *= tex_color;'#$D#$A;
   end;
 

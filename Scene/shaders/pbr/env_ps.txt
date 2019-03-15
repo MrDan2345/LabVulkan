@@ -22,9 +22,10 @@ layout (binding = 1) uniform sampler_type tex_color;
 layout (binding = 2) uniform sampler_type tex_depth;
 layout (binding = 3) uniform sampler_type tex_normal;
 layout (binding = 4) uniform sampler_type tex_phys_params;
-layout (binding = 5) uniform samplerCube tex_irradiance;
-layout (binding = 6) uniform samplerCube tex_prefiltered;
-layout (binding = 7) uniform sampler2D tex_brdf_lut;
+layout (binding = 5) uniform texture2D tex_ssao;
+layout (binding = 6) uniform samplerCube tex_irradiance;
+layout (binding = 7) uniform samplerCube tex_prefiltered;
+layout (binding = 8) uniform sampler2D tex_brdf_lut;
 layout (location = 0) out vec4 out_color;
 
 const float PI = 3.14159265359;
@@ -91,6 +92,9 @@ vec4 get_world_pos(float depth) {
 void main() {
 	ivec2 sc = ivec2(gl_FragCoord.xy);
 	vec3 sampled_color = vec3(0.0);
+	vec4 ssao = texelFetch(tex_ssao, sc, 0);
+	//out_color = ssao;
+	//return;
 #if MULTISAMPLED
 	for (int samp = 0; samp < sample_count; ++samp)
 #endif// MULTISAMPLED
@@ -127,9 +131,9 @@ void main() {
 		// Ambient part
 		vec3 kD = 1.0 - F;
 		kD *= 1.0 - metallic;	  
-		vec3 ambient = (kD * diffuse + specular);
+		vec3 ambient = (kD * diffuse + specular) * ssao.xyz;
 		
-		vec3 color = ambient + Lo;
+		vec3 color = (ambient + Lo);
 
 		color = mix(color, textureLod(tex_prefiltered, -dir_to_camera, 0).xyz, step(0.99, depth));
 		
@@ -138,6 +142,7 @@ void main() {
 #if MULTISAMPLED
 	sampled_color *= 1.0 / float(sample_count);
 #endif// MULTISAMPLED
+	//sampled_color *= ssao.xyz;
 	// Tone mapping
 	sampled_color = Uncharted2Tonemap(sampled_color * data.exposure);
 	sampled_color = sampled_color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
