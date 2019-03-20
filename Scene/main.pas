@@ -2187,13 +2187,13 @@ begin
       0, 1, i, 1
     );
   end;
-  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Arches_E_PineTree_3k.hdr', False);
+  tex2d := TLabTexture2D.Create(App.Device, '../Images/Arches_E_PineTree_3k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Tropical_Beach/Tropical_Beach_3k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Mono_Lake_C/Mono_Lake_C_Ref.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/hdrvfx_0012_sand/hdrvfx_0012_sand_v11_Ref.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Summi_Pool/Summi_Pool_3k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Milkyway/Milkyway_small.hdr', False);
-  tex2d := TLabTexture2D.Create(App.Device, '../Images/Factory_Catwalk/Factory_Catwalk_2k.hdr', False);
+  //tex2d := TLabTexture2D.Create(App.Device, '../Images/Factory_Catwalk/Factory_Catwalk_2k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Hamarikyu_Bridge_B/14-Hamarikyu_Bridge_B_3k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/Theatre_Center/Theatre-Center_2k.hdr', False);
   //tex2d := TLabTexture2D.Create(App.Device, '../Images/CharlesRiver/CharlesRiver_Ref.hdr', False);

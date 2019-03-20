@@ -14,15 +14,4 @@
       </Unit0>
     </Units>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints Count="1">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="main.pas"/>
-        <Line Value="636"/>
-      </Item1>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>
