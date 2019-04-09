@@ -225,10 +225,9 @@ type
     var Semaphore: TLabSemaphoreShared;
     var Fence: TLabFenceShared;
     var OffscreenTargets: array of record
-      Depth: TRenderTarget;
       Color: TRenderTarget;
       Normals: TRenderTarget;
-      ZBuffer: TLabDepthBufferShared;
+      Depth: TLabDepthBufferShared;
       FrameBuffer: TLabFrameBufferShared;
     end;
     var WidthRT: TVkUInt32;
@@ -595,8 +594,8 @@ begin
     InstanceStaging.Ptr.Unmap;
   end;
   VertexShader := TLabVertexShader.Create(App.Device, 'light_vs.spv');
-  TessControlShader := TLabTessControlShader.Create(App.Device, 'light_tcs.spv');
-  TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'light_tes.spv');
+  TessControlShader := TLabTessCtrlShader.Create(App.Device, 'light_tcs.spv');
+  TessEvalShader := TLabTessEvalShader.Create(App.Device, 'light_tes.spv');
   PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');
   Sampler := TLabSampler.Create(
     App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,
@@ -729,7 +728,7 @@ begin
       [
         LabDescriptorImageInfo(
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          App.OffscreenTargets[i].Depth.View.Ptr.VkHandle,
+          App.OffscreenTargets[i].Depth.Ptr.View.VkHandle,
           Sampler.Ptr.VkHandle
         )
       ]
@@ -938,7 +937,7 @@ begin
       [
         LabDescriptorImageInfo(
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          App.OffscreenTargets[i].Depth.View.Ptr.VkHandle,
+          App.OffscreenTargets[i].Depth.Ptr.View.VkHandle,
           Sampler.Ptr.VkHandle
         )
       ]
@@ -1104,7 +1103,7 @@ begin
     ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
-    LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
+    LabPipelineColorBlendState([LabDefaultColorBlendAttachment, LabDefaultColorBlendAttachment], []),
     LabPipelineTesselationState(0)
   );
   DescriptorSets.Ptr.UpdateSets(
@@ -1226,26 +1225,18 @@ begin
   SetLength(OffscreenTargets, SwapChain.Ptr.ImageCount);
   for i := 0 to SwapChain.Ptr.ImageCount - 1 do
   begin
-    OffscreenTargets[i].Depth.SetupImage(VK_FORMAT_R32_SFLOAT, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    //OffscreenTargets[i].Depth.SetupImage(VK_FORMAT_R32_SFLOAT, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     OffscreenTargets[i].Color.SetupImage(VK_FORMAT_R8G8B8A8_UNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     OffscreenTargets[i].Normals.SetupImage(VK_FORMAT_R8G8B8A8_SNORM, TVkFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-    OffscreenTargets[i].ZBuffer := TLabDepthBuffer.Create(
-      App.Device, App.WidthRT, App.HeightRT, VK_FORMAT_UNDEFINED,
-      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    OffscreenTargets[i].Depth := TLabDepthBuffer.Create(
+      App.Device, App.WidthRT, App.HeightRT, VK_FORMAT_D32_SFLOAT,// VK_FORMAT_UNDEFINED,
+      TVkFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) or
+      TVkFlags(VK_IMAGE_USAGE_SAMPLED_BIT)
     );
   end;
   RenderPassOffscreen := TLabRenderPass.Create(
     Device,
     [
-      LabAttachmentDescription(
-        OffscreenTargets[0].Depth.Image.Ptr.Format,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_ATTACHMENT_LOAD_OP_CLEAR,
-        VK_ATTACHMENT_STORE_OP_STORE,
-        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        VK_ATTACHMENT_STORE_OP_DONT_CARE
-      ),
       LabAttachmentDescription(
         OffscreenTargets[0].Color.Image.Ptr.Format,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -1265,8 +1256,8 @@ begin
         VK_ATTACHMENT_STORE_OP_DONT_CARE
       ),
       LabAttachmentDescription(
-        OffscreenTargets[0].ZBuffer.Ptr.Format,
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        OffscreenTargets[0].Depth.Ptr.Format,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
@@ -1279,11 +1270,10 @@ begin
         [],
         [
           LabAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-          LabAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+          LabAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
         ],
         [],
-        LabAttachmentReference(3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+        LabAttachmentReference(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
         []
       )
     ],
@@ -1292,17 +1282,19 @@ begin
         VK_SUBPASS_EXTERNAL,
         0,
         TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
-        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) or TVkFlags(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT),
         TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
-        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) or
+        TVkFlags(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT),
         TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
       ),
       LabSubpassDependency(
         0,
         VK_SUBPASS_EXTERNAL,
-        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),
+        TVkFlags(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) or TVkFlags(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT),
         TVkFlags(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT),
-        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) or
+        TVkFlags(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT) or TVkFlags(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT),
         TVkFlags(VK_ACCESS_MEMORY_READ_BIT),
         TVkFlags(VK_DEPENDENCY_BY_REGION_BIT)
       )
@@ -1360,10 +1352,9 @@ begin
       Device, RenderPassOffscreen.Ptr,
       SwapChain.Ptr.Width, SwapChain.Ptr.Height,
       [
-        OffscreenTargets[i].Depth.View.Ptr.VkHandle,
         OffscreenTargets[i].Color.View.Ptr.VkHandle,
         OffscreenTargets[i].Normals.View.Ptr.VkHandle,
-        OffscreenTargets[i].ZBuffer.Ptr.View.VkHandle
+        OffscreenTargets[i].Depth.Ptr.View.VkHandle
       ]
     );
   end;
@@ -1509,7 +1500,7 @@ begin
   Cmd.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   Cmd.Ptr.BeginRenderPass(
     RenderPassOffscreen.Ptr, OffscreenTargets[cur_buffer].FrameBuffer.Ptr,
-    [LabClearValue(1, 0), LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0, 0, 0, 1.0), LabClearValue(1.0, 0)]
+    [LabClearValue(0.4, 0.7, 1.0, 1.0), LabClearValue(0, 0, 0, 1.0), LabClearValue(1.0, 0)]
   );
   Cube.Ptr.Draw(Cmd.Ptr);
   Cmd.Ptr.EndRenderPass;

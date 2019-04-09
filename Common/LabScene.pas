@@ -114,7 +114,7 @@ type
   public
     const SemanticMap: array[0..5] of record
       Name: String;
-      Value: TLabColladaVertexAttributeSemantic;
+      Value: TLabVertexAttributeSemantic;
     end = (
       (Name: 'position'; Value: as_position),
       (Name: 'normal'; Value: as_normal),
@@ -123,11 +123,11 @@ type
       (Name: 'color'; Value: as_color),
       (Name: 'texcoord'; Value: as_texcoord)
     );
-    class function GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
-    class function GetSemanticValue(const SemanticName: String): TLabColladaVertexAttributeSemantic;
+    class function GetSemanticName(const Semantic: TLabVertexAttributeSemantic): String;
+    class function GetSemanticValue(const SemanticName: String): TLabVertexAttributeSemantic;
     class function MakeShader(
       const ADevice: TLabDeviceShared;
-      const Desc: array of TLabColladaVertexAttribute;
+      const Desc: array of TLabVertexAttribute;
       const Parameters: array of TLabSceneShaderParameter;
       const SkinInfo: PLabSceneShaderSkinInfo = nil;
       const DeferredInfo: PLabSceneShaderDeferredInfo = nil;
@@ -146,10 +146,10 @@ type
         function CmpFloats(const a, b: Pointer): Boolean;
         var CmpFunc: TCmpFunc;
       public
-        Attribute: TLabColladaVertexAttribute;
+        Attribute: TLabVertexAttribute;
         Size: TVkUInt32;
         Offset: TVkUInt32;
-        constructor Create(const AAttribute: TLabColladaVertexAttribute);
+        constructor Create(const AAttribute: TLabVertexAttribute);
         procedure WriteData(const Dst: Pointer; const Index: TVkUInt32); virtual; abstract;
         function Compare(const a, b: Pointer): Boolean;
       end;
@@ -159,7 +159,7 @@ type
         Triangles: TLabColladaTriangles;
         IndexStride: TVkUInt32;
         constructor Create(
-          const AAttribute: TLabColladaVertexAttribute;
+          const AAttribute: TLabVertexAttribute;
           const AInput: TLabColladaInput;
           const ATriangles: TLabColladaTriangles;
           const AOffset: TVkUInt32
@@ -171,7 +171,7 @@ type
         Data: Pointer;
         Stride: TVkUInt32;
         constructor Create(
-          const AAttribute: TLabColladaVertexAttribute;
+          const AAttribute: TLabVertexAttribute;
           const AData: Pointer;
           const AItemStride: TVkUInt32;
           const AOffset: TVkUInt32
@@ -185,7 +185,7 @@ type
       VertexData: Pointer;
       VertexStride: TVkUInt32;
       VertexAttributes: array of TLabVertexBufferAttributeFormat;
-      VertexDescriptor: TLabColladaVertexDescriptor;
+      VertexDescriptor: TLabVertexDescriptor;
       IndexCount: TVkInt32;
       IndexData: Pointer;
       IndexStride: TVkUInt8;
@@ -720,10 +720,10 @@ begin
   Result := True;
 end;
 
-constructor TLabSceneGeometry.TSubset.TVertexChannel.Create(const AAttribute: TLabColladaVertexAttribute);
+constructor TLabSceneGeometry.TSubset.TVertexChannel.Create(const AAttribute: TLabVertexAttribute);
 begin
   Attribute := AAttribute;
-  if Attribute.DataType = at_float then
+  if Attribute.DataType = dt_float then
   begin
     case Attribute.Semantic of
       as_position,
@@ -751,14 +751,15 @@ begin
 end;
 
 constructor TLabSceneGeometry.TSubset.TVertexChannelArray.Create(
-  const AAttribute: TLabColladaVertexAttribute; const AData: Pointer;
-  const AItemStride: TVkUInt32; const AOffset: TVkUInt32);
+  const AAttribute: TLabVertexAttribute; const AData: Pointer;
+  const AItemStride: TVkUInt32; const AOffset: TVkUInt32
+);
 begin
   inherited Create(AAttribute);
   case Attribute.DataType of
-    at_float: Size := SizeOf(TVkFloat) * Attribute.DataCount;
-    at_int: Size := SizeOf(TVkInt32) * Attribute.DataCount;
-    at_bool: Size := SizeOf(Boolean) * Attribute.DataCount;
+    dt_float: Size := SizeOf(TVkFloat) * Attribute.DataCount;
+    dt_int: Size := SizeOf(TVkInt32) * Attribute.DataCount;
+    dt_bool: Size := SizeOf(Boolean) * Attribute.DataCount;
     else Size := 0;
   end;
   Offset := AOffset;
@@ -772,7 +773,7 @@ begin
 end;
 
 constructor TLabSceneGeometry.TSubset.TVertexChannelInput.Create(
-  const AAttribute: TLabColladaVertexAttribute;
+  const AAttribute: TLabVertexAttribute;
   const AInput: TLabColladaInput;
   const ATriangles: TLabColladaTriangles;
   const AOffset: TVkUInt32
@@ -798,7 +799,7 @@ begin
   Triangles.CopyInputData(Dst + Offset, Input, Triangles.Indices^[Index * IndexStride + Input.Offset]);
 end;
 
-class function TLabSceneShaderFactory.GetSemanticName(const Semantic: TLabColladaVertexAttributeSemantic): String;
+class function TLabSceneShaderFactory.GetSemanticName(const Semantic: TLabVertexAttributeSemantic): String;
   var i: TVkInt32;
 begin
   for i := 0 to High(SemanticMap) do
@@ -809,7 +810,7 @@ begin
   Result := '';
 end;
 
-class function TLabSceneShaderFactory.GetSemanticValue(const SemanticName: String): TLabColladaVertexAttributeSemantic;
+class function TLabSceneShaderFactory.GetSemanticValue(const SemanticName: String): TLabVertexAttributeSemantic;
   var i: TVkInt32;
 begin
   for i := 0 to High(SemanticMap) do
@@ -822,7 +823,7 @@ end;
 
 class function TLabSceneShaderFactory.MakeShader(
   const ADevice: TLabDeviceShared;
-  const Desc: array of TLabColladaVertexAttribute;
+  const Desc: array of TLabVertexAttribute;
   const Parameters: array of TLabSceneShaderParameter;
   const SkinInfo: PLabSceneShaderSkinInfo;
   const DeferredInfo: PLabSceneShaderDeferredInfo;
@@ -1598,10 +1599,10 @@ constructor TLabSceneGeometry.TSubset.Create(
   const AGeometry: TLabSceneGeometry;
   const Triangles: TLabColladaTriangles
 );
-  function GetFormat(const Attrib: TLabColladaVertexAttribute): TVkFormat;
+  function GetFormat(const Attrib: TLabVertexAttribute): TVkFormat;
   begin
     case Attrib.DataType of
-      at_float:
+      dt_float:
       begin
         case Attrib.DataCount of
           1: Result := VK_FORMAT_R32_SFLOAT;
@@ -1611,7 +1612,7 @@ constructor TLabSceneGeometry.TSubset.Create(
           else Result := VK_FORMAT_UNDEFINED;
         end;
       end;
-      at_int:
+      dt_int:
       begin
         case Attrib.DataCount of
           1: Result := VK_FORMAT_R32_SINT;
@@ -1621,7 +1622,7 @@ constructor TLabSceneGeometry.TSubset.Create(
           else Result := VK_FORMAT_UNDEFINED;
         end;
       end;
-      at_bool:
+      dt_bool:
       begin
         case Attrib.DataCount of
           1: Result := VK_FORMAT_R8_UINT;
@@ -1850,7 +1851,7 @@ begin
       i := Length(channels);
       SetLength(channels, i + 1);
       channels[i] := TVertexChannelArray.Create(
-        LabColladaVertexAttribute(as_normal, at_float, 3),
+        LabVertexAttribute(as_normal, dt_float, 3),
         @normals[0],
         SizeOf(normals[0]),
         VertexStride
@@ -1869,7 +1870,7 @@ begin
       i := Length(channels);
       SetLength(channels, i + 1);
       channels[i] := TVertexChannelArray.Create(
-        LabColladaVertexAttribute(as_tangent, at_float, 3),
+        LabVertexAttribute(as_tangent, dt_float, 3),
         @tangents[0].Tangent,
         SizeOf(tangents[0]),
         VertexStride
@@ -1884,7 +1885,7 @@ begin
       i := Length(channels);
       SetLength(channels, i + 1);
       channels[i] := TVertexChannelArray.Create(
-        LabColladaVertexAttribute(as_binormal, at_float, 3),
+        LabVertexAttribute(as_binormal, dt_float, 3),
         @tangents[0].Binormal,
         SizeOf(tangents[0]),
         VertexStride
@@ -1972,7 +1973,7 @@ begin
     for j := 0 to High(channels) do
     begin
       BufferPtrVert := VertexData + VertexStride * i + VertexAttributes[j].Offset;
-      if channels[j].Attribute.DataType = at_float then
+      if channels[j].Attribute.DataType = dt_float then
       begin
         case channels[j].Attribute.DataCount of
           2: PLabVec2(BufferPtrVert)^ := PLabVec2(BufferPtrVert)^.Swizzle(AttribSwizzles[j]);

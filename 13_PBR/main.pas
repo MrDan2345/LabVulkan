@@ -1289,8 +1289,8 @@ constructor TScene.Create;
 begin
   UniformBuffer := TUniformBufferArray.Create(App.Device, arr_size * arr_size, TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
   VertexShader := TLabVertexShader.Create(App.Device, 'sphere_vs.spv');
-  TessCtrlShader := TLabTessControlShader.Create(App.Device, 'sphere_tcs.spv');
-  TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'sphere_tes.spv');
+  TessCtrlShader := TLabTessCtrlShader.Create(App.Device, 'sphere_tcs.spv');
+  TessEvalShader := TLabTessEvalShader.Create(App.Device, 'sphere_tes.spv');
   PixelShader := TLabPixelShader.Create(App.Device, 'sphere_ps.spv');
   DescriptorSets := App.DescriptorSetsFactory.Ptr.Request([
       LabDescriptorSetBindings([

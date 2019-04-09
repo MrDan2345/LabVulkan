@@ -1922,8 +1922,8 @@ begin
     InstanceStaging.Ptr.Unmap;
   end;
   VertexShader := TLabVertexShader.Create(App.Device, 'light_vs.spv');
-  TessControlShader := TLabTessControlShader.Create(App.Device, 'light_tcs.spv');
-  TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'light_tes.spv');
+  TessControlShader := TLabTessCtrlShader.Create(App.Device, 'light_tcs.spv');
+  TessEvalShader := TLabTessEvalShader.Create(App.Device, 'light_tes.spv');
   if App.SampleCount = VK_SAMPLE_COUNT_1_BIT then
   begin
     PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');

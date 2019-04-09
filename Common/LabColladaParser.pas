@@ -182,22 +182,6 @@ type
     destructor Destroy; override;
   end;
 
-  TLabColladaVertexAttributeSemantic = (
-    as_invalid,
-    as_position,
-    as_normal,
-    as_tangent,
-    as_binormal,
-    as_color,
-    as_texcoord
-  );
-  TLabColladaVertexAttribute = record
-    Semantic: TLabColladaVertexAttributeSemantic;
-    DataType: TLabColladaArrayType;
-    DataCount: TVkUInt8;
-    SetNumber: TVkUInt8;
-  end;
-  TLabColladaVertexDescriptor = array of TLabColladaVertexAttribute;
   TLabColladaTriangles = class (TLabColladaObject)
   private
     _MaterialRef: DOMString;
@@ -207,7 +191,7 @@ type
     _VertexLayout: TLabColladaInputList;
     function GetVertexSize: TVkInt32;
     function GetIndices: PLabInt32Arr; inline;
-    function GetVertexDescriptor: TLabColladaVertexDescriptor;
+    function GetVertexDescriptor: TLabVertexDescriptor;
     function GetInputSourceCount(const Index: TVkUInt32): TVkUInt32; inline;
   protected
     procedure InitializeObject; override;
@@ -217,7 +201,7 @@ type
     property Indices: PLabInt32Arr read GetIndices;
     property VertexLayout: TLabColladaInputList read _VertexLayout;
     property VertexSize: TVkInt32 read GetVertexSize;
-    property VertexDescriptor: TLabColladaVertexDescriptor read GetVertexDescriptor;
+    property VertexDescriptor: TLabVertexDescriptor read GetVertexDescriptor;
     property Material: DOMString read _MaterialRef;
     property InputSourceCount[const Index: TVkUInt32]: TVkUInt32 read GetInputSourceCount;
     constructor Create(const XMLNode: TDOMNode; const AParent: TLabColladaObject);
@@ -798,13 +782,6 @@ type
     constructor Create(const Steam: TStream);
     destructor Destroy; override;
   end;
-
-function LabColladaVertexAttribute(
-  const Semantic: TLabColladaVertexAttributeSemantic;
-  const DataType: TLabColladaArrayType = at_float;
-  const DataCount: TVkUInt8 = 4;
-  const SetNumber: TVkUInt8 = 0
-): TLabColladaVertexAttribute; inline;
 
 implementation
 
@@ -2110,12 +2087,12 @@ begin
   Result := @_Indices[0];
 end;
 
-function TLabColladaTriangles.GetVertexDescriptor: TLabColladaVertexDescriptor;
+function TLabColladaTriangles.GetVertexDescriptor: TLabVertexDescriptor;
   var CurAttr: TVkInt32;
   procedure AddInput(const Input: TLabColladaInput);
     const SemanticMap: array[0..5] of record
       Name: String;
-      Value: TLabColladaVertexAttributeSemantic;
+      Value: TLabVertexAttributeSemantic;
     end = (
       (Name: 'POSITION'; Value: as_position),
       (Name: 'COLOR'; Value: as_color),
@@ -2146,7 +2123,12 @@ function TLabColladaTriangles.GetVertexDescriptor: TLabColladaVertexDescriptor;
         if SemanticMap[i].Name = AnsiString(Input.Semantic) then
         begin
           Result[CurAttr].Semantic := SemanticMap[i].Value;
-          Result[CurAttr].DataType := Source.DataArray.ArrayType;
+          case Source.DataArray.ArrayType of
+            at_bool: Result[CurAttr].DataType := dt_bool;
+            at_int: Result[CurAttr].DataType := dt_int;
+            at_float: Result[CurAttr].DataType := dt_float;
+            else Result[CurAttr].DataType := dt_invalid;
+          end;
           Result[CurAttr].DataCount := Source.Accessor.Stride;
           Result[CurAttr].SetNumber := Input.InputSet;
           Inc(CurAttr);
@@ -3423,19 +3405,6 @@ destructor TLabColladaParser.Destroy;
 begin
   if Assigned(_RootNode) then _RootNode.Free;
   inherited Destroy;
-end;
-
-function LabColladaVertexAttribute(
-  const Semantic: TLabColladaVertexAttributeSemantic;
-  const DataType: TLabColladaArrayType;
-  const DataCount: TVkUInt8;
-  const SetNumber: TVkUInt8
-): TLabColladaVertexAttribute;
-begin
-  Result.Semantic := Semantic;
-  Result.DataType := DataType;
-  Result.DataCount := DataCount;
-  Result.SetNumber := SetNumber;
 end;
 
 end.

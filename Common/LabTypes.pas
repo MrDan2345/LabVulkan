@@ -87,6 +87,29 @@ type
     property RefCount: Longint read _RefCount;
   end;
 
+  TLabVertexAttributeSemantic = (
+    as_invalid,
+    as_position,
+    as_normal,
+    as_tangent,
+    as_binormal,
+    as_color,
+    as_texcoord
+  );
+  TLabVertexDataType = (
+    dt_invalid,
+    dt_bool,
+    dt_int,
+    dt_float
+  );
+  TLabVertexAttribute = record
+    Semantic: TLabVertexAttributeSemantic;
+    DataType: TLabVertexDataType;
+    DataCount: TVkUInt8;
+    SetNumber: TVkUInt8;
+  end;
+  TLabVertexDescriptor = array of TLabVertexAttribute;
+
   TLabStrArrA = array of AnsiString;
   TLabByteArr = array of TVkUInt8;
 
@@ -100,6 +123,12 @@ function LabRect2D(
   const Width: TVkUInt32;
   const Height: TVkUInt32
 ): TVkRect2D; inline;
+function LabVertexAttribute(
+  const Semantic: TLabVertexAttributeSemantic;
+  const DataType: TLabVertexDataType = dt_float;
+  const DataCount: TVkUInt8 = 4;
+  const SetNumber: TVkUInt8 = 0
+): TLabVertexAttribute; inline;
 
 implementation
 
@@ -316,6 +345,19 @@ begin
   Result.offset.y := Y;
   Result.extent.width := Width;
   Result.extent.height := Height;
+end;
+
+function LabVertexAttribute(
+  const Semantic: TLabVertexAttributeSemantic;
+  const DataType: TLabVertexDataType;
+  const DataCount: TVkUInt8;
+  const SetNumber: TVkUInt8
+): TLabVertexAttribute;
+begin
+  Result.Semantic := Semantic;
+  Result.DataType := DataType;
+  Result.DataCount := DataCount;
+  Result.SetNumber := SetNumber;
 end;
 
 end.

@@ -54,6 +54,8 @@ constructor TLabDevice.Create(
   var device_extensions: array of AnsiString;
   var add_swapchain_extension, add_quieue_request: Boolean;
   var i, j, request_queue_count: Integer;
+  var mp: TVkMemoryPropertyFlagBits;
+  var str: String;
 begin
   LabLog('TLabDevice.Create');
   LabLogOffset(2);
@@ -138,6 +140,40 @@ begin
     begin
       LabLog('Extension[' + IntToStr(i) + '] ' + device_extensions[i]);
     end;
+  end;
+  LabLog('Memory heap count = ' + IntToStr(_PhysicalDevice.Ptr.MemoryPropertices^.memoryHeapCount));
+  for i := 0 to _PhysicalDevice.Ptr.MemoryPropertices^.memoryHeapCount - 1 do
+  begin
+    LabLogOffset(2);
+    LabLog('Heap[' + i.ToString + ']: ', 2);
+    LabLog('Size = ' + (_PhysicalDevice.Ptr.MemoryPropertices^.memoryHeaps[i].size div (1024 * 1024)).ToString + ' MB');
+    if _PhysicalDevice.Ptr.MemoryPropertices^.memoryHeaps[i].flags and TVkFlags(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) > 0 then
+    begin
+      LabLog('VK_MEMORY_HEAP_DEVICE_LOCAL_BIT');
+    end;
+    if _PhysicalDevice.Ptr.MemoryPropertices^.memoryHeaps[i].flags and TVkFlags(VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) > 0 then
+    begin
+      LabLog('VK_MEMORY_HEAP_MULTI_INSTANCE_BIT');
+    end;
+    LabLogOffset(-4);
+  end;
+  LabLog('Memory type count = ' + IntToStr(_PhysicalDevice.Ptr.MemoryPropertices^.memoryTypeCount));
+  for i := 0 to _PhysicalDevice.Ptr.MemoryPropertices^.memoryTypeCount - 1 do
+  begin
+    LabLogOffset(2);
+    LabLog('Type[' + i.ToString + ']:', 2);
+    LabLog('Heap index = ' + _PhysicalDevice.Ptr.MemoryPropertices^.memoryTypes[i].heapIndex.ToString);
+    mp := TVkMemoryPropertyFlagBits(1);
+    while mp <= High(TVkMemoryPropertyFlagBits) do
+    begin
+      if _PhysicalDevice.Ptr.MemoryPropertices^.memoryTypes[i].propertyFlags and TVkFlags(mp) > 0 then
+      begin
+        WriteStr(str, mp);
+        LabLog(str);
+      end;
+      mp := TVkMemoryPropertyFlagBits(Ord(mp) shl 1);
+    end;
+    LabLogOffset(-4);
   end;
   LabLogOffset(-2);
 end;

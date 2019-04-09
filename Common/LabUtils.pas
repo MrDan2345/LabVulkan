@@ -57,6 +57,11 @@ type
     procedure Sort(const CmpFunc: TCmpFuncObj); overload;
   end;
 
+  generic TLabObjList<TObj> = class (specialize TLabList<TObj>)
+  public
+    destructor Destroy; override;
+  end;
+
   generic TLabRefList<T> = class (TLabClass)
   private
     var _Items: array of T;
@@ -215,6 +220,93 @@ type
     destructor Destroy; override;
   end;
 
+  TLabTokenType = (ttEOF, ttError, ttSymbol, ttWord, ttKeyword, ttString, ttNumber);
+
+  TLabParserSyntax = object
+  public
+    Comment: array of array[0..1] of AnsiString;
+    CommentLine: array of AnsiString;
+    Strings: array of AnsiString;
+    Symbols: array of AnsiString;
+    KeyWords: array of AnsiString;
+    CaseSensitive: Boolean;
+    procedure AddComment(const ACommentStart, ACommentEnd: AnsiString);
+    procedure AddCommentLine(const ACommentLine: AnsiString);
+    procedure AddString(const AStringStartEnd: AnsiString);
+    procedure AddSymbol(const ASymbol: AnsiString);
+    procedure AddSymbols(const ASymbols: array of AnsiString);
+    procedure AddKeyWord(const AKeyWord: AnsiString);
+    procedure AddKeyWords(const AKeyWords: array of AnsiString);
+    procedure Reset;
+  end;
+  PLabParserSyntax = ^TLabParserSyntax;
+
+  TLabParser = class
+  private
+    type TState = record
+      Line, Position: TLabInt32;
+    end;
+    var _Position: TLabInt32;
+    var _Text: array of AnsiChar;
+    var _Line: TLabInt32;
+    var _DefaultSyntax: TLabParserSyntax;
+    var _Syntax: PLabParserSyntax;
+    var _States: array of TState;
+    function GetComment(const Index: TLabInt32): AnsiString; inline;
+    function GetCommentCount: TLabInt32; inline;
+    function GetCommentLine(const Index: TLabInt32): AnsiString; inline;
+    function GetCommentLineCount: TLabInt32; inline;
+    function GetKeyWord(const Index: TLabInt32): AnsiString; inline;
+    function GetKeyWordCount: TLabInt32; inline;
+    function GetString(const Index: TLabInt32): AnsiString; inline;
+    function GetStringCount: TLabInt32; inline;
+    function GetSymbol(const Index: TLabInt32): AnsiString; inline;
+    function GetSymbolCount: TLabInt32; inline;
+    function GetText: AnsiString; inline;
+    function GetLen: TLabInt32; inline;
+    procedure SetSyntax(const Value: PLabParserSyntax); inline;
+  public
+    property Text: AnsiString read GetText;
+    property Len: TLabInt32 read GetLen;
+    property Position: TLabInt32 read _Position write _Position;
+    property Line: TLabInt32 read _Line;
+    property CommentCount: TLabInt32 read GetCommentCount;
+    property Comments[const Index: TLabInt32]: AnsiString read GetComment;
+    property CommnetLineCount: TLabInt32 read GetCommentLineCount;
+    property CommentLines[const Index: TLabInt32]: AnsiString read GetCommentLine;
+    property StringCount: TLabInt32 read GetStringCount;
+    property Strings[const Index: TLabInt32]: AnsiString read GetString;
+    property SymbolCount: TLabInt32 read GetSymbolCount;
+    property Symbols[const Index: TLabInt32]: AnsiString read GetSymbol;
+    property KeyWordCount: TLabInt32 read GetKeyWordCount;
+    property KeyWords[const Index: TLabInt32]: AnsiString read GetKeyWord;
+    property Syntax: PLabParserSyntax read _Syntax write SetSyntax;
+    constructor Create; virtual;
+    constructor Create(const ParseText: AnsiString; const CaseSensitive: Boolean = False); virtual;
+    destructor Destroy; override;
+    procedure Parse(const ParseText: AnsiString);
+    procedure AddComment(const CommentStart, CommentEnd: AnsiString);
+    procedure AddCommentLine(const CommentLine: AnsiString);
+    procedure AddString(const StringStartEnd: AnsiString);
+    procedure AddSymbol(const Symbol: AnsiString);
+    procedure AddKeyWord(const KeyWord: AnsiString);
+    procedure SkipSpaces;
+    procedure StatePush;
+    procedure StatePop;
+    procedure StateDiscard;
+    procedure StateLoad;
+    function Read(const Count: TLabInt32): AnsiString; overload;
+    function Read(const Pos: TLabInt32; const Count: TLabInt32): AnsiString; overload;
+    function IsAtSymbol: TLabInt32;
+    function IsAtKeyword: TLabInt32;
+    function IsAtCommentLine: TLabInt32;
+    function IsAtCommentStart: TLabInt32;
+    function IsAtCommentEnd: TLabInt32;
+    function IsAtString: TLabInt32;
+    function IsAtEOF: Boolean;
+    function NextToken(var TokenType: TLabTokenType): AnsiString;
+  end;
+
   TLabListString = specialize TLabList<AnsiString>;
   TLabListStringShared = specialize TLabSharedRef<TLabListString>;
   TLabListPointer = specialize TLabList<Pointer>;
@@ -289,6 +381,70 @@ var LogOffset: Integer = 0;
 var LogLock: Integer = 0;
 var ProfileStack: array [0..127] of TProfileTime;
 var ProfileIndex: Integer = -1;
+
+procedure TLabParserSyntax.AddComment(const ACommentStart, ACommentEnd: AnsiString);
+begin
+  SetLength(Comment, Length(Comment) + 1);
+  Comment[High(Comment)][0] := ACommentStart;
+  Comment[High(Comment)][1] := ACommentEnd;
+end;
+
+procedure TLabParserSyntax.AddCommentLine(const ACommentLine: AnsiString);
+begin
+  SetLength(CommentLine, Length(CommentLine) + 1);
+  CommentLine[High(CommentLine)] := ACommentLine;
+end;
+
+procedure TLabParserSyntax.AddString(const AStringStartEnd: AnsiString);
+begin
+  SetLength(Strings, Length(Strings) + 1);
+  Strings[High(Strings)] := AStringStartEnd;
+end;
+
+procedure TLabParserSyntax.AddSymbol(const ASymbol: AnsiString);
+begin
+  SetLength(Symbols, Length(Symbols) + 1);
+  Symbols[High(Symbols)] := ASymbol;
+end;
+
+procedure TLabParserSyntax.AddSymbols(const ASymbols: array of AnsiString);
+  var i, n: Integer;
+begin
+  n := Length(Symbols);
+  SetLength(Symbols, Length(Symbols) + Length(ASymbols));
+  for i := 0 to High(ASymbols) do Symbols[n + i] := ASymbols[i];
+end;
+
+procedure TLabParserSyntax.AddKeyWord(const AKeyWord: AnsiString);
+begin
+  SetLength(KeyWords, Length(KeyWords) + 1);
+  KeyWords[High(KeyWords)] := AKeyWord;
+end;
+
+procedure TLabParserSyntax.AddKeyWords(const AKeyWords: array of AnsiString);
+  var i, n: Integer;
+begin
+  n := Length(KeyWords);
+  SetLength(KeyWords, Length(KeyWords) + Length(AKeyWords));
+  for i := 0 to High(AKeyWords) do KeyWords[n + i] := AKeyWords[i];
+end;
+
+procedure TLabParserSyntax.Reset;
+begin
+  SetLength(Comment, 0);
+  SetLength(CommentLine, 0);
+  SetLength(Strings, 0);
+  SetLength(Symbols, 0);
+  SetLength(KeyWords, 0);
+  CaseSensitive := False;
+end;
+
+destructor TLabObjList.Destroy;
+  var i: Integer;
+begin
+  for i := 0 to High(_Items) do _Items[i].Free;
+  inherited Destroy;
+end;
 
 //TLabList BEGIN
 {$Hints off}
@@ -627,7 +783,7 @@ function TLabRefList.Find(const Item: T): Integer;
   var i: Integer;
 begin
   for i := 0 to _ItemCount - 1 do
-  if _Items[i]._Ptr = Item._Ptr then
+  if _Items[i].Ptr = Item.Ptr then
   begin
     Result := i;
     Exit;
@@ -1239,6 +1395,443 @@ begin
   inherited Destroy;
 end;
 //TLabAlignedArray END
+
+//TLabParser BEGIN
+function TLabParser.GetText: AnsiString;
+begin
+  SetLength(Result, Length(_Text));
+  Move(_Text[0], Result[1], Length(_Text));
+end;
+
+function TLabParser.GetComment(const Index: TLabInt32): AnsiString;
+begin
+  Result := _DefaultSyntax.Comment[Index][0] + _DefaultSyntax.Comment[Index][1];
+end;
+
+function TLabParser.GetCommentCount: TLabInt32;
+begin
+  Result := Length(_DefaultSyntax.Comment);
+end;
+
+function TLabParser.GetCommentLine(const Index: TLabInt32): AnsiString;
+begin
+  Result := _DefaultSyntax.CommentLine[Index];
+end;
+
+function TLabParser.GetCommentLineCount: TLabInt32;
+begin
+  Result := Length(_DefaultSyntax.CommentLine);
+end;
+
+function TLabParser.GetKeyWord(const Index: TLabInt32): AnsiString;
+begin
+  Result := _DefaultSyntax.KeyWords[Index];
+end;
+
+function TLabParser.GetKeyWordCount: TLabInt32;
+begin
+  Result := Length(_DefaultSyntax.KeyWords);
+end;
+
+function TLabParser.GetString(const Index: TLabInt32): AnsiString;
+begin
+  Result := _DefaultSyntax.Strings[Index];
+end;
+
+function TLabParser.GetStringCount: TLabInt32;
+begin
+  Result := Length(_DefaultSyntax.Strings);
+end;
+
+function TLabParser.GetSymbol(const Index: TLabInt32): AnsiString;
+begin
+  Result := _DefaultSyntax.Symbols[Index];
+end;
+
+function TLabParser.GetSymbolCount: TLabInt32;
+begin
+  Result := Length(_DefaultSyntax.Symbols);
+end;
+
+function TLabParser.GetLen: TLabInt32;
+begin
+  Result := Length(_Text);
+end;
+
+procedure TLabParser.SetSyntax(const Value: PLabParserSyntax);
+begin
+  if Value = nil then _Syntax := @_DefaultSyntax else _Syntax := Value;
+end;
+
+constructor TLabParser.Create;
+begin
+  inherited Create;
+  _Position := 0;
+  _Text := '';
+  _DefaultSyntax.CaseSensitive := False;
+  _Syntax := @_DefaultSyntax;
+end;
+
+constructor TLabParser.Create(const ParseText: AnsiString; const CaseSensitive: Boolean = False);
+begin
+  inherited Create;
+  _DefaultSyntax.CaseSensitive := CaseSensitive;
+  _Syntax := @_DefaultSyntax;
+  Parse(ParseText);
+end;
+
+destructor TLabParser.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TLabParser.Parse(const ParseText: AnsiString);
+begin
+  if Length(_Text) <> Length(ParseText) then
+  SetLength(_Text, Length(ParseText));
+  Move(ParseText[1], _Text[0], Length(ParseText));
+  _Position := 0;
+  _Line := 0;
+end;
+
+procedure TLabParser.AddComment(const CommentStart, CommentEnd: AnsiString);
+begin
+  _DefaultSyntax.AddComment(CommentStart, CommentEnd);
+end;
+
+procedure TLabParser.AddCommentLine(const CommentLine: AnsiString);
+begin
+  _DefaultSyntax.AddCommentLine(CommentLine);
+end;
+
+procedure TLabParser.AddString(const StringStartEnd: AnsiString);
+begin
+  _DefaultSyntax.AddString(StringStartEnd);
+end;
+
+procedure TLabParser.AddSymbol(const Symbol: AnsiString);
+begin
+  _DefaultSyntax.AddSymbol(Symbol);
+end;
+
+procedure TLabParser.AddKeyWord(const KeyWord: AnsiString);
+begin
+  _DefaultSyntax.AddKeyWord(KeyWord);
+end;
+
+procedure TLabParser.SkipSpaces;
+begin
+  while (_Position < Len)
+  and (
+    (_Text[_Position] = ' ')
+    or (_Text[_Position] = #9)
+    or (_Text[_Position] = #$D)
+    or (_Text[_Position] = #$A)
+  ) do
+  begin
+    if _Text[_Position] = #$D then
+    Inc(_Line);
+    Inc(_Position);
+  end;
+end;
+
+procedure TLabParser.StatePush;
+begin
+  SetLength(_States, Length(_States) + 1);
+  _States[High(_States)].Line := _Line;
+  _States[High(_States)].Position := _Position;
+end;
+
+procedure TLabParser.StatePop;
+begin
+  if Length(_States) < 1 then Exit;
+  StateLoad;
+  StateDiscard;
+end;
+
+procedure TLabParser.StateDiscard;
+begin
+  if Length(_States) < 1 then Exit;
+  SetLength(_States, Length(_States) - 1);
+end;
+
+procedure TLabParser.StateLoad;
+begin
+  if Length(_States) < 1 then Exit;
+  _Line := _States[High(_States)].Line;
+  _Position := _States[High(_States)].Position;
+end;
+
+function TLabParser.Read(const Count: TLabInt32): AnsiString;
+  var c: TLabInt32;
+begin
+  if Count + _Position > Len then
+  c := Len - _Position
+  else
+  c := Count;
+  SetLength(Result, c);
+  Move(_Text[_Position], Result[1], c);
+  Inc(_Position, c);
+end;
+
+function TLabParser.Read(const Pos: TLabInt32; const Count: TLabInt32): AnsiString;
+  var c: TLabInt32;
+begin
+  if Count + Pos > Len then
+  c := Len - Pos
+  else
+  c := Count;
+  if c <= 0 then
+  begin
+    Result := '';
+    Exit;
+  end;
+  SetLength(Result, c);
+  Move(_Text[Pos], Result[1], c);
+end;
+
+function TLabParser.IsAtSymbol: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.Symbols) do
+  begin
+    Match := True;
+    if _Position + Length(_Syntax^.Symbols[i]) - 1 > High(_Text) then
+    Match := False
+    else
+    begin
+      for j := 0 to Length(_Syntax^.Symbols[i]) - 1 do
+      if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.Symbols[i][j + 1]))
+      or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.Symbols[i][j + 1]))) then
+      begin
+        Match := False;
+        Break;
+      end;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtKeyword: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.KeyWords) do
+  begin
+    Match := True;
+    for j := 0 to Length(_Syntax^.KeyWords[i]) - 1 do
+    if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.KeyWords[i][j + 1]))
+    or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.KeyWords[i][j + 1]))) then
+    begin
+      Match := False;
+      Break;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtCommentLine: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.CommentLine) do
+  begin
+    Match := True;
+    for j := 0 to Length(_Syntax^.CommentLine[i]) - 1 do
+    if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.CommentLine[i][j + 1]))
+    or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.CommentLine[i][j + 1]))) then
+    begin
+      Match := False;
+      Break;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtCommentStart: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.Comment) do
+  begin
+    Match := True;
+    for j := 0 to Length(_Syntax^.Comment[i][0]) - 1 do
+    if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.Comment[i][0][j + 1]))
+    or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.Comment[i][0][j + 1]))) then
+    begin
+      Match := False;
+      Break;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtCommentEnd: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.Comment) do
+  begin
+    Match := True;
+    for j := 0 to Length(_Syntax^.Comment[i][1]) - 1 do
+    if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.Comment[i][1][j + 1]))
+    or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.Comment[i][1][j + 1]))) then
+    begin
+      Match := False;
+      Break;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtString: TLabInt32;
+  var i, j: TLabInt32;
+  var Match: Boolean;
+begin
+  for i := 0 to High(_Syntax^.Strings) do
+  begin
+    Match := True;
+    for j := 0 to Length(_Syntax^.Strings[i]) - 1 do
+    if (_Syntax^.CaseSensitive and (_Text[_Position + j] <> _Syntax^.Strings[i][j + 1]))
+    or (not _Syntax^.CaseSensitive and (LowerCase(_Text[_Position + j]) <> LowerCase(_Syntax^.Strings[i][j + 1]))) then
+    begin
+      Match := False;
+      Break;
+    end;
+    if Match then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TLabParser.IsAtEOF: Boolean;
+begin
+  Result := _Position >= Len;
+end;
+
+function TLabParser.NextToken(var TokenType: TLabTokenType): AnsiString;
+  var i: TLabInt32;
+  var b: Boolean;
+begin
+  Result := '';
+  TokenType := ttEOF;
+  SkipSpaces;
+  if _Position >= Len then
+  Exit;
+  i := IsAtCommentStart;
+  while i > -1 do
+  begin
+    Inc(_Position, Length(_Syntax^.Comment[i][0]));
+    while (_Position < Len - Length(_Syntax^.Comment[i][1]))
+    and (IsAtCommentEnd <> i) do
+    Inc(_Position);
+    Inc(_Position, Length(_Syntax^.Comment[i][1]));
+    SkipSpaces;
+    i := IsAtCommentStart;
+  end;
+  i := IsAtCommentLine;
+  while i > -1 do
+  begin
+    Inc(_Position, Length(_Syntax^.CommentLine[i]));
+    while (_Position < Len)
+    and (_Text[_Position] <> #$D)
+    and (_Text[_Position] <> #$A) do
+    Inc(_Position);
+    SkipSpaces;
+    i := IsAtCommentLine;
+  end;
+  i := IsAtString;
+  if i > -1 then
+  begin
+    TokenType := ttString;
+    Inc(_Position, Length(_Syntax^.Strings[i]));
+    while (_Position <= Len - Length(_Syntax^.Strings[i]))
+    and (IsAtString <> i) do
+    begin
+      Result := Result + _Text[_Position];
+      Inc(_Position);
+    end;
+    if _Position <= Len - Length(_Syntax^.Strings[i]) then
+    Inc(_Position, Length(_Syntax^.Strings[i]));
+    Exit;
+  end;
+  i := IsAtSymbol;
+  if i > -1 then
+  begin
+    TokenType := ttSymbol;
+    Result := _Syntax^.Symbols[i];
+    Inc(_Position, Length(_Syntax^.Symbols[i]));
+    Exit;
+  end;
+  b := True;
+  while b do
+  begin
+    Result := Result + _Text[_Position];
+    Inc(_Position);
+    if _Position >= Length(_Text) then
+    b := False;
+    if b and (
+      (_Text[_Position] = ' ')
+      or (_Text[_Position] = #$D)
+      or (_Text[_Position] = #$A)
+    ) then
+    begin
+      b := False;
+    end;
+    if b then
+    begin
+      i := IsAtSymbol;
+      if i > -1 then
+      b := False;
+    end;
+  end;
+  if Length(Result) > 0 then
+  begin
+    if StrToIntDef(Result, 0) = StrToIntDef(Result, 1) then
+    begin
+      TokenType := ttNumber;
+      Exit;
+    end;
+    for i := 0 to High(_Syntax^.KeyWords) do
+    if LowerCase(_Syntax^.KeyWords[i]) = LowerCase(Result) then
+    begin
+      TokenType := ttKeyword;
+      Result := _Syntax^.KeyWords[i];
+      Exit;
+    end;
+    TokenType := ttWord;
+  end;
+end;
+//TLabParser END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin

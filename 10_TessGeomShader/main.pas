@@ -235,9 +235,9 @@ begin
   PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
   VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
   PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
-  TessControlShader := TLabTessControlShader.Create(Device, 'tcs.spv');
-  TessEvalShader := TLabTessEvaluationShader.Create(Device, 'tes.spv');
-  GeomShader := TLabGeometryShader.Create(Device, 'gs.spv');
+  TessControlShader := TLabTessCtrlShader.Create(Device, 'tcs.spv');
+  TessEvalShader := TLabTessEvalShader.Create(Device, 'tes.spv');
+  GeomShader := TLabGeomShader.Create(Device, 'gs.spv');
   VertexBuffer := TLabVertexBuffer.Create(
     Device,
     sizeof(g_vb_solid_face_colors_Data),

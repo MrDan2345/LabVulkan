@@ -10,13 +10,11 @@ layout (location = 3) in vec3 in_binormal;
 layout (location = 4) in vec4 in_color;
 layout (location = 5) in vec2 in_tc0;
 layout (location = 6) in vec4 in_pos_w;
-layout (location = 0) out float out_depth;
-layout (location = 1) out vec4 out_color;
-layout (location = 2) out vec4 out_normal;
+layout (location = 0) out vec4 out_color;
+layout (location = 1) out vec4 out_normal;
 void main() {
   mat3 tbn = mat3(normalize(in_tangent), normalize(in_binormal), normalize(in_normal));
   vec3 normal = normalize(tbn * (texture(tex_normal, in_tc0).xyz * 2 - 1));
-  out_depth = gl_FragCoord.z;
   out_color = texture(tex_color, in_tc0);
   out_normal = vec4(normal, 1);
 }

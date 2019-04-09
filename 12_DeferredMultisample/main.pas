@@ -574,8 +574,8 @@ begin
     InstanceStaging.Ptr.Unmap;
   end;
   VertexShader := TLabVertexShader.Create(App.Device, 'light_vs.spv');
-  TessControlShader := TLabTessControlShader.Create(App.Device, 'light_tcs.spv');
-  TessEvalShader := TLabTessEvaluationShader.Create(App.Device, 'light_tes.spv');
+  TessControlShader := TLabTessCtrlShader.Create(App.Device, 'light_tcs.spv');
+  TessEvalShader := TLabTessEvalShader.Create(App.Device, 'light_tes.spv');
   PixelShader := TLabPixelShader.Create(App.Device, 'light_ps.spv');
   Sampler := TLabSampler.Create(
     App.Device, VK_FILTER_NEAREST, VK_FILTER_NEAREST,

@@ -633,7 +633,7 @@ begin
   if Length(ImageInfos) > 0 then
   begin
     SetLength(Result.ImageInfos, Length(ImageInfos));
-    Move(ImageInfos[0], Result.ImageInfos[0], SizeOf(TVkDescriptorImageInfo));
+    Move(ImageInfos[0], Result.ImageInfos[0], SizeOf(TVkDescriptorImageInfo) * Length(ImageInfos));
     Result.WriteDescriptorSet.pImageInfo := @Result.ImageInfos[0];
   end
   else
@@ -643,7 +643,7 @@ begin
   if Length(BufferInfos) > 0 then
   begin
     SetLength(Result.BufferInfos, Length(BufferInfos));
-    Move(BufferInfos[0], Result.BufferInfos[0], SizeOf(TVkDescriptorBufferInfo));
+    Move(BufferInfos[0], Result.BufferInfos[0], SizeOf(TVkDescriptorBufferInfo) * Length(BufferInfos));
     Result.WriteDescriptorSet.pBufferInfo := @Result.BufferInfos[0];
   end
   else
@@ -653,7 +653,7 @@ begin
   if Length(TexelBufferViews) > 0 then
   begin
     SetLength(Result.TexelBufferViews, Length(TexelBufferViews));
-    Move(TexelBufferViews[0], Result.TexelBufferViews[0], SizeOf(TVkBufferView));
+    Move(TexelBufferViews[0], Result.TexelBufferViews[0], SizeOf(TVkBufferView) * Length(TexelBufferViews));
     Result.WriteDescriptorSet.pTexelBufferView := @TexelBufferViews[0];
   end
   else

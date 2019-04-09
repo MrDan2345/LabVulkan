@@ -107,8 +107,8 @@ begin
   _Shader := TLabSceneShaderFactory.MakeShader(
     _Device.Ptr,
     [
-      LabColladaVertexAttribute(as_position),
-      LabColladaVertexAttribute(as_color)
+      LabVertexAttribute(as_position),
+      LabVertexAttribute(as_color)
     ],
     [
       LabSceneShaderParameterUniform(

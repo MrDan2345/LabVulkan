@@ -3,7 +3,7 @@
 #extension GL_ARB_shading_language_420pack : enable
 layout (vertices = 3) out;
 void main(void) {
-	float t = 10.0;
+	float t = 15.0;
     if (gl_InvocationID == 0) {
         gl_TessLevelInner[0] = t;
         gl_TessLevelOuter[0] = t;

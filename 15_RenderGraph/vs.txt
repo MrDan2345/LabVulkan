@@ -1,0 +1,16 @@
+#version 400
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+layout (std140, binding = 0) uniform t_data {
+    mat4 mvp;
+} data;
+vec4 pos[] = {vec4(-1.0, -1.0, 0.0, 1.0), vec4(0.0, 1.0, 0.0, 1.0), vec4(1.0, -1.0, 0.0, 1.0)};
+vec4 col[] = {vec4(1, 0, 0, 1), vec4(0, 1, 0, 1), vec4(0, 0, 1, 1)};
+layout (location = 0) out vec4 out_col;
+out gl_PerVertex {
+    vec4 gl_Position;
+};
+void main() {
+   out_col = col[gl_VertexIndex];
+   gl_Position = data.mvp * pos[gl_VertexIndex];
+}

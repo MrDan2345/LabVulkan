@@ -6,7 +6,6 @@ unit main;
 interface
 
 uses
-  cube_data,
   Vulkan,
   LabTypes,
   LabMath,
@@ -27,20 +26,48 @@ uses
   LabPlatform,
   LabSync,
   LabUtils,
+  LabScene,
+  LabColladaParser,
+  LabRenderGraph,
   Classes,
   SysUtils;
 
 type
-  TTransforms = record
-    W: TLabMat;
-    VP: TLabMat;
-    WVP: TLabMat;
+  TUniforms = class (TLabClass)
+  public
+    type TUniformGlobal = record
+      time: TLabVec4;
+    end;
+    type TUniformView = record
+      v: TLabMat;
+      p: TLabMat;
+      vp: TLabMat;
+      vp_i: TLabMat;
+    end;
+    type TUniformInstance = record
+      w: TLabMat;
+    end;
+    type TUniformData = record
+      mvp: TLabMat;
+    end;
+    type TUniformBufferGlobal = specialize TLabUniformBuffer<TUniformGlobal>;
+    type TUniformBufferView = specialize TLabUniformBuffer<TUniformView>;
+    type TUniformBufferInstance = specialize TLabUniformBuffer<TUniformInstance>;
+    type TUniformBufferData = specialize TLabUniformBuffer<TUniformData>;
+    type TUniformBufferGlobalShared = specialize TLabSharedRef<TUniformBufferGlobal>;
+    type TUniformBufferViewShared = specialize TLabSharedRef<TUniformBufferView>;
+    type TUniformBufferInstanceShared = specialize TLabSharedRef<TUniformBufferInstance>;
+    type TUniformBufferDataShared = specialize TLabSharedRef<TUniformBufferData>;
+    var Global: TUniformBufferGlobalShared;
+    var View: TUniformBufferViewShared;
+    var Inst: TUniformBufferInstanceShared;
+    var Data: TUniformBufferDataShared;
+    constructor Create;
   end;
+  TUniformsShared = specialize TLabSharedRef<TUniforms>;
 
   TLabApp = class (TLabVulkan)
   public
-    type TUniformTransforms = specialize TLabUniformBuffer<TTransforms>;
-    type TUniformTransformsShared = specialize TLabSharedRef<TUniformTransforms>;
     var Window: TLabWindowShared;
     var Device: TLabDeviceShared;
     var Surface: TLabSurfaceShared;
@@ -51,19 +78,15 @@ type
     var Fence: TLabFenceShared;
     var DepthBuffers: array of TLabDepthBufferShared;
     var FrameBuffers: array of TLabFrameBufferShared;
-    var UniformBuffer: TUniformTransformsShared;
     var PipelineLayout: TLabPipelineLayoutShared;
     var Pipeline: TLabPipelineShared;
     var RenderPass: TLabRenderPassShared;
-    var VertexShader: TLabShaderShared;
-    var PixelShader: TLabShaderShared;
-    var TessControlShader: TLabShaderShared;
-    var TessEvalShader: TLabShaderShared;
-    var VertexBuffer: TLabVertexBufferShared;
-    var VertexBufferStaging: TLabBufferShared;
+    var Shaders: TLabShaderGroupShared;
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
+    var Uniforms: TUniformsShared;
+    var CombinedShader: TLabCombinedShaderShared;
     constructor Create;
     procedure SwapchainCreate;
     procedure SwapchainDestroy;
@@ -86,8 +109,17 @@ var
 
 implementation
 
+constructor TUniforms.Create;
+begin
+  Global := TUniformBufferGlobal.Create(App.Device);
+  View := TUniformBufferView.Create(App.Device);
+  Inst := TUniformBufferInstance.Create(App.Device);
+  Data := TUniformBufferData.Create(App.Device);
+end;
+
 constructor TLabApp.Create;
 begin
+  //ReportFormats := True;
   //EnableLayerIfAvailable('VK_LAYER_LUNARG_api_dump');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_core_validation');
   EnableLayerIfAvailable('VK_LAYER_LUNARG_parameter_validation');
@@ -164,48 +196,39 @@ begin
 end;
 
 procedure TLabApp.UpdateTransforms;
-  var World, View, Projection, Clip: TLabMat;
   var fov: TVkFloat;
+  var W, V, P, C: TLabMat;
 begin
   fov := LabDegToRad * 45;
-  Projection := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
-  View := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
-  World := LabMatScaling(0.2) * LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
-  Clip := LabMat(
+  P := LabMatProj(fov, Window.Ptr.Width / Window.Ptr.Height, 0.1, 100);
+  V := LabMatView(LabVec3(-5, 3, -10), LabVec3, LabVec3(0, 1, 0));
+  W := LabMatRotationY((LabTimeLoopSec(5) / 5) * Pi * 2);
+  C := LabMat(
     1, 0, 0, 0,
     0, -1, 0, 0,
     0, 0, 1, 0,
     0, 0, 0, 1
   );
-  with UniformBuffer.Ptr.Buffer^ do
-  begin
-    W := World;
-    VP := View * Projection * Clip;
-    WVP := World * View * Projection * Clip;
-  end;
+  Uniforms.Ptr.View.Ptr.Buffer^.v := V;
+  Uniforms.Ptr.View.Ptr.Buffer^.p := P;
+  Uniforms.Ptr.View.Ptr.Buffer^.vp := V * P * C;
+  Uniforms.Ptr.View.Ptr.Buffer^.vp_i := (V * P * C).Inverse;
+  Uniforms.Ptr.Inst.Ptr.Buffer^.w := W;
+  Uniforms.Ptr.Global.Ptr.Buffer^.time := LabVec4(LabTimeSec, LabTimeSec * 0.1, LabTimeSec * 10, sin(LabTimeSec * LabPi));
+  Uniforms.Ptr.Data.Ptr.Buffer^.mvp := W * V * P * C;
 end;
 
 procedure TLabApp.TransferBuffers;
 begin
-  CmdBuffer.Ptr.RecordBegin;
-  CmdBuffer.Ptr.CopyBuffer(VertexBufferStaging.Ptr.VkHandle, VertexBuffer.Ptr.VkHandle, [LabBufferCopy(VertexBuffer.Ptr.Size)]);
-  CmdBuffer.Ptr.RecordEnd;
-  QueueSubmit(
-    SwapChain.Ptr.QueueFamilyGraphics,
-    [CmdBuffer.Ptr.VkHandle],
-    [],
-    [],
-    VK_NULL_HANDLE
-  );
-  QueueWaitIdle(SwapChain.Ptr.QueueFamilyGraphics);
-  VertexBufferStaging := nil;
+
 end;
 
 procedure TLabApp.Initialize;
   var map: PVkVoid;
+  var ShaderBuildInfo: TLabShaderBuildInfo;
 begin
   Window := TLabWindow.Create(500, 500);
-  Window.Ptr.Caption := 'Vulkan Tesselation';
+  Window.Ptr.Caption := 'Vulkan Initialization';
   Device := TLabDevice.Create(
     PhysicalDevices[0],
     [
@@ -218,48 +241,37 @@ begin
   SwapChainCreate;
   CmdPool := TLabCommandPool.Create(Device, SwapChain.Ptr.QueueFamilyIndexGraphics);
   CmdBuffer := TLabCommandBuffer.Create(CmdPool);
-  UniformBuffer := TUniformTransforms.Create(Device);
   DescriptorSetsFactory := TLabDescriptorSetsFactory.Create(Device);
   DescriptorSets := DescriptorSetsFactory.Ptr.Request([
-    LabDescriptorSetBindings([
-      LabDescriptorBinding(
-        0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-        TVkFlags(VK_SHADER_STAGE_VERTEX_BIT) or TVkFlags(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
-      )
-    ])
+      LabDescriptorSetBindings([
+          LabDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+          LabDescriptorBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+          LabDescriptorBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT)),
+          LabDescriptorBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, TVkFlags(VK_SHADER_STAGE_VERTEX_BIT))
+      ])
   ]);
-  PipelineLayout := TLabPipelineLayout.Create(Device, [], [DescriptorSets.Ptr.Layout[0].Ptr]);
-  VertexShader := TLabVertexShader.Create(Device, 'vs.spv');
-  PixelShader := TLabPixelShader.Create(Device, 'ps.spv');
-  TessControlShader := TLabTessCtrlShader.Create(Device, 'tcs.spv');
-  TessEvalShader := TLabTessEvalShader.Create(Device, 'tes.spv');
-  VertexBuffer := TLabVertexBuffer.Create(
-    Device,
-    sizeof(g_vb_solid_face_colors_Data),
-    sizeof(g_vb_solid_face_colors_Data[0]),
-    [
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 0),
-      LabVertexBufferAttributeFormat(VK_FORMAT_R32G32B32A32_SFLOAT, 16)
-    ],
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_DST_BIT) or TVkFlags(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-    TVkFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+  PipelineLayout := TLabPipelineLayout.Create(
+    Device, [], [
+      DescriptorSets.Ptr.Layout[0].Ptr
+    ]
   );
-  VertexBufferStaging := TLabBuffer.Create(
-    Device, VertexBuffer.Ptr.Size,
-    TVkFlags(VK_BUFFER_USAGE_TRANSFER_SRC_BIT), [], VK_SHARING_MODE_EXCLUSIVE,
-    TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  );
-  map := nil;
-  if (VertexBufferStaging.Ptr.Map(map)) then
-  begin
-    Move(g_vb_solid_face_colors_Data, map^, sizeof(g_vb_solid_face_colors_Data));
-    VertexBufferStaging.Ptr.Unmap;
-  end;
+  //VertexShader := TLabVertexShader.Create(Device, 'triangle_vs.spv');
+  //PixelShader := TLabPixelShader.Create(Device, 'triangle_ps.spv');
+  CombinedShader := TLabCombinedShader.CreateFromFile(App.Device, 'triangle_shader.txt');
+  ShaderBuildInfo.JointCount := 0;
+  ShaderBuildInfo.MaxJointWeights := 0;
+  Shaders := CombinedShader.Ptr.Build(ShaderBuildInfo);
+  Uniforms := TUniforms.Create;
   DescriptorSets.Ptr.UpdateSets(
     [
       LabWriteDescriptorSetUniformBuffer(
         DescriptorSets.Ptr.VkHandle[0], 0,
-        [LabDescriptorBufferInfo(UniformBuffer.Ptr.VkHandle)]
+        [
+          LabDescriptorBufferInfo(Uniforms.Ptr.Global.Ptr.VkHandle),
+          LabDescriptorBufferInfo(Uniforms.Ptr.View.Ptr.VkHandle),
+          LabDescriptorBufferInfo(Uniforms.Ptr.Inst.Ptr.VkHandle),
+          LabDescriptorBufferInfo(Uniforms.Ptr.Data.Ptr.VkHandle)
+        ]
       )
     ],
     []
@@ -268,32 +280,21 @@ begin
   Pipeline := TLabGraphicsPipeline.Create(
     Device, PipelineCache, PipelineLayout.Ptr,
     [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR],
-    [
-      LabShaderStage(VertexShader.Ptr),
-      LabShaderStage(PixelShader.Ptr),
-      LabShaderStage(TessControlShader.Ptr),
-      LabShaderStage(TessEvalShader.Ptr)
-    ],
+    [LabShaderStage(Shaders.Ptr.Vertex.Ptr), LabShaderStage(Shaders.Ptr.Pixel.Ptr)],
     RenderPass.Ptr, 0,
     LabPipelineViewportState(),
     LabPipelineInputAssemblyState(
-      VK_PRIMITIVE_TOPOLOGY_PATCH_LIST
+      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
     ),
-    LabPipelineVertexInputState(
-      [VertexBuffer.Ptr.MakeBindingDesc(0)],
-      [
-        VertexBuffer.Ptr.MakeAttributeDesc(0, 0, 0),
-        VertexBuffer.Ptr.MakeAttributeDesc(1, 1, 0)
-      ]
-    ),
+    LabPipelineVertexInputState([], []),
     LabPipelineRasterizationState(
-      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_LINE,
-      TVkFlags(VK_CULL_MODE_BACK_BIT), VK_FRONT_FACE_COUNTER_CLOCKWISE
+      VK_FALSE, VK_FALSE, VK_POLYGON_MODE_FILL,
+      TVkFlags(VK_CULL_MODE_NONE), VK_FRONT_FACE_COUNTER_CLOCKWISE
     ),
     LabPipelineDepthStencilState(LabDefaultStencilOpState, LabDefaultStencilOpState),
     LabPipelineMultisampleState(),
     LabPipelineColorBlendState([LabDefaultColorBlendAttachment], []),
-    LabPipelineTesselationState(3)
+    LabPipelineTesselationState(0)
   );
   Semaphore := TLabSemaphore.Create(Device);
   Fence := TLabFence.Create(Device);
@@ -304,20 +305,16 @@ procedure TLabApp.Finalize;
 begin
   Device.Ptr.WaitIdle;
   SwapchainDestroy;
-  UniformBuffer.Ptr.Unmap;
+  Shaders := nil;
+  CombinedShader := nil;
+  Uniforms := nil;
   Fence := nil;
   Semaphore := nil;
   Pipeline := nil;
   PipelineCache := nil;
+  PipelineLayout := nil;
   DescriptorSets := nil;
   DescriptorSetsFactory := nil;
-  VertexBuffer := nil;
-  TessControlShader := nil;
-  TessEvalShader := nil;
-  PixelShader := nil;
-  VertexShader := nil;
-  PipelineLayout := nil;
-  UniformBuffer := nil;
   CmdBuffer := nil;
   CmdPool := nil;
   Surface := nil;
@@ -367,10 +364,9 @@ begin
     PipelineLayout.Ptr,
     0, [DescriptorSets.Ptr.VkHandle[0]], []
   );
-  CmdBuffer.Ptr.BindVertexBuffers(0, [VertexBuffer.Ptr.VkHandle], [0]);
   CmdBuffer.Ptr.SetViewport([LabViewport(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
   CmdBuffer.Ptr.SetScissor([LabRect2D(0, 0, Window.Ptr.Width, Window.Ptr.Height)]);
-  CmdBuffer.Ptr.Draw(12 * 3);
+  CmdBuffer.Ptr.Draw(3);
   CmdBuffer.Ptr.EndRenderPass;
   CmdBuffer.Ptr.RecordEnd;
   QueueSubmit(
@@ -383,6 +379,7 @@ begin
   );
   Fence.Ptr.WaitFor;
   Fence.Ptr.Reset;
+  CmdPool.Ptr.Reset();
   QueuePresent(SwapChain.Ptr.QueueFamilyPresent, [SwapChain.Ptr.VkHandle], [cur_buffer], []);
 end;
 

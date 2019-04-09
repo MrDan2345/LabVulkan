@@ -1,0 +1,38 @@
+shader {
+	name = "triangle";
+	uniform {
+		name = "data";
+		stages = [vertex];
+		data {
+			mvp: mat4[];
+		}
+	}
+	stage: vertex {
+		entry = "main";
+		code {
+			vec4 pos[] = {vec4(-1.0, -1.0, 0.0, 1.0), vec4(0.0, 1.0, 0.0, 1.0), vec4(1.0, -1.0, 0.0, 1.0)};
+			vec4 col[] = {vec4(1, 0, 0, 1), vec4(0, 1, 0, 1), vec4(0, 0, 1, 1)};
+			out gl_PerVertex {
+				vec4 gl_Position;
+			};
+			void main() {
+			   out_color = col[gl_VertexIndex];
+			   gl_Position = /*(view.vp * instance.w)*/data.mvp[0] * pos[gl_VertexIndex];
+			}
+		}
+	}
+	stage: pixel {
+		entry = "main";
+		input {
+			color: vec4;
+		}
+		output {
+			color: vec4;
+		}
+		code {
+			void main() {
+			   out_color = in_color;
+			}
+		}
+	}
+}
