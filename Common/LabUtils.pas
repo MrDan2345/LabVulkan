@@ -341,6 +341,7 @@ function LabRandomPi: TVkFloat; inline;
 function LabRandom2Pi: TVkFloat; inline;
 function LabRandomCirclePoint: TLabVec2; inline;
 function LabRandomSpherePoint: TLabVec3; inline;
+function LabAlign(const Value: TVkUInt32; const Alignment: TVkUInt32): TVkUInt32; inline;
 
 const LabFormatFeatures: array[0..23] of TVkFormatFeatureFlagBits = (
   VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
@@ -2285,6 +2286,12 @@ begin
   LabSinCos(a2, s2, c2);
   Result.SetValue(c1 * c2, s2, s1 * c2);
 end;
+
+function LabAlign(const Value: TVkUInt32; const Alignment: TVkUInt32): TVkUInt32;
+begin
+  Result := Value + ((Alignment - (Value mod Alignment)) mod Alignment);
+end;
+
 {$Pop}
 
 function LabVkErrorString(const State: TVkResult): String;

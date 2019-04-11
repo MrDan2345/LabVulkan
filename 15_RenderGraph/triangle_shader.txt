@@ -4,7 +4,7 @@ shader {
 		name = "data";
 		stages = [vertex];
 		data {
-			mvp: mat4[];
+			mvp: mat4[][1];
 		}
 	}
 	stage: vertex {
@@ -17,7 +17,7 @@ shader {
 			};
 			void main() {
 			   out_color = col[gl_VertexIndex];
-			   gl_Position = /*(view.vp * instance.w)*/data.mvp[0] * pos[gl_VertexIndex];
+			   gl_Position = /*(view.vp * instance.w)*/data.mvp[0][0] * pos[gl_VertexIndex];
 			}
 		}
 	}

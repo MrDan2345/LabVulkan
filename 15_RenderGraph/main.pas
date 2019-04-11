@@ -33,39 +33,6 @@ uses
   SysUtils;
 
 type
-  TUniforms = class (TLabClass)
-  public
-    type TUniformGlobal = record
-      time: TLabVec4;
-    end;
-    type TUniformView = record
-      v: TLabMat;
-      p: TLabMat;
-      vp: TLabMat;
-      vp_i: TLabMat;
-    end;
-    type TUniformInstance = record
-      w: TLabMat;
-    end;
-    type TUniformData = record
-      mvp: TLabMat;
-    end;
-    type TUniformBufferGlobal = specialize TLabUniformBuffer<TUniformGlobal>;
-    type TUniformBufferView = specialize TLabUniformBuffer<TUniformView>;
-    type TUniformBufferInstance = specialize TLabUniformBuffer<TUniformInstance>;
-    type TUniformBufferData = specialize TLabUniformBuffer<TUniformData>;
-    type TUniformBufferGlobalShared = specialize TLabSharedRef<TUniformBufferGlobal>;
-    type TUniformBufferViewShared = specialize TLabSharedRef<TUniformBufferView>;
-    type TUniformBufferInstanceShared = specialize TLabSharedRef<TUniformBufferInstance>;
-    type TUniformBufferDataShared = specialize TLabSharedRef<TUniformBufferData>;
-    var Global: TUniformBufferGlobalShared;
-    var View: TUniformBufferViewShared;
-    var Inst: TUniformBufferInstanceShared;
-    var Data: TUniformBufferDataShared;
-    constructor Create;
-  end;
-  TUniformsShared = specialize TLabSharedRef<TUniforms>;
-
   TLabApp = class (TLabVulkan)
   public
     var Window: TLabWindowShared;
@@ -85,7 +52,10 @@ type
     var DescriptorSetsFactory: TLabDescriptorSetsFactoryShared;
     var DescriptorSets: TLabDescriptorSetsShared;
     var PipelineCache: TLabPipelineCacheShared;
-    var Uniforms: TUniformsShared;
+    var UniformGlobal: TLabManagedUniformBufferShared;
+    var UniformView: TLabManagedUniformBufferShared;
+    var UniformInst: TLabManagedUniformBufferShared;
+    var UniformData: TLabManagedUniformBufferShared;
     var CombinedShader: TLabCombinedShaderShared;
     constructor Create;
     procedure SwapchainCreate;
@@ -108,14 +78,6 @@ var
   App: TLabApp;
 
 implementation
-
-constructor TUniforms.Create;
-begin
-  Global := TUniformBufferGlobal.Create(App.Device);
-  View := TUniformBufferView.Create(App.Device);
-  Inst := TUniformBufferInstance.Create(App.Device);
-  Data := TUniformBufferData.Create(App.Device);
-end;
 
 constructor TLabApp.Create;
 begin
@@ -209,13 +171,13 @@ begin
     0, 0, 1, 0,
     0, 0, 0, 1
   );
-  Uniforms.Ptr.View.Ptr.Buffer^.v := V;
-  Uniforms.Ptr.View.Ptr.Buffer^.p := P;
-  Uniforms.Ptr.View.Ptr.Buffer^.vp := V * P * C;
-  Uniforms.Ptr.View.Ptr.Buffer^.vp_i := (V * P * C).Inverse;
-  Uniforms.Ptr.Inst.Ptr.Buffer^.w := W;
-  Uniforms.Ptr.Global.Ptr.Buffer^.time := LabVec4(LabTimeSec, LabTimeSec * 0.1, LabTimeSec * 10, sin(LabTimeSec * LabPi));
-  Uniforms.Ptr.Data.Ptr.Buffer^.mvp := W * V * P * C;
+  UniformView.Ptr.MemberAsMat('v')^ := V;
+  UniformView.Ptr.MemberAsMat('p')^ := P;
+  UniformView.Ptr.MemberAsMat('vp')^ := V * P * C;
+  UniformView.Ptr.MemberAsMat('vp_i')^ := (V * P * C).Inverse;
+  UniformInst.Ptr.MemberAsMat('w')^ := W;
+  UniformGlobal.Ptr.MemberAsVec4('time')^ := LabVec4(LabTimeSec, LabTimeSec * 0.1, LabTimeSec * 10, sin(LabTimeSec * LabPi));
+  UniformData.Ptr.MemberAsMat('mvp')^ := W * V * P * C;
 end;
 
 procedure TLabApp.TransferBuffers;
@@ -261,16 +223,20 @@ begin
   ShaderBuildInfo.JointCount := 0;
   ShaderBuildInfo.MaxJointWeights := 0;
   Shaders := CombinedShader.Ptr.Build(ShaderBuildInfo);
-  Uniforms := TUniforms.Create;
+  UniformGlobal := CombinedShader.Ptr.FindUniform('global').CreateBuffer();
+  UniformView := CombinedShader.Ptr.FindUniform('view').CreateBuffer();
+  UniformInst := CombinedShader.Ptr.FindUniform('instance').CreateBuffer();
+  UniformData := CombinedShader.Ptr.FindUniform('data').CreateBuffer(1);
+  //Uniforms := TUniforms.Create;
   DescriptorSets.Ptr.UpdateSets(
     [
       LabWriteDescriptorSetUniformBuffer(
         DescriptorSets.Ptr.VkHandle[0], 0,
         [
-          LabDescriptorBufferInfo(Uniforms.Ptr.Global.Ptr.VkHandle),
-          LabDescriptorBufferInfo(Uniforms.Ptr.View.Ptr.VkHandle),
-          LabDescriptorBufferInfo(Uniforms.Ptr.Inst.Ptr.VkHandle),
-          LabDescriptorBufferInfo(Uniforms.Ptr.Data.Ptr.VkHandle)
+          LabDescriptorBufferInfo(UniformGlobal.Ptr.VkHandle),
+          LabDescriptorBufferInfo(UniformView.Ptr.VkHandle),
+          LabDescriptorBufferInfo(UniformInst.Ptr.VkHandle),
+          LabDescriptorBufferInfo(UniformData.Ptr.VkHandle)
         ]
       )
     ],
@@ -307,7 +273,11 @@ begin
   SwapchainDestroy;
   Shaders := nil;
   CombinedShader := nil;
-  Uniforms := nil;
+  UniformGlobal := nil;
+  UniformView := nil;
+  UniformInst := nil;
+  UniformData := nil;
+  //Uniforms := nil;
   Fence := nil;
   Semaphore := nil;
   Pipeline := nil;

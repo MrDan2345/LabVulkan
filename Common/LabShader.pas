@@ -6,11 +6,13 @@ interface
 uses
   Vulkan,
   Classes,
+  SysUtils,
+  Process,
   LabTypes,
   LabUtils,
   LabDevice,
-  SysUtils,
-  Process;
+  LabBuffer,
+  LabMath;
 
 type
   TLabShader = class (TLabClass)
@@ -131,23 +133,60 @@ type
     JointCount: TVkInt32;
   end;
 
+  TLabShaderDataItem = object
+    ItemName: AnsiString;
+    ItemType: AnsiString;
+    Offset: TVkUInt32;
+    Stride: TVkUInt32;
+    ArrayCount: array of TVkUInt32;
+    function IsArray: Boolean; inline;
+    function IsOpenArray: Boolean; inline;
+  end;
+  TLabShaderDataBlock = object
+    Members: array of TLabShaderDataItem;
+    FixedSize: TVkUInt32;
+    VaryingSize: TVkUInt32;
+    procedure AddItem(const ItemName: String; const ItemType: String; const ArrayCount: array of TVkUInt32);
+    procedure CalculateSize;
+  end;
+  PLabShaderDataBlock = ^TLabShaderDataBlock;
+
+  TLabManagedUniformBuffer = class (TLabBuffer)
+  private
+    var _Data: Pointer;
+    var _DataBlock: TLabShaderDataBlock;
+  public
+    property Data: Pointer read _Data;
+    function FindMemberIndex(const MemberName: AnsiString): TVkInt32;
+    function MemberData(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): Pointer; inline;
+    function MemberAsFloat(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): PLabFloat; inline;
+    function MemberAsVec2(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): PLabVec2; inline;
+    function MemberAsVec3(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): PLabVec3; inline;
+    function MemberAsVec4(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): PLabVec4; inline;
+    function MemberAsMat(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): PLabMat; inline;
+    function MemberAsFloat(const MemberName: AnsiString; const ArrayIndex: TVkUInt32 = 0): PLabFloat; inline;
+    function MemberAsVec2(const MemberName: AnsiString; const ArrayIndex: TVkUInt32 = 0): PLabVec2; inline;
+    function MemberAsVec3(const MemberName: AnsiString; const ArrayIndex: TVkUInt32 = 0): PLabVec3; inline;
+    function MemberAsVec4(const MemberName: AnsiString; const ArrayIndex: TVkUInt32 = 0): PLabVec4; inline;
+    function MemberAsMat(const MemberName: AnsiString; const ArrayIndex: TVkUInt32 = 0): PLabMat;
+    constructor Create(
+      const ADevice: TLabDeviceShared;
+      const ADataBlock: TLabShaderDataBlock;
+      const AOpenArraySize: TVkUInt32 = 0;
+      const AUsage: TVkBufferUsageFlags = TVkFlags(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+      const AMemoryFlags: TVkFlags = TVkFlags(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) or TVkFlags(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    );
+  end;
+  TLabManagedUniformBufferShared = specialize TLabSharedRef<TLabManagedUniformBuffer>;
+
   TLabCombinedShader = class (TLabClass)
   public
-    type TDataItem = object
-      ItemName: String;
-      ItemType: String;
-      ArrayCount: TVkInt32;
-      function IsArray: Boolean; inline;
-      function IsOpenArray: Boolean; inline;
-    end;
-    type TDataBlock = array of TDataItem;
-    type PDataBlock = ^TDataBlock;
     type TStage = class
     public
       var Entry: AnsiString;
       var Code: AnsiString;
-      var Inputs: TDataBlock;
-      var Outputs: TDataBlock;
+      var Inputs: TLabShaderDataBlock;
+      var Outputs: TLabShaderDataBlock;
       var NextStage: TStage;
       var ShaderCode: String;
       constructor Create;
@@ -168,12 +207,14 @@ type
     public
     end;
     type TUniform = class
+    private
+      var _Device: TLabDeviceShared;
     public
       var Name: String;
       var Stages: TVkShaderStageFlags;
-      var Data: TDataBlock;
-      procedure AddItem(const ItemName: String; const ItemType: String; const ArrayCount: Integer = -1);
-      constructor Create;
+      var Data: TLabShaderDataBlock;
+      function CreateBuffer(const OpenArraySize: TVkUInt32 = 0): TLabManagedUniformBufferShared;
+      constructor Create(const ADevice: TLabDeviceShared);
     end;
     type TUniformList = specialize TLabObjList<TUniform>;
   private
@@ -185,9 +226,15 @@ type
     var _StageGeometry: TStageGeometry;
     var _StagePixel: TStagePixel;
     var _Uniforms: TUniformList;
+    function GetUniform(const Index: TVkInt32): TUniform; inline;
+    function GetUniformCount: TVkInt32; inline;
   public
     property Device: TLabDeviceShared read _Device;
     property Name: String read _Name;
+    property Uniform[const Index: TVkInt32]: TUniform read GetUniform;
+    property UniformCount: TVkInt32 read GetUniformCount;
+    function FindUniformIndex(const UniformName: AnsiString): TVkInt32; inline;
+    function FindUniform(const UniformName: AnsiString): TUniform; inline;
     function Build(const BuildInfo: TLabShaderBuildInfo): TLabShaderGroupShared;
     class function CreateFromFile(const ADevice: TLabDeviceShared; const FileName: String): TLabCombinedShader;
     constructor Create(const ADevice: TLabDeviceShared; const ShaderCode: String);
@@ -217,14 +264,255 @@ function LabShaderStages(const Shaders: array of TLabShaderShared): TLabShaderSt
 
 implementation
 
-function TLabCombinedShader.TDataItem.IsArray: Boolean;
+function TLabShaderDataItem.IsArray: Boolean;
 begin
-  Result := ArrayCount > -1;
+  Result := Length(ArrayCount) > 0;
 end;
 
-function TLabCombinedShader.TDataItem.IsOpenArray: Boolean;
+function TLabShaderDataItem.IsOpenArray: Boolean;
 begin
-  Result := ArrayCount = 0;
+  Result := (Length(ArrayCount) > 0) and (ArrayCount[0] = 0);
+end;
+
+procedure TLabShaderDataBlock.AddItem(
+  const ItemName: String;
+  const ItemType: String;
+  const ArrayCount: array of TVkUInt32
+);
+begin
+  SetLength(Members, Length(Members) + 1);
+  Members[High(Members)].ItemName := ItemName;
+  Members[High(Members)].ItemType := ItemType;
+  Members[High(Members)].Offset := 0;
+  SetLength(Members[High(Members)].ArrayCount, Length(ArrayCount));
+  Move(ArrayCount[0], Members[High(Members)].ArrayCount, Length(ArrayCount) * SizeOf(TVkUInt32));
+end;
+
+procedure TLabShaderDataBlock.CalculateSize;
+  var mat_parser: TLabParser;
+  procedure ParseMatrix(const Str: AnsiString; var cols, rows: TVkUInt32);
+    var token: AnsiString;
+    var tt: TLabTokenType;
+  begin
+    mat_parser.Parse(Str);
+    tt := ttEOF;
+    token := mat_parser.NextToken(tt);
+    if (tt <> ttKeyword) or (token <> 'mat') then Exit;
+    token := mat_parser.NextToken(tt);
+    if tt <> ttNumber then Exit;
+    cols := StrToIntDef(token, cols);
+    rows := cols;
+    token := mat_parser.NextToken(tt);
+    if (tt = ttKeyword) and (token = 'x') then
+    begin
+      token := mat_parser.NextToken(tt);
+      if tt <> ttNumber then Exit;
+      rows := StrToIntDef(token, rows);
+    end;
+  end;
+  function StrInSet(const Str: AnsiString; const StrSet: array of AnsiString): Boolean;
+    var i: TVkInt32;
+  begin
+    for i := 0 to High(StrSet) do
+    if StrSet[i] = Str then Exit(True);
+    Result := False;
+  end;
+  var p, i, j, max_ba, ba, size, rows, cols: TVkUInt32;
+  var N: TVkUInt32;
+begin
+  mat_parser := TLabParser.Create;
+  mat_parser.Syntax^.CaseSensitive := True;
+  mat_parser.AddKeyWord('mat');
+  mat_parser.AddKeyWord('x');
+  FixedSize := 0;
+  VaryingSize := 0;
+  p := 0;
+  max_ba := 1;
+  for i := 0 to High(Members) do
+  begin
+    N := 4;
+    if StrInSet(Members[i].ItemType, ['bool', 'int', 'uint', 'float', 'double']) then
+    begin
+      ba := 1;
+      size := 1;
+    end
+    else if StrInSet(Members[i].ItemType, ['bvec2', 'ivec2', 'uvec2', 'vec2', 'dvec2']) then
+    begin
+      ba := 2;
+      size := 2;
+    end
+    else if StrInSet(Members[i].ItemType, ['bvec3', 'ivec3', 'uvec3', 'vec3', 'dvec3']) then
+    begin
+      ba := 4;
+      size := 3;
+    end
+    else if StrInSet(Members[i].ItemType, ['bvec4', 'ivec4', 'uvec4', 'vec4', 'dvec4']) then
+    begin
+      ba := 4;
+      size := 4;
+    end
+    else if Members[i].ItemType.StartsWith('mat') then
+    begin
+      cols := 4;
+      rows := 4;
+      ParseMatrix(Members[i].ItemType, cols, rows);
+      if Members[i].IsArray or (cols > 2) then ba := 4
+      else if cols > 1 then ba := 2
+      else ba := 1;
+      size := ba * rows;
+    end;
+    if StrInSet(Members[i].ItemType, ['double', 'dvec2', 'dvec3', 'dvec4']) then
+    begin
+      N := 8;
+    end;
+    Members[i].Stride := 0;
+    if Members[i].IsArray then
+    begin
+      ba := 4;
+      if Members[i].IsOpenArray then
+      begin
+        VaryingSize := size;
+        for j := 1 to High(Members[i].ArrayCount) do
+        begin
+          VaryingSize *= Members[i].ArrayCount[j];
+        end;
+        Members[i].Stride := VaryingSize * N;
+      end;
+      for j := 0 to High(Members[i].ArrayCount) do
+      begin
+        size *= Members[i].ArrayCount[j];
+      end;
+      if not Members[i].IsOpenArray then
+      begin
+        Members[i].Stride := size * N;
+      end;
+    end;
+    p := LabAlign(p, N * ba);
+    Members[i].Offset := p;
+    p += N * size;
+    if ba * N > max_ba then max_ba := ba * N;
+  end;
+  FixedSize := LabAlign(p, max_ba);
+  mat_parser.Free;
+end;
+
+function TLabManagedUniformBuffer.FindMemberIndex(const MemberName: AnsiString): TVkInt32;
+  var i: TVkInt32;
+begin
+  for i := 0 to High(_DataBlock.Members) do
+  if _DataBlock.Members[i].ItemName = MemberName then
+  begin
+    Exit(i);
+  end;
+  Result := -1;
+end;
+
+function TLabManagedUniformBuffer.MemberData(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32 = 0): Pointer;
+begin
+  Result := _Data + (_DataBlock.Members[MemberIndex].Offset + _DataBlock.Members[MemberIndex].Stride * ArrayIndex);
+end;
+
+function TLabManagedUniformBuffer.MemberAsFloat(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32): PLabFloat;
+begin
+  Result := PLabFloat(MemberData(MemberIndex, ArrayIndex));
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec2(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32): PLabVec2;
+begin
+  Result := PLabVec2(MemberData(MemberIndex, ArrayIndex));
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec3(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32): PLabVec3;
+begin
+  Result := PLabVec3(MemberData(MemberIndex, ArrayIndex));
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec4(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32): PLabVec4;
+begin
+  Result := PLabVec4(MemberData(MemberIndex, ArrayIndex));
+end;
+
+function TLabManagedUniformBuffer.MemberAsMat(const MemberIndex: TVkInt32; const ArrayIndex: TVkUInt32): PLabMat;
+begin
+  Result := PLabMat(MemberData(MemberIndex, ArrayIndex));
+end;
+
+function TLabManagedUniformBuffer.MemberAsFloat(const MemberName: AnsiString; const ArrayIndex: TVkUInt32): PLabFloat;
+  var i: TVkInt32;
+begin
+  i := FindMemberIndex(MemberName);
+  if i = -1 then Exit(nil);
+  Result := MemberAsFloat(i);
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec2(const MemberName: AnsiString; const ArrayIndex: TVkUInt32): PLabVec2;
+  var i: TVkInt32;
+begin
+  i := FindMemberIndex(MemberName);
+  if i = -1 then Exit(nil);
+  Result := MemberAsVec2(i);
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec3(const MemberName: AnsiString; const ArrayIndex: TVkUInt32): PLabVec3;
+  var i: TVkInt32;
+begin
+  i := FindMemberIndex(MemberName);
+  if i = -1 then Exit(nil);
+  Result := MemberAsVec3(i);
+end;
+
+function TLabManagedUniformBuffer.MemberAsVec4(const MemberName: AnsiString; const ArrayIndex: TVkUInt32): PLabVec4;
+  var i: TVkInt32;
+begin
+  i := FindMemberIndex(MemberName);
+  if i = -1 then Exit(nil);
+  Result := MemberAsVec4(i);
+end;
+
+function TLabManagedUniformBuffer.MemberAsMat(const MemberName: AnsiString; const ArrayIndex: TVkUInt32): PLabMat;
+  var i: TVkInt32;
+begin
+  i := FindMemberIndex(MemberName);
+  if i = -1 then Exit(nil);
+  Result := MemberAsMat(i);
+end;
+
+constructor TLabManagedUniformBuffer.Create(
+  const ADevice: TLabDeviceShared;
+  const ADataBlock: TLabShaderDataBlock;
+  const AOpenArraySize: TVkUInt32;
+  const AUsage: TVkBufferUsageFlags;
+  const AMemoryFlags: TVkFlags
+);
+  var TotalSize: TVkDeviceSize;
+  var i: TVkInt32;
+begin
+  _DataBlock.FixedSize := ADataBlock.FixedSize;
+  _DataBlock.VaryingSize := ADataBlock.VaryingSize;
+  SetLength(_DataBlock.Members, Length(ADataBlock.Members));
+  for i := 0 to High(ADataBlock.Members) do
+  begin
+    _DataBlock.Members[i].ItemName := ADataBlock.Members[i].ItemName;
+    _DataBlock.Members[i].ItemType := ADataBlock.Members[i].ItemType;
+    _DataBlock.Members[i].Offset := ADataBlock.Members[i].Offset;
+    if Length(ADataBlock.Members[i].ArrayCount) > 0 then
+    begin
+      SetLength(_DataBlock.Members[i].ArrayCount, Length(ADataBlock.Members[i].ArrayCount));
+      Move(ADataBlock.Members[i].ArrayCount[0], _DataBlock.Members[i].ArrayCount[0], Length(ADataBlock.Members[i].ArrayCount) * SizeOf(TVkUInt32));
+    end;
+  end;
+  TotalSize := LabAlign(
+    ADataBlock.FixedSize + ADataBlock.VaryingSize * AOpenArraySize,
+    ADevice.Ptr.PhysicalDevice.Ptr.Properties^.limits.nonCoherentAtomSize
+  );
+  inherited Create(
+    ADevice,
+    TotalSize,
+    AUSage,
+    [], VK_SHARING_MODE_EXCLUSIVE,
+    AMemoryFlags
+  );
+  Map(_Data);
 end;
 
 class function TLabCachedShader.MakeHash(const ShaderCode: String): TVkUInt32;
@@ -573,26 +861,53 @@ begin
   _Hash := LabCRC32(_Hash, @_StageCreateInfo.stage, SizeOf(_StageCreateInfo.stage));
 end;
 
-procedure TLabCombinedShader.TUniform.AddItem(
-  const ItemName: String;
-  const ItemType: String;
-  const ArrayCount: Integer
-);
+function TLabCombinedShader.TUniform.CreateBuffer(const OpenArraySize: TVkUInt32): TLabManagedUniformBufferShared;
+  var ub: TLabManagedUniformBuffer;
 begin
-  SetLength(Data, Length(Data) + 1);
-  Data[High(Data)].ItemName := ItemName;
-  Data[High(Data)].ItemType := ItemType;
-  Data[High(Data)].ArrayCount := ArrayCount;
+  ub := TLabManagedUniformBuffer.Create(
+    _Device, Data, OpenArraySize
+  );
+  Result := ub;
 end;
 
-constructor TLabCombinedShader.TUniform.Create;
+constructor TLabCombinedShader.TUniform.Create(const ADevice: TLabDeviceShared);
 begin
+  _Device := ADevice;
   Stages := TVkFlags(VK_SHADER_STAGE_ALL);
 end;
 
 constructor TLabCombinedShader.TStage.Create;
 begin
   Entry := 'main';
+end;
+
+function TLabCombinedShader.GetUniform(const Index: TVkInt32): TUniform;
+begin
+  Result := _Uniforms[Index];
+end;
+
+function TLabCombinedShader.GetUniformCount: TVkInt32;
+begin
+  Result := _Uniforms.Count;
+end;
+
+function TLabCombinedShader.FindUniformIndex(const UniformName: AnsiString): TVkInt32;
+  var i: TVkInt32;
+begin
+  for i := 0 to _Uniforms.Count - 1 do
+  if _Uniforms[i].Name = UniformName then
+  begin
+    Exit(i);
+  end;
+  Result := -1;
+end;
+
+function TLabCombinedShader.FindUniform(const UniformName: AnsiString): TUniform;
+  var i: TVkInt32;
+begin
+  i := FindUniformIndex(UniformName);
+  if i > -1 then Exit(_Uniforms[i]);
+  Result := nil;
 end;
 
 function TLabCombinedShader.Build(const BuildInfo: TLabShaderBuildInfo): TLabShaderGroupShared;
@@ -647,16 +962,18 @@ function TLabCombinedShader.Build(const BuildInfo: TLabShaderBuildInfo): TLabSha
     end;
     Result := False;
   end;
-  function DataItemToStr(const DataItem: TDataItem; const Prefix: String = ''): String;
+  function DataItemToStr(const DataItem: TLabShaderDataItem; const Prefix: String = ''): String;
+    var i: Integer;
   begin
     Result := DataItem.ItemType;
     Result += ' ' + Prefix + DataItem.ItemName;
     if DataItem.IsArray then
+    for i := 0 to High(DataItem.ArrayCount) do
     begin
       Result += '[';
-      if not DataItem.IsOpenArray then
+      if DataItem.ArrayCount[i] > 0 then
       begin
-        Result += DataItem.ArrayCount.ToString;
+        Result += DataItem.ArrayCount[i].ToString;
       end;
       Result += ']';
     end;
@@ -669,12 +986,12 @@ function TLabCombinedShader.Build(const BuildInfo: TLabShaderBuildInfo): TLabSha
   var code: String;
   var uniform_bindings: array of Integer;
   var binding: Integer;
-  procedure WriteVaryingDataBlock(const DataBlock: TDataBlock; const Prefix: String; const MapTo: PDataBlock = nil);
+  procedure WriteVaryingDataBlock(const DataBlock: TLabShaderDataBlock; const Prefix: String; const MapTo: PLabShaderDataBlock = nil);
     function FindMapLoc(const Name: String): Integer;
       var i: Integer;
     begin
-      for i := 0 to High(MapTo^) do
-      if MapTo^[i].ItemName = Name then
+      for i := 0 to High(MapTo^.Members) do
+      if MapTo^.Members[i].ItemName = Name then
       begin
         Exit(i);
       end;
@@ -685,28 +1002,28 @@ function TLabCombinedShader.Build(const BuildInfo: TLabShaderBuildInfo): TLabSha
   begin
     if Assigned(MapTo) then
     begin
-      SetLength(loc_remap, Length(DataBlock));
+      SetLength(loc_remap, Length(DataBlock.Members));
       n := 0;
       for i := 0 to High(loc_remap) do
       begin
-        loc_remap[i] := FindMapLoc(DataBlock[i].ItemName);
+        loc_remap[i] := FindMapLoc(DataBlock.Members[i].ItemName);
         if loc_remap[i] = -1 then
         begin
           loc_remap[i] := Length(loc_remap) + n;
           Inc(n);
         end;
       end;
-      for i := 0 to High(DataBlock) do
+      for i := 0 to High(DataBlock.Members) do
       begin
-        code += 'layout (location = ' + IncVal(loc_remap[i]).ToString + ') ' + Prefix + ' ' + DataItemToStr(DataBlock[i], Prefix + '_') + ';'#$D#$A;
+        code += 'layout (location = ' + IncVal(loc_remap[i]).ToString + ') ' + Prefix + ' ' + DataItemToStr(DataBlock.Members[i], Prefix + '_') + ';'#$D#$A;
       end;
     end
     else
     begin
       loc := 0;
-      for i := 0 to High(DataBlock) do
+      for i := 0 to High(DataBlock.Members) do
       begin
-        code += 'layout (location = ' + IncVal(loc).ToString + ') ' + Prefix + ' ' + DataItemToStr(DataBlock[i], Prefix + '_') + ';'#$D#$A;
+        code += 'layout (location = ' + IncVal(loc).ToString + ') ' + Prefix + ' ' + DataItemToStr(DataBlock.Members[i], Prefix + '_') + ';'#$D#$A;
       end;
     end;
   end;
@@ -721,9 +1038,9 @@ function TLabCombinedShader.Build(const BuildInfo: TLabShaderBuildInfo): TLabSha
         uniform_bindings[i] := IncVal(binding);
       end;
       code += 'layout (std140, binding = ' + uniform_bindings[i].ToString + ') uniform t_' + _Uniforms[i].Name + ' {'#$D#$A;
-      for j := 0 to High(_Uniforms[i].Data) do
+      for j := 0 to High(_Uniforms[i].Data.Members) do
       begin
-        code += '  ' + DataItemToStr(_Uniforms[i].Data[j]) + ';'#$D#$A;
+        code += '  ' + DataItemToStr(_Uniforms[i].Data.Members[j]) + ';'#$D#$A;
       end;
       code += '} ' + _Uniforms[i].Name + ';'#$D#$A;
     end;
@@ -737,21 +1054,9 @@ begin
     uniform_bindings[i] := -1;
   end;
   binding := 0;
-  code := '#version 400'#$D#$A;
+  code := '#version 450'#$D#$A;
   code += '#extension GL_ARB_separate_shader_objects : enable'#$D#$A;
   code += '#extension GL_ARB_shading_language_420pack : enable'#$D#$A;
-  code += 'layout (std140, binding = ' + IncVal(binding).ToString + ') uniform t_global {'#$D#$A;
-  code += '  vec4 time;'#$D#$A;
-  code += '} global;'#$D#$A;
-  code += 'layout (std140, binding = ' + IncVal(binding).ToString + ') uniform t_view {'#$D#$A;
-  code += '  mat4 v;'#$D#$A;
-  code += '  mat4 p;'#$D#$A;
-  code += '  mat4 vp;'#$D#$A;
-  code += '  mat4 vp_i;'#$D#$A;
-  code += '} view;'#$D#$A;
-  code += 'layout (std140, binding = ' + IncVal(binding).ToString + ') uniform t_instance {'#$D#$A;
-  code += '  mat4 w;'#$D#$A;
-  code += '} instance;'#$D#$A;
   WriteUniforms(VK_SHADER_STAGE_VERTEX_BIT);
   location := 0;
   for i := 0 to High(BuildInfo.VertexDescriptors) do
@@ -759,17 +1064,17 @@ begin
     code += 'layout (location = ' + IncVal(location).ToString + ') in ';
     code += GetAttribType(BuildInfo.VertexDescriptors[i]) + ' in_' + GetAttribName(BuildInfo.VertexDescriptors[i]) + ';'#$D#$A;
   end;
-  for i := 0 to High(_StageVertex.Inputs) do
+  for i := 0 to High(_StageVertex.Inputs.Members) do
   begin
-    if not FindVertexAttrib(_StageVertex.Inputs[i].ItemName) then
+    if not FindVertexAttrib(_StageVertex.Inputs.Members[i].ItemName) then
     begin
-      code += 'const ' + _StageVertex.Inputs[i].ItemType + ' in_' + _StageVertex.Inputs[i].ItemName + ' = ' + _StageVertex.Inputs[i].ItemType + '(0);'#$D#$A;
+      code += 'const ' + _StageVertex.Inputs.Members[i].ItemType + ' in_' + _StageVertex.Inputs.Members[i].ItemName + ' = ' + _StageVertex.Inputs.Members[i].ItemType + '(0);'#$D#$A;
     end;
   end;
   WriteVaryingDataBlock(_StageVertex.Outputs, 'out');
   code += _StageVertex.Code;
   Result.Ptr.Vertex := TLabVertexShaderCached.FindOrCreate(_Device, code);
-  code := '#version 400'#$D#$A;
+  code := '#version 450'#$D#$A;
   code += '#extension GL_ARB_separate_shader_objects : enable'#$D#$A;
   code += '#extension GL_ARB_shading_language_420pack : enable'#$D#$A;
   WriteUniforms(VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -936,7 +1241,7 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
   end;
   function ParseGlobal: Boolean;
     function ParseShader: Boolean;
-      function ParseDataBlock(var DataBlock: TDataBlock): Boolean;
+      function ParseDataBlock(var DataBlock: TLabShaderDataBlock): Boolean;
         var di_name, di_type: String;
         var di_arr: TVkInt32;
       begin
@@ -950,9 +1255,10 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
           NextToken;
           if tt <> ttWord then exit_fail;
           di_type := token;
-          if not VerifyNextToken([ttSymbol], ['[', ';']) then exit_fail;
-          di_arr := -1;
-          if token = '[' then
+          SetLength(DataBlock.Members, Length(DataBlock.Members) + 1);
+          DataBlock.Members[High(DataBlock.Members)].ItemName := di_name;
+          DataBlock.Members[High(DataBlock.Members)].ItemType := di_type;
+          while VerifyNextToken([ttSymbol], ['[']) do
           begin
             NextToken;
             if tt = ttNumber then
@@ -962,17 +1268,16 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
             end
             else
             begin
+              if Length(DataBlock.Members[High(DataBlock.Members)].ArrayCount) > 0 then exit_fail;
               di_arr := 0;
             end;
             if not VerifyToken([ttSymbol], [']']) then exit_fail;
-            if not VerifyNextToken([ttSymbol], [';']) then exit_fail;
+            SetLength(DataBlock.Members[High(DataBlock.Members)].ArrayCount, Length(DataBlock.Members[High(DataBlock.Members)].ArrayCount) + 1);
+            DataBlock.Members[High(DataBlock.Members)].ArrayCount[High(DataBlock.Members[High(DataBlock.Members)].ArrayCount)] := di_arr;
           end;
-          SetLength(DataBlock, Length(DataBlock) + 1);
-          DataBlock[High(DataBlock)].ItemName := di_name;
-          DataBlock[High(DataBlock)].ItemType := di_type;
-          DataBlock[High(DataBlock)].ArrayCount := di_arr;
         end;
         SyntaxPop;
+        DataBlock.CalculateSize;
         Result := True;
       end;
       function ParseUniform: Boolean;
@@ -980,7 +1285,7 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
         var v: TValues;
         var val: TValue;
       begin
-        uniform := TUniform.Create;
+        uniform := TUniform.Create(_Device);
         _Uniforms.Add(uniform);
         SyntaxPush(@SyntaxUniform);
         while True do
@@ -1185,8 +1490,8 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
     function FindOutput(const Stage: TStage; const InputName: String): Integer;
       var i: Integer;
     begin
-      for i := 0 to High(Stage.Outputs) do
-      if Stage.Outputs[i].ItemName = InputName then
+      for i := 0 to High(Stage.Outputs.Members) do
+      if Stage.Outputs.Members[i].ItemName = InputName then
       begin
         Exit(i);
       end;
@@ -1214,24 +1519,47 @@ constructor TLabCombinedShader.Create(const ADevice: TLabDeviceShared; const Sha
     begin
       if Assigned(CurStage.NextStage) then
       begin
-        for i := 0 to High(CurStage.NextStage.Inputs) do
+        for i := 0 to High(CurStage.NextStage.Inputs.Members) do
         begin
-          j := FindOutput(CurStage, CurStage.NextStage.Inputs[i].ItemName);
+          j := FindOutput(CurStage, CurStage.NextStage.Inputs.Members[i].ItemName);
           if j = -1 then
           begin
-            j := Length(CurStage.Outputs);
-            SetLength(CurStage.Outputs, Length(CurStage.Outputs) + 1);
-            CurStage.Outputs[j] := CurStage.NextStage.Inputs[i];
+            j := Length(CurStage.Outputs.Members);
+            SetLength(CurStage.Outputs.Members, Length(CurStage.Outputs.Members) + 1);
+            CurStage.Outputs.Members[j] := CurStage.NextStage.Inputs.Members[i];
           end;
         end;
       end;
       CurStage := CurStage.NextStage;
     end;
   end;
+  procedure AddStandardUniforms;
+    var ud: TUniform;
+  begin
+    ud := TUniform.Create(_Device);
+    ud.Name := 'global';
+    ud.Data.AddItem('time', 'vec4', []);
+    ud.Data.CalculateSize;
+    _Uniforms.Add(ud);
+    ud := TUniform.Create(_Device);
+    ud.Name := 'view';
+    ud.Data.AddItem('v', 'mat4', []);
+    ud.Data.AddItem('p', 'mat4', []);
+    ud.Data.AddItem('vp', 'mat4', []);
+    ud.Data.AddItem('vp_i', 'mat4', []);
+    ud.Data.CalculateSize;
+    _Uniforms.Add(ud);
+    ud := TUniform.Create(_Device);
+    ud.Name := 'instance';
+    ud.Data.AddItem('w', 'mat4', []);
+    ud.Data.CalculateSize;
+    _Uniforms.Add(ud);
+  end;
 begin
   inherited Create;
   _Device := ADevice;
   _Uniforms := TUniformList.Create;
+  AddStandardUniforms;
   p := TLabParser.Create(ShaderCode, True);
   with SyntaxGlobal do
   begin
