@@ -24,9 +24,11 @@ type
     var _Device: TLabDeviceShared;
     var _Handle: TVkRenderPass;
     var _Hash: TVkUInt32;
+    var _SubPassCount: TVkUInt32;
   public
     property VkHandle: TVkRenderPass read _Handle;
     property Hash: TVkUInt32 read _Hash;
+    property SubPassCount: TVkUInt32 read _SubPassCount;
     constructor Create(
       const ADevice: TLabDeviceShared;
       const AAttachments: array of TVkAttachmentDescription;
@@ -39,13 +41,13 @@ type
 
 function LabAttachmentDescription(
   const Format: TVkFormat;
+  const InitialLayout: TVkImageLayout;
   const FinalLayout: TVkImageLayout;
   const Samples: TVkSampleCountFlagBits = VK_SAMPLE_COUNT_1_BIT;
   const LoadOp: TVkAttachmentLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   const StoreOp: TVkAttachmentStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   const StencilLoadOp: TVkAttachmentLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   const StencilStoreOp: TVkAttachmentStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  const InitialLayout: TVkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   const Flags: TVkAttachmentDescriptionFlags = 0
 ): TVkAttachmentDescription;
 
@@ -93,6 +95,7 @@ begin
   begin
     subpass_descriptions[i] := LabSubpassDescription(ASubpasses[i]);
   end;
+  _SubPassCount := Length(ASubpasses);
   {$Push}{$Hints off}
   FillChar(rp_info, SizeOf(rp_info), 0);
   {$Pop}
@@ -171,13 +174,13 @@ end;
 
 function LabAttachmentDescription(
   const Format: TVkFormat;
+  const InitialLayout: TVkImageLayout;
   const FinalLayout: TVkImageLayout;
   const Samples: TVkSampleCountFlagBits;
   const LoadOp: TVkAttachmentLoadOp;
   const StoreOp: TVkAttachmentStoreOp;
   const StencilLoadOp: TVkAttachmentLoadOp;
   const StencilStoreOp: TVkAttachmentStoreOp;
-  const InitialLayout: TVkImageLayout;
   const Flags: TVkAttachmentDescriptionFlags
 ): TVkAttachmentDescription;
 begin

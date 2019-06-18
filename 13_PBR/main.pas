@@ -354,9 +354,14 @@ begin
   for i := 0 to High(attachments) do
   begin
     attachments[i] := LabAttachmentDescription(
-      TextureEnv.Ptr.Format, {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
-      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      VK_IMAGE_LAYOUT_UNDEFINED
+      TextureEnv.Ptr.Format,
+      VK_IMAGE_LAYOUT_UNDEFINED,
+      {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_STORE,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_DONT_CARE
     );
   end;
   render_pass := TLabRenderPass.Create(
@@ -538,9 +543,14 @@ begin
   for i := 0 to High(attachments) do
   begin
     attachments[i] := LabAttachmentDescription(
-      TextureIrradiance.Ptr.Format, {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
-      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      VK_IMAGE_LAYOUT_UNDEFINED
+      TextureIrradiance.Ptr.Format,
+      VK_IMAGE_LAYOUT_UNDEFINED,
+      {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL} VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_STORE,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_DONT_CARE
     );
   end;
   render_pass := TLabRenderPass.Create(
@@ -722,9 +732,14 @@ begin
   for i := 0 to High(attachments) do
   begin
     attachments[i] := LabAttachmentDescription(
-      TexturePrefiltered.Ptr.Format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_SAMPLE_COUNT_1_BIT,
-      VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      VK_IMAGE_LAYOUT_UNDEFINED
+      TexturePrefiltered.Ptr.Format,
+      VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      VK_SAMPLE_COUNT_1_BIT,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_STORE,
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      VK_ATTACHMENT_STORE_OP_DONT_CARE
     );
   end;
   render_pass := TLabRenderPass.Create(
@@ -898,6 +913,7 @@ begin
     [
       LabAttachmentDescription(
         TextureBRDFLUT.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1417,6 +1433,7 @@ begin
     [
       LabAttachmentDescription(
         RenderTargets[0].Color.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -1426,6 +1443,7 @@ begin
       ),
       LabAttachmentDescription(
         RenderTargets[0].Depth.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -1435,6 +1453,7 @@ begin
       ),
       LabAttachmentDescription(
         RenderTargets[0].Normals.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -1444,6 +1463,7 @@ begin
       ),
       LabAttachmentDescription(
         RenderTargets[0].PhysParams.Image.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -1453,6 +1473,7 @@ begin
       ),
       LabAttachmentDescription(
         RenderTargets[0].ZBuffer.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         App.SampleCount,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -1544,24 +1565,24 @@ begin
     [
       LabAttachmentDescription(
         _SwapChain.Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        VK_IMAGE_LAYOUT_UNDEFINED,
         0
       ),
       LabAttachmentDescription(
         _DepthBuffers[0].Ptr.Format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         VK_SAMPLE_COUNT_1_BIT,
         VK_ATTACHMENT_LOAD_OP_CLEAR,
         VK_ATTACHMENT_STORE_OP_STORE,
         VK_ATTACHMENT_LOAD_OP_LOAD,
         VK_ATTACHMENT_STORE_OP_STORE,
-        VK_IMAGE_LAYOUT_UNDEFINED,
         0
       )
     ],

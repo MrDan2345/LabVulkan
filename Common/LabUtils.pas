@@ -41,6 +41,7 @@ type
     property Data: TItemPtr read GetData;
     function Find(const Item: T): Integer;
     function Add(const Item: T): Integer;
+    function AddUnique(const Item: T): Integer;
     function Pop: T;
     function Extract(const Index: Integer): T;
     function Insert(const Index: Integer; const Item: T): Integer;
@@ -307,6 +308,15 @@ type
     function NextToken(var TokenType: TLabTokenType): AnsiString;
   end;
 
+  TLabDebugReport = class (TLabClass)
+  private
+    var _Callback: TVkDebugReportCallbackEXT;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Message(const MessageText: AnsiString);
+  end;
+
   TLabListString = specialize TLabList<AnsiString>;
   TLabListStringShared = specialize TLabSharedRef<TLabListString>;
   TLabListPointer = specialize TLabList<Pointer>;
@@ -524,6 +534,12 @@ begin
   _Items[_ItemCount] := Item;
   Result := _ItemCount;
   Inc(_ItemCount);
+end;
+
+function TLabList.AddUnique(const Item: T): Integer;
+begin
+  Result := Find(Item);
+  if Result = -1 then Exit(Add(Item));
 end;
 
 function TLabList.Pop: T;
@@ -1833,6 +1849,57 @@ begin
   end;
 end;
 //TLabParser END
+
+//TLabDebugReport BEGIN
+function LabDebugReportCallback(
+  flags: TVkDebugReportFlagsEXT;
+  objectType: TVkDebugReportObjectTypeEXT;
+  object_: TVkUInt64;
+  location: TVkSize;
+  messageCode: TVkInt32;
+  const pLayerPrefix: PVkChar;
+  const pMessage:PVkChar;
+  pUserData:PVkVoid
+):TVkBool32; {$ifdef Windows}stdcall;{$else}{$ifdef Android}{$ifdef cpuarm}hardfloat;{$else}cdecl;{$endif}{$else}cdecl;{$endif}{$endif}
+  var str_message: AnsiString;
+begin
+  str_message := pMessage;
+  TLabDebugReport(pUserData).Message(str_message);
+  Result := VK_FALSE;
+end;
+
+constructor TLabDebugReport.Create;
+  var ci: TVkDebugReportCallbackCreateInfoEXT;
+begin
+  FillChar(ci, SizeOf(ci), 0);
+  ci.pfnCallback := @LabDebugReportCallback;
+  ci.pUserData := Self;
+  ci.flags := (
+    //TVkFlags(VK_DEBUG_REPORT_INFORMATION_BIT_EXT) or
+    TVkFlags(VK_DEBUG_REPORT_WARNING_BIT_EXT) or
+    TVkFlags(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) or
+    TVkFlags(VK_DEBUG_REPORT_ERROR_BIT_EXT)// or
+    //TVkFlags(VK_DEBUG_REPORT_DEBUG_BIT_EXT)
+  );
+  Vulkan.CreateDebugReportCallbackEXT(
+    VulkanInstance,
+    @ci,
+    nil,
+    @_Callback
+  );
+end;
+
+destructor TLabDebugReport.Destroy;
+begin
+  Vulkan.DestroyDebugReportCallbackEXT(VulkanInstance, _Callback, nil);
+  inherited Destroy;
+end;
+
+procedure TLabDebugReport.Message(const MessageText: AnsiString);
+begin
+  LabLog(MessageText);
+end;
+//TLabDebugReport END
 
 procedure LabZeroMem(const Ptr: Pointer; const Size: SizeInt);
 begin
