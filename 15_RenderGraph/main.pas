@@ -100,11 +100,15 @@ type
         var _FirstLayout: TVkImageLayout;
         var _InitialLayout: TVkImageLayout;
         var _FinalLayout: TVkImageLayout;
+        var _LoadOp: TVkAttachmentLoadOp;
+        var _StoreOp: TVkAttachmentStoreOp;
       public
         property Attachment: TAttachment read _Attachment;
         property FirstLayout: TVkImageLayout read _FinalLayout;
         property InitialLayout: TVkImageLayout read _InitialLayout write _InitialLayout;
         property FinalLayout: TVkImageLayout read _FinalLayout write _FinalLayout;
+        property LoadOp: TVkAttachmentLoadOp read _LoadOp write _LoadOp;
+        property StoreOp: TVkAttachmentStoreOp read _StoreOp write _StoreOp;
         constructor Create(const AAttachment: TAttachment; const AFirstLayout: TVkImageLayout);
       end;
       type TCompiledSlotList = specialize TLabObjList<TCompiledAttachmentSlot>;
@@ -193,6 +197,8 @@ begin
   _FirstLayout := AFirstLayout;
   _InitialLayout := VK_IMAGE_LAYOUT_UNDEFINED;
   _FinalLayout := VK_IMAGE_LAYOUT_UNDEFINED;
+  _LoadOp := VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  _StoreOp := VK_ATTACHMENT_STORE_OP_DONT_CARE;
 end;
 
 constructor TFrameGraph.TCompiledRenderPass.Create;
@@ -517,25 +523,36 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
         end;
       end;
     end;
-    procedure DeriveLoadStore;
+    procedure DeriveLayoutsAndLoadStore;
       var i_p, i_a: TVkInt32;
       var pass_c: TCompiledRenderPass;
+      var slot_c: TCompiledRenderPass.TCompiledAttachmentSlot;
       var attachment: TPass.TAttachmentSlot;
     begin
-      for i_p := 0 to _CompiledRenderPasses.Count - 1 do
+      for i := 0 to _CompiledRenderPasses.Count - 1 do
       begin
-        pass_c := _CompiledRenderPasses[i_p];
-        for i_a := 0 to pass_c.Attachments.Count - 1 do
+        pass_c := _CompiledRenderPasses[i];
+        for j := 0 to pass_c.Attachments.Count - 1 do
         begin
-          attachment := pass_c.Attachments[i_a];
-
+          for d := pass_c.Dependencies.Count - 1 downto 0 do
+          begin
+            slot_c := pass_c.Dependencies[d].HasOutputAttachment(pass_c.Attachments[j].Attachment);
+            if Assigned(slot_c) then
+            begin
+              pass_c.Attachments[j].InitialLayout := pass_c.Attachments[j].FirstLayout;
+              slot_c.FinalLayout := pass_c.Attachments[j].FirstLayout;
+              pass_c.Attachments[j].LoadOp := VK_ATTACHMENT_LOAD_OP_LOAD;
+              slot_c.StoreOp := VK_ATTACHMENT_STORE_OP_STORE;
+            end;
+          end;
         end;
       end;
     end;
     var i, j, attachment_count: TVkInt32;
-    var pass: TPass;
+    var pass_c: TCompiledRenderPass;
     var slot_c: TCompiledRenderPass.TCompiledAttachmentSlot;
     var attachments: array of TVkAttachmentDescription;
+    var subpasses: array of TLabSubpassDescriptionData;
   begin
     CreateCompiledPasses;
     GatherExternalDependencies;
@@ -543,32 +560,29 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
     for i := 0 to _CompiledRenderPasses.Count - 1 do
     begin
       pass_c := _CompiledRenderPasses[i];
-      for j := 0 to pass_c.Attachments.Count - 1 do
-      begin
-        for d := pass_c.Dependencies.Count - 1 downto 0 do
-        begin
-          slot_c := pass_c.Dependencies[d].HasOutputAttachment(pass_c.Attachments[j].Attachment);
-          if Assigned(slot_c) then
-          begin
-            pass_c.Attachments[j].InitialLayout := pass_c.Attachments[j].FirstLayout;
-            slot_c.FinalLayout := pass_c.Attachments[j].FirstLayout;
-          end;
-        end;
-      end;
       SetLength(attachments, pass_c.Attachments.Count);
       for j := 0 to pass_c.Attachments.Count - 1 do
       begin
+        slot_c := pass_c.Attachments[j];
         attachments[j] := LabAttachmentDescription(
-          pass_c.Attachments[j].Attachment.Format,
-          pass_c.Attachments[j].InitialLayout,
-          pass_c.Attachments[j].FinalLayout,
+          slot_c.Attachment.Format,
+          slot_c.InitialLayout,
+          slot_c.FinalLayout,
           VK_SAMPLE_COUNT_1_BIT,
-          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-          VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          slot_c.LoadOp,
+          slot_c.StoreOp,
           VK_ATTACHMENT_LOAD_OP_DONT_CARE,
           VK_ATTACHMENT_STORE_OP_DONT_CARE
         );
       end;
+      SetLength(subpasses, pass_c.SubPassList.Count);
+      for j := 0 to pass_c.SubPassList.Count - 1 do
+      begin
+
+      end;
+      pass_c.RenderPass := TLabRenderPass.Create(
+        _Device, attachments,
+      );
     end;
   end;
 begin
