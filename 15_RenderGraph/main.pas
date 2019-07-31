@@ -102,6 +102,7 @@ type
         var _FinalLayout: TVkImageLayout;
         var _LoadOp: TVkAttachmentLoadOp;
         var _StoreOp: TVkAttachmentStoreOp;
+        var _AttachmentIndex: TVkUInt32;
       public
         property Attachment: TAttachment read _Attachment;
         property FirstLayout: TVkImageLayout read _FinalLayout;
@@ -109,7 +110,8 @@ type
         property FinalLayout: TVkImageLayout read _FinalLayout write _FinalLayout;
         property LoadOp: TVkAttachmentLoadOp read _LoadOp write _LoadOp;
         property StoreOp: TVkAttachmentStoreOp read _StoreOp write _StoreOp;
-        constructor Create(const AAttachment: TAttachment; const AFirstLayout: TVkImageLayout);
+        property AttachmentIndex: TVkUInt32 read _AttachmentIndex write _AttachmentIndex;
+        constructor Create(const AAttachment: TAttachment; const AFirstLayout: TVkImageLayout; const AIndex: TVkUInt32 = $ffffffff);
       end;
       type TCompiledSlotList = specialize TLabObjList<TCompiledAttachmentSlot>;
       type TCompiledRenderPassListTmp = specialize TLabList<TCompiledRenderPass>;
@@ -121,7 +123,7 @@ type
       destructor Destroy; override;
       function DependsOnAttachment(const Attachment: TAttachment): TPass.TAttachmentSlot;
       function HasOutputAttachment(const Attachment: TAttachment): TCompiledAttachmentSlot;
-      procedure AddAttachmentUnique(const Attachment: TAttachment; const FirstLayout: TVkImageLayout);
+      procedure AddAttachmentUnique(const Attachment: TAttachment; const FirstLayout: TVkImageLayout; const IgnoreIndex: TVkUint32);
     end;
     type TCompiledRenderPassList = specialize TLabObjList<TCompiledRenderPass>;
     type TCompiledRenderPassListShared = specialize TLabSharedRef<TCompiledRenderPassList>;
@@ -190,7 +192,8 @@ implementation
 
 constructor TFrameGraph.TCompiledRenderPass.TCompiledAttachmentSlot.Create(
   const AAttachment: TAttachment;
-  const AFirstLayout: TVkImageLayout
+  const AFirstLayout: TVkImageLayout;
+  const AIndex: TVkUInt32 = $ffffffff
 );
 begin
   _Attachment := AAttachment;
@@ -199,6 +202,7 @@ begin
   _FinalLayout := VK_IMAGE_LAYOUT_UNDEFINED;
   _LoadOp := VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   _StoreOp := VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  _AttachmentIndex := AIndex;
 end;
 
 constructor TFrameGraph.TCompiledRenderPass.Create;
@@ -245,16 +249,32 @@ end;
 
 procedure TFrameGraph.TCompiledRenderPass.AddAttachmentUnique(
   const Attachment: TAttachment;
-  const FirstLayout: TVkImageLayout
+  const FirstLayout: TVkImageLayout;
+  const IgnoreIndex: TVkUint32
 );
   var i: TVkInt32;
+  var ind: TVkUInt32;
 begin
   for i := 0 to Attachments.Count - 1 do
   if Attachments[i].Attachment = Attachment then
   begin
     Exit;
   end;
-  Attachments.Add(TCompiledAttachmentSlot.Create(Attachment, FirstLayout));
+  if IgnoreIndex then
+  begin
+    ind := $ffffffff;
+  end
+  else
+  begin
+    ind := 0;
+    for i := 0 to Attachments.Count - 1 do
+    if (Attachments[i].AttachmentIndex <> $ffffffff)
+    and (Attachments[i].AttachmentIndex >= ind) then
+    begin
+      ind := Attachments[i].AttachmentIndex + 1;
+    end;
+  end;
+  Attachments.Add(TCompiledAttachmentSlot.Create(Attachment, FirstLayout, ind));
 end;
 
 constructor TFrameGraph.TPass.TDependency.Create(const APass: TPass; const AForceSubpass: Boolean);
@@ -447,14 +467,16 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
           begin
             pass_c.AddAttachmentUnique(
               pass_c.SubPassList[i].AttachmentsColor[j].Attachment,
-              pass_c.SubPassList[i].AttachmentsColor[j].SlotLayout
+              pass_c.SubPassList[i].AttachmentsColor[j].SlotLayout,
+              not pass_c.SubPassList[i].AttachmentsColor[j].PerRegion
             );
           end;
           if Assigned(pass_c.SubPassList[i].AttachmentDepth) then
           begin
             pass_c.AddAttachmentUnique(
               pass_c.SubPassList[i].AttachmentDepth.Attachment,
-              pass_c.SubPassList[i].AttachmentDepth.SlotLayout
+              pass_c.SubPassList[i].AttachmentDepth.SlotLayout,
+              not pass_c.SubPassList[i].AttachmentsColor[j].PerRegion
             );
           end;
         end;
@@ -548,11 +570,12 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
         end;
       end;
     end;
-    var i, j, attachment_count: TVkInt32;
+    var i, j, a, n, attachment_count: TVkInt32;
     var pass_c: TCompiledRenderPass;
     var slot_c: TCompiledRenderPass.TCompiledAttachmentSlot;
     var attachments: array of TVkAttachmentDescription;
     var subpasses: array of TLabSubpassDescriptionData;
+    var input_attachments: array of TVkAttachmentReference;
   begin
     CreateCompiledPasses;
     GatherExternalDependencies;
@@ -560,11 +583,18 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
     for i := 0 to _CompiledRenderPasses.Count - 1 do
     begin
       pass_c := _CompiledRenderPasses[i];
-      SetLength(attachments, pass_c.Attachments.Count);
+      n := 0;
       for j := 0 to pass_c.Attachments.Count - 1 do
+      if pass_c.Attachments[j].AttachmentIndex <> $ffffffff then
+      begin
+        n := LabMax(n, pass_c.Attachments[j].AttachmentIndex + 1);
+      end;
+      SetLength(attachments, n);
+      for j := 0 to pass_c.Attachments.Count - 1 do
+      if pass_c.Attachments[j].AttachmentIndex <> $ffffffff then
       begin
         slot_c := pass_c.Attachments[j];
-        attachments[j] := LabAttachmentDescription(
+        attachments[slot_c.AttachmentIndex] := LabAttachmentDescription(
           slot_c.Attachment.Format,
           slot_c.InitialLayout,
           slot_c.FinalLayout,
@@ -578,7 +608,16 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
       SetLength(subpasses, pass_c.SubPassList.Count);
       for j := 0 to pass_c.SubPassList.Count - 1 do
       begin
+        SetLength(input_attachments, 0);
+        for a := 0 to pass_c.SubPassList[j].AttachmentsInput.Count - 1 do
+        if pass_c.SubPassList[0].AttachmentsInput[a].PerRegion then
+        begin
+          SetLength(input_attachments, Length(input_attachments) + 1);
+          input_attachments[High(input_attachments)].attachment := ;
+        end;
+        subpasses[j] := LabSubpassDescriptionData(
 
+        );
       end;
       pass_c.RenderPass := TLabRenderPass.Create(
         _Device, attachments,
