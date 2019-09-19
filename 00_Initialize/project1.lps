@@ -2,16 +2,20 @@
 <CONFIG>
   <ProjectSession>
     <PathDelim Value="\"/>
-    <Version Value="10"/>
+    <Version Value="11"/>
     <BuildModes Active="Default"/>
     <Units Count="1">
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
         <CursorPos Y="40"/>
-        <UsageCount Value="33"/>
+        <UsageCount Value="57"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes Count="0" ActiveMode="default"/>
+    </RunParams>
   </ProjectSession>
 </CONFIG>

@@ -613,7 +613,7 @@ function TFrameGraph.CompileRenderPasses: TCompiledRenderPassListShared;
         if pass_c.SubPassList[0].AttachmentsInput[a].PerRegion then
         begin
           SetLength(input_attachments, Length(input_attachments) + 1);
-          input_attachments[High(input_attachments)].attachment := ;
+          input_attachments[High(input_attachments)].;
         end;
         subpasses[j] := LabSubpassDescriptionData(
 

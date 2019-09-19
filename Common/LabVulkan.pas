@@ -16,6 +16,7 @@ type
     Name: AnsiString;
     SpecVersion: TVkUInt32;
   end;
+  TLabExtensionArr = array of TLabExtension;
 
   TLabLayer = record
     Name: AnsiString;
@@ -34,6 +35,7 @@ type
     class var _OnFinalize: TLabProcObj;
     class var _OnLoop: TLabProcObj;
     class var _Layers: array of TLabLayer;
+    class var _Extensions: TLabExtensionArr;
     class var _ExtensionsEnabled: TLabListStringShared;
     class var _LayersEnabled: TLabListStringShared;
     class var _ReportFormats: Boolean;
@@ -46,6 +48,7 @@ type
     class property OnInitialize: TLabProcObj read _OnInitialize write _OnInitialize;
     class property OnFinalize: TLabProcObj read _OnFinalize write _OnFinalize;
     class property OnLoop: TLabProcObj read _OnLoop write _OnLoop;
+    class property Extensions: TLabExtensionArr read _Extensions;
     class function GetLayer(const Index: Integer): PLabLayer; inline;
     class function GetLayerCount: Integer; inline;
     class function FindLayer(const Name: AnsiString): PLabLayer;
@@ -174,6 +177,20 @@ begin
     ResetExtensions;
     EnableExtension(VK_KHR_SURFACE_EXTENSION_NAME);
     EnableExtension(TLabSurface.GetSurfacePlatformExtension);
+    extension_count := 0;
+    Vulkan.EnumerateInstanceExtensionProperties(nil, @extension_count, nil);
+    SetLength(extension_properties, extension_count);
+    SetLength(_Extensions, extension_count);
+    Vulkan.EnumerateInstanceExtensionProperties(nil, @extension_count, @extension_properties[0]);
+    LabLog('Suppoerted Extensions[' + extension_count.ToString + ']:');
+    LabLogOffset(2);
+    for i := 0 to extension_count - 1 do
+    begin
+      _Extensions[i].Name := extension_properties[i].extensionName;
+      _Extensions[i].SpecVersion := extension_properties[i].specVersion;
+      LabLog(_Extensions[i].Name + ' ver' + _Extensions[i].SpecVersion.ToString);
+    end;
+    LabLogOffset(-2);
     layer_count := 0;
     LabAssertVkError(Vulkan.EnumerateInstanceLayerProperties(@layer_count, nil));
     if layer_count > 0 then
@@ -298,7 +315,7 @@ constructor TLabVulkan.Create;
   var app_info: TVkApplicationInfo;
   var inst_info: TVkInstanceCreateInfo;
   var inst_commands: TVulkanCommands;
-  var extensions: array of PVkChar;
+  var ext_arr: array of PVkChar;
   var layers: array of PVkChar;
   var r: TVkResult;
   var i, j, physical_device_count: Integer;
@@ -321,10 +338,10 @@ begin
   app_info.pEngineName := PVkChar('LabVulkan');
   app_info.engineVersion := 1;
   app_info.apiVersion := VK_API_VERSION_1_0;
-  SetLength(extensions, _ExtensionsEnabled.Ptr.Count);
+  SetLength(ext_arr, _ExtensionsEnabled.Ptr.Count);
   for i := 0 to _ExtensionsEnabled.Ptr.Count - 1 do
   begin
-    extensions[i] := PVkChar(_ExtensionsEnabled.Ptr[i]);
+    ext_arr[i] := PVkChar(_ExtensionsEnabled.Ptr[i]);
   end;
   SetLength(layers, _LayersEnabled.Ptr.Count);
   for i := 0 to _LayersEnabled.Ptr.Count - 1 do
@@ -347,10 +364,10 @@ begin
   begin
     inst_info.ppEnabledLayerNames := nil;
   end;
-  inst_info.enabledExtensionCount := Length(extensions);
-  if Length(extensions) > 0 then
+  inst_info.enabledExtensionCount := Length(ext_arr);
+  if Length(ext_arr) > 0 then
   begin
-    inst_info.ppEnabledExtensionNames := PPVkChar(@extensions[0]);
+    inst_info.ppEnabledExtensionNames := PPVkChar(@ext_arr[0]);
   end
   else
   begin
