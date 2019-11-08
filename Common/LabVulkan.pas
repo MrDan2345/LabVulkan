@@ -324,6 +324,8 @@ constructor TLabVulkan.Create;
   var fmt_props: TVkFormatProperties;
   var ff: TVkFormatFeatureFlagBits;
   var fmt_str, str: String;
+  var ext_properties: array of TVkExtensionProperties;
+  var ext_property_count: TVkUInt32;
 begin
   LabLog('TLabVulkan.Create');
   LabLogOffset(2);
@@ -419,6 +421,14 @@ begin
         LabLog('PROTECTED');
       end;
       LabLogOffset(-2);
+    end;
+    Vulkan.EnumerateDeviceExtensionProperties(physical_device_arr[i], nil, @ext_property_count, nil);
+    SetLength(ext_properties, ext_property_count);
+    Vulkan.EnumerateDeviceExtensionProperties(physical_device_arr[i], nil, @ext_property_count, @ext_properties[0]);
+    LabLog('Device extension count = ' + IntToStr(ext_property_count));
+    for j := 0 to ext_property_count - 1 do
+    begin
+      LabLog('Extension[' + IntToStr(j) + ']: ' + ext_properties[j].extensionName);
     end;
     if _ReportFormats then
     begin
