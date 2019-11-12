@@ -541,14 +541,14 @@ begin
   while l <= h do
   begin
     m := (l + h) shr 1;
-    if List[m].Hash > AHash then
+    if List[m].CodeHash > AHash then
     h := m - 1
-    else if List[m].Hash < AHash then
+    else if List[m].CodeHash < AHash then
     l := m + 1
     else Exit(List[m]);
   end;
   if (l < List.Count)
-  and (List[l].Hash = AHash)
+  and (List[l].CodeHash = AHash)
   then Exit(List[l]) else Exit(nil);
 end;
 
