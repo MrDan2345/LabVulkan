@@ -285,7 +285,7 @@ begin
   Members[High(Members)].ItemType := ItemType;
   Members[High(Members)].Offset := 0;
   SetLength(Members[High(Members)].ArrayCount, Length(ArrayCount));
-  Move(ArrayCount[0], Members[High(Members)].ArrayCount, Length(ArrayCount) * SizeOf(TVkUInt32));
+  Move(ArrayCount[0], Members[High(Members)].ArrayCount[0], Length(ArrayCount) * SizeOf(TVkUInt32));
 end;
 
 procedure TLabShaderDataBlock.CalculateSize;
