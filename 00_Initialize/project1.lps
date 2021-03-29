@@ -8,7 +8,8 @@
       <Unit0>
         <Filename Value="project1.lpr"/>
         <IsPartOfProject Value="True"/>
-        <CursorPos Y="40"/>
+        <TopLine Value="15"/>
+        <CursorPos X="34" Y="11"/>
         <UsageCount Value="57"/>
         <Loaded Value="True"/>
       </Unit0>
@@ -18,4 +19,15 @@
       <Modes Count="0" ActiveMode="default"/>
     </RunParams>
   </ProjectSession>
+  <Debugging>
+    <BreakPoints Count="1">
+      <Item1>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\Common\LabPipeline.pas"/>
+        <Line Value="630"/>
+      </Item1>
+    </BreakPoints>
+  </Debugging>
 </CONFIG>

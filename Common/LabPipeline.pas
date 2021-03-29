@@ -603,7 +603,7 @@ begin
   pipeline_info.pVertexInputState := @AVertexInputState.CreateInfo;
   pipeline_info.pInputAssemblyState := @AInputAssemblyState;
   pipeline_info.pRasterizationState := @ARasterizationState;
-  pipeline_info.pColorBlendState := @AColorBlendState;
+  pipeline_info.pColorBlendState := @AColorBlendState.CreateInfo;
   if (ATesselationState.patchControlPoints > 0) then
   begin
     pipeline_info.pTessellationState := @ATesselationState;
